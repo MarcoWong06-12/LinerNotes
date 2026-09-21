@@ -34,13 +34,19 @@ class AiTranslationService @Inject constructor(
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     private fun isGeminiService(): Boolean {
-        val base = aiPreferences.baseUrl.lowercase()
-        val model = aiPreferences.modelName.lowercase()
+        val base = aiPreferences.baseUrl.lowercase().trim()
+        val model = aiPreferences.modelName.lowercase().trim()
+
+        if (base.contains("deepseek.com") || model.contains("deepseek")) return false
+        if (base.contains("openai.com") || model.startsWith("gpt-")) return false
+        if (base.contains("moonshot.cn") || model.contains("kimi")) return false
+        if (base.contains("dashscope.aliyuncs.com") || model.contains("qwen")) return false
+
         val key = aiPreferences.apiKey.trim()
         return base.contains("generativelanguage.googleapis.com") ||
+               model.contains("gemini") ||
                key.startsWith("AQ.") ||
-               key.startsWith("AIza") ||
-               model.contains("gemini")
+               key.startsWith("AIza")
     }
 
     suspend fun testConnection(
