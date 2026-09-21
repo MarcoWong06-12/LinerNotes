@@ -30,7 +30,15 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          gradle :app:assembleDebug --stacktrace
+          gradle :app:assembleDebug --stacktrace > build.log 2>&1 || {
+            tail -n 40 build.log | while IFS= read -r line; do
+              clean=$(echo "$line" | tr -d '\r')
+              if [ -n "$clean" ]; then
+                echo "::error::$clean"
+              fi
+            done
+            exit 1
+          }
 
       - name: Upload Debug APK to Artifacts
         uses: actions/upload-artifact@v4
@@ -39,3 +47,10 @@ jobs:
           name: LinerNotes-v1.0-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
+
+      - name: Upload Failure Log
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-failure-log
+          path: build.log
