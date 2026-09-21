@@ -12,7 +12,6 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
-import androidx.core.app.ServiceCompat
 import com.linernotes.app.MainActivity
 import com.linernotes.app.R
 import dagger.hilt.android.AndroidEntryPoint
@@ -55,8 +54,7 @@ class BatchTranslationService : Service() {
         // 立即展示前台通知，满足 Android 14 启动 5 秒内必须调用 startForeground 的严格要求
         val initialNotification = buildNotification("正在准备翻译专辑...", "", 0, 0)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ServiceCompat.startForeground(
-                this,
+            startForeground(
                 NOTIFICATION_ID,
                 initialNotification,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
@@ -185,7 +183,7 @@ class BatchTranslationService : Service() {
 
     private fun stopForegroundAndService() {
         releaseWakeLock()
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 

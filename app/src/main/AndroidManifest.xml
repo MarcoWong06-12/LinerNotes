@@ -30,7 +30,7 @@
         </activity>
 
         <service
-            android:name=".core.translation.BatchTranslationService"
+            android:name="com.linernotes.app.core.translation.BatchTranslationService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
     </application>
