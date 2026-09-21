@@ -29,11 +29,25 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --stacktrace
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x ./gradlew
+          ./gradlew :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build_output.log
 
       - name: Upload Debug APK to Artifacts
         uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: LinerNotes-v1.0-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
+
+      - name: Upload Build Log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: build_output.log
+          retention-days: 7
+          if-no-files-found: ignore

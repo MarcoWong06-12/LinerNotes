@@ -168,11 +168,11 @@ class BatchTranslationService : Service() {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(content)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "取消", stopPendingIntent)
+            .addAction(android.R.drawable.ic_delete, "取消", stopPendingIntent)
 
         if (maxProgress > 0) {
             builder.setProgress(maxProgress, currentProgress, false)
