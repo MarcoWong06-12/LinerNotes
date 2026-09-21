@@ -30,16 +30,9 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          gradle :app:assembleDebug --stacktrace > build.log 2>&1 || {
-            ERR=$(grep -i -E "error:|FAILURE:|Exception" build.log | head -n 5 | tr '\n' ' ' | sed 's/[^a-zA-Z0-9 .:/_-]//g')
-            echo "::error title=GradleBuildFailure::$ERR"
-            echo "### ❌ Build Failure Log" >> $GITHUB_STEP_SUMMARY
-            echo '```text' >> $GITHUB_STEP_SUMMARY
-            tail -n 80 build.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            cat build.log
-            exit 1
-          }
+          sed -i 's/\r$//' ./gradlew
+          chmod +x ./gradlew
+          ./gradlew :app:assembleDebug --stacktrace
 
       - name: Upload Debug APK to Artifacts
         uses: actions/upload-artifact@v4
