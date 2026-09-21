@@ -108,17 +108,27 @@ fun AiConfigDialog(
                 // API Key 输入框
                 OutlinedTextField(
                     value = apiKey,
-                    onValueChange = { apiKey = it },
+                    onValueChange = { apiKey = it.replace("\n", "").replace("\r", "").trim() },
                     label = { Text("API Key") },
-                    placeholder = { Text("粘贴 API Key (如 AQ... 或 sk-...)") },
+                    placeholder = { Text("粘贴 API Key (如 sk-... 或 AQ...)") },
                     singleLine = true,
                     visualTransformation = if (isKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
-                        IconButton(onClick = { isKeyVisible = !isKeyVisible }) {
-                            Icon(
-                                if (isKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = null
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = {
+                                val clip = clipboardManager.getText()?.text?.trim()
+                                if (!clip.isNullOrBlank()) {
+                                    apiKey = clip.replace("\n", "").replace("\r", "").trim()
+                                }
+                            }) {
+                                Icon(Icons.Default.ContentPaste, contentDescription = "粘贴剪贴板内容")
+                            }
+                            IconButton(onClick = { isKeyVisible = !isKeyVisible }) {
+                                Icon(
+                                    if (isKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = null
+                                )
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -129,10 +139,26 @@ fun AiConfigDialog(
                 // Base URL
                 OutlinedTextField(
                     value = baseUrl,
-                    onValueChange = { baseUrl = it },
+                    onValueChange = {
+                        baseUrl = it.replace("POST ", "")
+                            .replace("post ", "")
+                            .replace("\n", "")
+                            .replace("\r", "")
+                            .trim()
+                    },
                     label = { Text("API 接口地址 (Base URL)") },
-                    placeholder = { Text("https://generativelanguage.googleapis.com/v1beta/openai") },
+                    placeholder = { Text("https://www.kuaiaiapi.com/v1") },
                     singleLine = true,
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            val clip = clipboardManager.getText()?.text?.trim()
+                            if (!clip.isNullOrBlank()) {
+                                baseUrl = clip.replace("POST ", "").replace("post ", "").replace("\n", "").trim()
+                            }
+                        }) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = "粘贴剪贴板内容")
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -141,10 +167,20 @@ fun AiConfigDialog(
                 // Model Name
                 OutlinedTextField(
                     value = modelName,
-                    onValueChange = { modelName = it },
+                    onValueChange = { modelName = it.replace("\n", "").replace("\r", "").trim() },
                     label = { Text("模型名称 (Model)") },
-                    placeholder = { Text("gemini-3.6-flash / gemini-3.8-flash") },
+                    placeholder = { Text("gpt-5.6-terra / gemini-3.6-flash") },
                     singleLine = true,
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            val clip = clipboardManager.getText()?.text?.trim()
+                            if (!clip.isNullOrBlank()) {
+                                modelName = clip.replace("\n", "").replace("\r", "").trim()
+                            }
+                        }) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = "粘贴剪贴板内容")
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
 

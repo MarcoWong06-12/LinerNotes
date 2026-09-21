@@ -115,8 +115,8 @@ class AiTranslationService @Inject constructor(
                 AiDebugLogger.log(true, "Gemini 测试成功", "耗时 ${duration}ms，状态码 200 OK")
                 return@withContext Pair(true, "连接成功！(耗时 ${duration}ms，Gemini 响应正常)")
             } else {
-                val url = if (trimmedBase.endsWith("/chat/completions")) trimmedBase else "$trimmedBase/chat/completions"
-                val model = trimmedModel.ifBlank { "deepseek-chat" }
+                val url = sanitizeOpenAiUrl(trimmedBase)
+                val model = trimmedModel.ifBlank { "gpt-5.6-terra" }
                 AiDebugLogger.log(true, "测试开始", "发起 OpenAI 格式测试: $url ($model)")
 
                 val testJson = JSONObject().apply {
@@ -133,6 +133,7 @@ class AiTranslationService @Inject constructor(
                 val req = Request.Builder()
                     .url(url)
                     .addHeader("Authorization", "Bearer $trimmedKey")
+                    .addHeader("User-Agent", "okhttp/4.12.0")
                     .post(testJson.toRequestBody(jsonMediaType))
                     .build()
 
@@ -316,12 +317,31 @@ class AiTranslationService @Inject constructor(
         )
     }
 
+    private fun sanitizeOpenAiUrl(rawBase: String): String {
+        var clean = rawBase.trim()
+            .replace("POST ", "")
+            .replace("post ", "")
+            .replace("GET ", "")
+            .replace("\n", "")
+            .replace("\r", "")
+            .trimEnd('/')
+
+        if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
+            clean = "https://$clean"
+        }
+
+        while (clean.endsWith("/chat/completions")) {
+            clean = clean.removeSuffix("/chat/completions").trimEnd('/')
+        }
+
+        return "$clean/chat/completions"
+    }
+
     /**
-     * 通用 OpenAI 兼容格式调用 (DeepSeek, OpenAI, Moonshot, 通义千问等)
+     * 通用 OpenAI 兼容格式调用 (中转站、DeepSeek, OpenAI, Moonshot, 通义千问等)
      */
     private fun translateWithOpenAi(trackTitle: String, originalLyrics: String): TranslationResult {
-        var cleanBase = aiPreferences.baseUrl.trim().trimEnd('/')
-        val url = if (cleanBase.endsWith("/chat/completions")) cleanBase else "$cleanBase/chat/completions"
+        val url = sanitizeOpenAiUrl(aiPreferences.baseUrl)
         AiDebugLogger.log(true, "OpenAI 翻译", "开始翻译《$trackTitle》，模型: ${aiPreferences.modelName}")
 
         val promptSystem = "你是一位精通欧美流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌词逐行翻译为优美、符合原意、押韵自然的中文。务必保持与原歌词严格一一对应的行数和空行，每一行英文对应一行中文译文，绝对不要添加任何编号、多余解释、前后缀或代码块标签。"
@@ -345,6 +365,7 @@ class AiTranslationService @Inject constructor(
         val request = Request.Builder()
             .url(url)
             .addHeader("Authorization", "Bearer ${aiPreferences.apiKey.trim()}")
+            .addHeader("User-Agent", "okhttp/4.12.0")
             .post(requestBodyJson.toRequestBody(jsonMediaType))
             .build()
 
