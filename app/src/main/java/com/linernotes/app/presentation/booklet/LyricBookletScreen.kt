@@ -8,8 +8,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -48,6 +50,10 @@ fun LyricBookletScreen(
         viewModel.setAlbumId(albumId)
     }
     val state by viewModel.uiState.collectAsState()
+    val batchState by viewModel.batchTranslationState.collectAsState()
+    val isBatchTranslatingThisAlbum = batchState.isTranslating && batchState.albumId == state.albumWithTracks?.album?.id
+    val isTranslatingOverall = state.isTranslating || isBatchTranslatingThisAlbum
+
     val snackbarHostState = remember { SnackbarHostState() }
 
     val currentTrack = viewModel.getCurrentTrack()
@@ -94,21 +100,70 @@ fun LyricBookletScreen(
                         onModeSelected = { viewModel.setDisplayMode(it) }
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    IconButton(
-                        onClick = { viewModel.onAiTranslateClicked() },
-                        enabled = !state.isTranslating
-                    ) {
-                        if (state.isTranslating) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
+                    Box {
+                        IconButton(
+                            onClick = { viewModel.onAiTranslateClicked() },
+                            enabled = !isTranslatingOverall
+                        ) {
+                            if (isTranslatingOverall) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = strings.aiTranslateAction,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = state.isTranslateMenuOpen,
+                            onDismissRequest = { viewModel.setTranslateMenuOpen(false) }
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(strings.translateCurrentTrack, style = MaterialTheme.typography.bodyMedium)
+                                },
+                                onClick = {
+                                    viewModel.retranslateCurrentTrack()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.FlashOn,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = strings.aiTranslateAction,
-                                tint = MaterialTheme.colorScheme.primary
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text(
+                                            strings.batchTranslateAlbum,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            strings.batchTranslateAlbumDesc,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.startBatchAlbumTranslation()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Album,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
                             )
                         }
                     }
@@ -144,26 +199,95 @@ fun LyricBookletScreen(
         },
         containerColor = basePaperColor
     ) { paddingValues ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(backgroundGradient)
                 .padding(paddingValues)
-                .pointerInput(state.currentTrackIndex, totalTracks) {
-                    var totalDragX = 0f
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            if (totalDragX > 150f) viewModel.previousTrack()
-                            else if (totalDragX < -150f) viewModel.nextTrack()
-                            totalDragX = 0f
-                        },
-                        onDragCancel = { totalDragX = 0f },
-                        onHorizontalDrag = { _, dragAmount -> totalDragX += dragAmount }
-                    )
-                }
         ) {
-            if (state.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            val strings = com.linernotes.app.core.i18n.LocalStrings.current
+
+            // 正在整张专辑后台批量翻译时的顶部常驻进度条与取消按钮
+            if (isBatchTranslatingThisAlbum) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "${strings.batchTranslatingBanner} [${batchState.currentTrackIndex}/${batchState.totalTracks}] ${batchState.currentTrackTitle ?: ""}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            TextButton(
+                                onClick = { viewModel.cancelBatchAlbumTranslation() },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Text(
+                                    strings.cancel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val progress = if (batchState.totalTracks > 0) {
+                            batchState.currentTrackIndex.toFloat() / batchState.totalTracks.toFloat()
+                        } else 0f
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                        )
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .pointerInput(state.currentTrackIndex, totalTracks) {
+                        var totalDragX = 0f
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (totalDragX > 150f) viewModel.previousTrack()
+                                else if (totalDragX < -150f) viewModel.nextTrack()
+                                totalDragX = 0f
+                            },
+                            onDragCancel = { totalDragX = 0f },
+                            onHorizontalDrag = { _, dragAmount -> totalDragX += dragAmount }
+                        )
+                    }
+            ) {
+                if (state.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),

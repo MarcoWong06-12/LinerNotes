@@ -153,6 +153,13 @@ fun AiConfigDialog(
                     SuggestionChip(
                         onClick = {
                             baseUrl = "https://www.kuaiaiapi.com/v1"
+                            modelName = "gpt-4o-mini"
+                        },
+                        label = { Text(strings.presetKuaiaiFast) }
+                    )
+                    SuggestionChip(
+                        onClick = {
+                            baseUrl = "https://www.kuaiaiapi.com/v1"
                             modelName = "gpt-5.6-terra"
                         },
                         label = { Text(strings.presetKuaiai) }

@@ -15,5 +15,6 @@ data class BookletUiState(
     val isEditingSheetOpen: Boolean = false,
     val isAiConfigOpen: Boolean = false,
     val isTranslating: Boolean = false,
+    val isTranslateMenuOpen: Boolean = false,
     val userMessage: String? = null
 )

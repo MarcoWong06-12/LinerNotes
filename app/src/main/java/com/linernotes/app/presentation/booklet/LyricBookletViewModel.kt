@@ -10,6 +10,8 @@ import com.linernotes.app.data.remote.AiTranslationService
 import com.linernotes.app.domain.model.LyricDisplayMode
 import com.linernotes.app.domain.repository.AlbumRepository
 import com.linernotes.app.presentation.booklet.model.BookletUiState
+import com.linernotes.app.core.translation.BatchTranslationManager
+import com.linernotes.app.core.translation.BatchTranslationState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,13 +24,26 @@ import javax.inject.Inject
 class LyricBookletViewModel @Inject constructor(
     private val repository: AlbumRepository,
     val aiPreferences: AiPreferences,
-    private val aiTranslationService: AiTranslationService
+    private val aiTranslationService: AiTranslationService,
+    private val batchTranslationManager: BatchTranslationManager
 ) : ViewModel() {
 
     private var currentAlbumId: String = ""
 
     private val _uiState = MutableStateFlow(BookletUiState())
     val uiState: StateFlow<BookletUiState> = _uiState.asStateFlow()
+
+    val batchTranslationState: StateFlow<BatchTranslationState> = batchTranslationManager.state
+
+    init {
+        viewModelScope.launch {
+            batchTranslationManager.state.collect { bState ->
+                if (!bState.userMessage.isNullOrBlank() && bState.albumId == currentAlbumId) {
+                    _uiState.update { it.copy(userMessage = bState.userMessage) }
+                }
+            }
+        }
+    }
 
     fun setAlbumId(id: String) {
         if (currentAlbumId != id) {
@@ -115,16 +130,31 @@ class LyricBookletViewModel @Inject constructor(
         }
     }
 
+    fun setTranslateMenuOpen(isOpen: Boolean) {
+        _uiState.update { it.copy(isTranslateMenuOpen = isOpen) }
+    }
+
     fun onAiTranslateClicked() {
         if (!aiPreferences.hasKey) {
             // 如果尚未配置 AI API Key，直接弹出配置窗口引导配置
             _uiState.update { it.copy(isAiConfigOpen = true) }
         } else {
-            retranslateCurrentTrack()
+            _uiState.update { it.copy(isTranslateMenuOpen = true) }
         }
     }
 
+    fun startBatchAlbumTranslation() {
+        _uiState.update { it.copy(isTranslateMenuOpen = false) }
+        val album = _uiState.value.albumWithTracks?.album ?: return
+        batchTranslationManager.startBatchTranslation(album.id, album.title)
+    }
+
+    fun cancelBatchAlbumTranslation() {
+        batchTranslationManager.cancelBatchTranslation()
+    }
+
     fun retranslateCurrentTrack() {
+        _uiState.update { it.copy(isTranslateMenuOpen = false) }
         val currentTrack = getCurrentTrack() ?: return
         if (currentTrack.originalLyrics.isNullOrBlank()) {
             _uiState.update { it.copy(userMessage = "当前曲目无歌词，无法进行翻译") }
