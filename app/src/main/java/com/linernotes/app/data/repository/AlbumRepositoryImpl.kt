@@ -15,9 +15,10 @@ import javax.inject.Singleton
 
 @Singleton
 class AlbumRepositoryImpl @Inject constructor(
-    private val albumDao: AlbumDao,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val albumDao: AlbumDao
 ) : AlbumRepository {
+
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 
     override fun getCollectionStream(): Flow<List<AlbumEntity>> {
         return albumDao.getAllAlbumsFlow().flowOn(ioDispatcher)

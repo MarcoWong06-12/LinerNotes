@@ -1,7 +1,6 @@
 package com.linernotes.app.presentation.booklet
 
 import androidx.compose.ui.graphics.Color
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.linernotes.app.core.lyric.LyricAligner
@@ -19,11 +18,10 @@ import javax.inject.Inject
 
 @HiltViewModel
 class LyricBookletViewModel @Inject constructor(
-    private val repository: AlbumRepository,
-    savedStateHandle: SavedStateHandle
+    private val repository: AlbumRepository
 ) : ViewModel() {
 
-    private var currentAlbumId: String = savedStateHandle["albumId"] ?: ""
+    private var currentAlbumId: String = ""
 
     private val _uiState = MutableStateFlow(BookletUiState())
     val uiState: StateFlow<BookletUiState> = _uiState.asStateFlow()
