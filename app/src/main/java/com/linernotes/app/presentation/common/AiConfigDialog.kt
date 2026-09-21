@@ -47,7 +47,7 @@ fun AiConfigDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = "支持所有兼容 OpenAI 格式的 API（如 DeepSeek、OpenAI、Moonshot/Kimi、通义千问、硅基流动等）。",
+                    text = "支持 Google Gemini、DeepSeek、OpenAI、Moonshot/Kimi、通义千问等所有兼容 OpenAI 格式的 API。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -55,15 +55,34 @@ fun AiConfigDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // 快捷预设按钮
-                Text("常用预设快速填充：", style = MaterialTheme.typography.labelSmall)
+                Text("常用引擎预设快速填充：", style = MaterialTheme.typography.labelSmall)
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    SuggestionChip(
+                        onClick = {
+                            baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
+                            modelName = "gemini-1.5-flash"
+                        },
+                        label = { Text("Gemini 1.5 (推荐)") }
+                    )
+                    SuggestionChip(
+                        onClick = {
+                            baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
+                            modelName = "gemini-2.0-flash"
+                        },
+                        label = { Text("Gemini 2.0") }
+                    )
                     SuggestionChip(
                         onClick = {
                             baseUrl = "https://api.deepseek.com/v1"
                             modelName = "deepseek-chat"
                         },
-                        label = { Text("DeepSeek (推荐)") }
+                        label = { Text("DeepSeek") }
                     )
                     SuggestionChip(
                         onClick = {
@@ -80,8 +99,8 @@ fun AiConfigDialog(
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
-                    label = { Text("API Key (sk-...)") },
-                    placeholder = { Text("粘贴你的 API Key") },
+                    label = { Text("API Key") },
+                    placeholder = { Text("粘贴 API Key (如 AIzaSy... 或 sk-...)") },
                     singleLine = true,
                     visualTransformation = if (isKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
@@ -102,7 +121,7 @@ fun AiConfigDialog(
                     value = baseUrl,
                     onValueChange = { baseUrl = it },
                     label = { Text("API 接口地址 (Base URL)") },
-                    placeholder = { Text("https://api.deepseek.com/v1") },
+                    placeholder = { Text("https://generativelanguage.googleapis.com/v1beta/openai") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -114,7 +133,7 @@ fun AiConfigDialog(
                     value = modelName,
                     onValueChange = { modelName = it },
                     label = { Text("模型名称 (Model)") },
-                    placeholder = { Text("deepseek-chat / gpt-4o-mini") },
+                    placeholder = { Text("gemini-1.5-flash / deepseek-chat") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

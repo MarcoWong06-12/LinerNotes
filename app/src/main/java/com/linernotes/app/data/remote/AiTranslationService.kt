@@ -35,21 +35,32 @@ class AiTranslationService @Inject constructor(
         originalLyrics: String
     ): TranslationResult = withContext(Dispatchers.IO) {
         if (aiPreferences.hasKey) {
-            try {
-                translateWithAi(trackTitle, originalLyrics)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                // 如果 AI 报错（如 Key 欠费或网络），优雅降级到基础翻译
-                fallbackTranslate(trackTitle, originalLyrics)
-            }
+            // 用户已配置自定义 API Key，直接由 AI 翻译；异常将抛出给界面展示明确错误
+            translateWithAi(trackTitle, originalLyrics)
         } else {
             fallbackTranslate(trackTitle, originalLyrics)
         }
     }
 
+    private fun resolveEndpointUrl(): String {
+        var cleanBase = aiPreferences.baseUrl.trim().trimEnd('/')
+        // 智能兼容 Google Gemini 官方域名输入
+        if (cleanBase.contains("generativelanguage.googleapis.com") && !cleanBase.contains("/openai")) {
+            cleanBase = if (cleanBase.endsWith("/v1beta")) {
+                "$cleanBase/openai"
+            } else {
+                "$cleanBase/v1beta/openai"
+            }
+        }
+        return if (cleanBase.endsWith("/chat/completions")) {
+            cleanBase
+        } else {
+            "$cleanBase/chat/completions"
+        }
+    }
+
     private fun translateWithAi(trackTitle: String, originalLyrics: String): TranslationResult {
-        val baseUrl = aiPreferences.baseUrl.trim().trimEnd('/')
-        val url = "$baseUrl/chat/completions"
+        val url = resolveEndpointUrl()
 
         // 1. 翻译歌词主体
         val promptSystem = "你是一位精通欧美流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌词逐行翻译为优美、符合原意、押韵自然的中文。务必保持与原歌词严格一一对应的行数和空行，每一行英文对应一行中文译文，绝对不要添加任何编号、多余解释、前后缀或代码块标签。"
@@ -79,9 +90,20 @@ class AiTranslationService @Inject constructor(
         val response = client.newCall(request).execute()
         val responseBody = response.body?.string() ?: throw IllegalStateException("AI 服务无响应")
 
+        if (!response.isSuccessful) {
+            val errMsg = try {
+                val errJson = JSONObject(responseBody)
+                val errObj = errJson.optJSONObject("error")
+                errObj?.optString("message") ?: responseBody
+            } catch (e: Exception) {
+                "HTTP ${response.code}: ${response.message}"
+            }
+            throw IllegalStateException("AI 接口报错: $errMsg")
+        }
+
         val json = JSONObject(responseBody)
         if (json.has("error")) {
-            val errMsg = json.getJSONObject("error").optString("message", "未知错误")
+            val errMsg = json.optJSONObject("error")?.optString("message") ?: json.optString("error", "未知错误")
             throw IllegalStateException("AI 接口报错: $errMsg")
         }
 
@@ -115,10 +137,15 @@ class AiTranslationService @Inject constructor(
         try {
             val titleResp = client.newCall(titleRequest).execute()
             val titleBody = titleResp.body?.string()
-            if (titleBody != null) {
+            if (titleBody != null && titleResp.isSuccessful) {
                 val tJson = JSONObject(titleBody)
-                val tContent = tJson.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                translatedTitle = tContent.replace("\"", "").replace("《", "").replace("》", "").trim()
+                if (!tJson.has("error")) {
+                    val tChoices = tJson.optJSONArray("choices")
+                    val tContent = tChoices?.optJSONObject(0)?.optJSONObject("message")?.optString("content")?.trim()
+                    if (!tContent.isNullOrBlank()) {
+                        translatedTitle = tContent.replace("\"", "").replace("《", "").replace("》", "").trim()
+                    }
+                }
             }
         } catch (e: Exception) {
             // 标题翻译失败非致命

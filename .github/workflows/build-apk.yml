@@ -42,17 +42,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.1
-          name: "LinerNotes v1.0.1 (支持 AI 翻译与自定义 API Key)"
+          tag_name: v1.0.2
+          name: "LinerNotes v1.0.2 (正式支持 Google Gemini 与一键预设)"
           body: |
-            ## 🎵 LinerNotes (唱片内页) v1.0.1 升级版
+            ## 🎵 LinerNotes (唱片内页) v1.0.2 升级版
 
-            ### 🚀 重磅新增与修复：
-            - 🤖 **全面支持自定义 AI 歌词翻译**：支持输入任意兼容 OpenAI 格式的 API Key（DeepSeek、OpenAI、Kimi、通义千问、硅基流动等）
-            - 🎼 **AI 逐行文学级歌词推敲**：保留歌词韵律与结构，中英双语严格逐行对应，曲名自动汉化
-            - ⚙️ **双入口便捷配置**：可在主页面右上角 ⚙️ 或歌词本内随时修改 API Key 与模型（默认推荐高性价比 DeepSeek）
-            - 🛡️ **内置无感降级保护**：未填写 API Key 或网络波动时，自动降级为基础翻译，告别空译文
-            - 💿 **官方高清封面与全曲目同步**：支持从相册自选照片与 LRCLIB 全量歌词库同步
+            ### 🚀 重磅新增与优化：
+            - ✨ **正式支持 Google Gemini API Key**：直接支持 Google AI Studio 免费申请的 Gemini API Key，并提供一键预设（Gemini 1.5 Flash / Gemini 2.0 Flash）！
+            - 🤖 **全面兼容 OpenAI 格式大模型**：内置 Google Gemini、DeepSeek、OpenAI 等一键预设，亦可自定义填写通义千问、Kimi 等服务。
+            - 🎼 **文学级逐行诗意歌词推敲**：中文与英文歌词保持严格逐行对应，并自动智能翻译单曲中文名称。
+            - ⚙️ **更贴心的输入体验**：自动识别并补全 Gemini 官方接口地址，提供清晰的报错与网络提示。
+            - 💿 **官方高清封面与全曲目同步**：支持从相册导入封面与 LRCLIB 全量歌词库智能搜索。
 
             **点击下方的 `app-debug.apk` 即可直接在手机上下载安装！**
           files: app/build/outputs/apk/debug/*.apk
