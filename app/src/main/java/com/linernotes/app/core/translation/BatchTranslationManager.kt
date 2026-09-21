@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import com.linernotes.app.core.debug.AiDebugLogger
 import com.linernotes.app.core.preference.AiPreferences
+import com.linernotes.app.data.local.entity.TrackEntity
 import com.linernotes.app.data.remote.AiTranslationService
 import com.linernotes.app.domain.repository.AlbumRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -12,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,9 +21,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
-import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -77,53 +76,94 @@ class BatchTranslationManager @Inject constructor(
                         currentTrackTitle = "准备中...",
                         currentTrackIndex = 0,
                         totalTracks = total,
-                        userMessage = "正在后台并发推敲翻译中..."
+                        userMessage = "正在推敲翻译整张专辑..."
                     )
                 }
 
                 // 2. 启动前台保活服务
                 startForegroundService(albumId, albumTitle)
 
-                // 3. 并发限流控制（信号量限制为 2，兼顾两倍吞吐量且杜绝中转 API 频繁 429 报错）
-                val semaphore = Semaphore(2)
-                val completedCount = AtomicInteger(0)
+                // 3. 第一轮顺畅推进（单轨顺延 + 缓冲延时，彻底杜绝瞬间并发击穿中转站频率阈值）
+                val successfulTracks = mutableListOf<TrackEntity>()
+                val failedTracks = mutableListOf<TrackEntity>()
 
-                val trackJobs = candidateTracks.map { track ->
-                    launch {
-                        semaphore.withPermit {
-                            if (!isActive) return@withPermit
-                            _state.update { it.copy(currentTrackTitle = track.title) }
-
-                            try {
-                                val result = translationService.translateTrack(
-                                    trackTitle = track.title,
-                                    originalLyrics = track.originalLyrics!!
-                                )
-                                // 翻译成功立即落库，即使中途退出也保留已翻译的成果
-                                repository.updateTrackTranslation(
-                                    trackId = track.id,
-                                    translatedTitle = result.translatedTitle ?: track.translatedTitle,
-                                    originalLyrics = track.originalLyrics,
-                                    translatedLyrics = result.translatedLyrics
-                                )
-                                AiDebugLogger.log(true, "批量翻译单曲成功", "《${track.title}》译文已存盘")
-                            } catch (e: Exception) {
-                                AiDebugLogger.log(false, "批量翻译单曲跳过", "《${track.title}》翻译出错: ${e.message}")
-                            } finally {
-                                val done = completedCount.incrementAndGet()
-                                _state.update { it.copy(currentTrackIndex = done) }
-                            }
-                        }
+                for ((index, track) in candidateTracks.withIndex()) {
+                    if (!isActive) break
+                    _state.update {
+                        it.copy(
+                            currentTrackTitle = track.title,
+                            currentTrackIndex = index + 1
+                        )
                     }
+
+                    try {
+                        val result = translationService.translateTrack(
+                            trackTitle = track.title,
+                            originalLyrics = track.originalLyrics!!
+                        )
+                        repository.updateTrackTranslation(
+                            trackId = track.id,
+                            translatedTitle = result.translatedTitle ?: track.translatedTitle,
+                            originalLyrics = track.originalLyrics,
+                            translatedLyrics = result.translatedLyrics
+                        )
+                        successfulTracks.add(track)
+                        AiDebugLogger.log(true, "批量翻译存盘", "《${track.title}》翻译完成并已落库")
+                    } catch (e: Exception) {
+                        failedTracks.add(track)
+                        AiDebugLogger.log(false, "批量翻译单曲受阻", "《${track.title}》第一轮暂未完成: ${e.message}，已加入末尾补译队列")
+                    }
+
+                    // 歌曲之间保持 400ms 微小缓冲，避免中转站 API 判定为恶意突发扫描
+                    delay(400)
                 }
 
-                trackJobs.forEach { it.join() }
+                // 4. 第二轮失败补偿修复机制 (Second-Pass Recovery)
+                if (failedTracks.isNotEmpty() && isActive) {
+                    AiDebugLogger.log(true, "补偿补译", "首轮存在 ${failedTracks.size} 首未完成，2 秒后启动二次补偿修复...")
+                    _state.update { it.copy(userMessage = "首轮有 ${failedTracks.size} 首歌曲受阻，正在自动执行二次补偿...") }
+                    delay(2000)
 
-                AiDebugLogger.log(true, "批量翻译", "整张专辑《$albumTitle》翻译全部完毕 ($total 首)")
+                    val stillFailed = mutableListOf<TrackEntity>()
+                    for (failedTrack in failedTracks) {
+                        if (!isActive) break
+                        _state.update { it.copy(currentTrackTitle = "【补译】${failedTrack.title}") }
+                        try {
+                            val result = translationService.translateTrack(
+                                trackTitle = failedTrack.title,
+                                originalLyrics = failedTrack.originalLyrics!!
+                            )
+                            repository.updateTrackTranslation(
+                                trackId = failedTrack.id,
+                                translatedTitle = result.translatedTitle ?: failedTrack.translatedTitle,
+                                originalLyrics = failedTrack.originalLyrics,
+                                translatedLyrics = result.translatedLyrics
+                            )
+                            successfulTracks.add(failedTrack)
+                            AiDebugLogger.log(true, "补偿补译成功", "《${failedTrack.title}》补偿翻译成功并已写入本地")
+                        } catch (e: Exception) {
+                            stillFailed.add(failedTrack)
+                            AiDebugLogger.log(false, "补偿补译失败", "《${failedTrack.title}》二次重试仍未成功: ${e.message}")
+                        }
+                        delay(600)
+                    }
+                    failedTracks.clear()
+                    failedTracks.addAll(stillFailed)
+                }
+
+                val finalSuccess = successfulTracks.size
+                val finalFailed = failedTracks.size
+                val finishMsg = if (finalFailed == 0) {
+                    "整张专辑翻译完成！（共 $total 首全部成功）"
+                } else {
+                    "整张专辑翻译结束：已完成 $finalSuccess 首，${finalFailed} 首未完成（可在单曲页重试）"
+                }
+
+                AiDebugLogger.log(true, "批量翻译全盘结束", finishMsg)
                 _state.update {
                     it.copy(
                         isTranslating = false,
-                        userMessage = "整张专辑翻译完成！"
+                        userMessage = finishMsg
                     )
                 }
             } catch (e: Exception) {

@@ -4,8 +4,7 @@ import com.linernotes.app.core.debug.AiDebugLogger
 import com.linernotes.app.core.i18n.TranslationTargetLanguage
 import com.linernotes.app.core.preference.AiPreferences
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -28,10 +27,10 @@ class AiTranslationService @Inject constructor(
     private val aiPreferences: AiPreferences
 ) {
     private val client = OkHttpClient.Builder()
-        .callTimeout(35, TimeUnit.SECONDS)
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(120, TimeUnit.SECONDS)
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -202,18 +201,113 @@ class AiTranslationService @Inject constructor(
     }
 
     /**
-     * Google Gemini 原生官方 API 调用 (支持最新的 AQ. 格式及 AIza 密钥)
+     * 带智能退避的健壮重试执行器
+     * 自动处理 HTTP 429 限流、500/502/503/504 服务拥堵以及网络超时，最大重试 3 次。
      */
-    private suspend fun translateWithGeminiNative(trackTitle: String, originalLyrics: String): TranslationResult = coroutineScope {
+    private suspend fun <T> executeWithRetry(
+        operationName: String,
+        maxRetries: Int = 3,
+        block: suspend (attempt: Int) -> T
+    ): T {
+        var currentAttempt = 1
+        while (true) {
+            try {
+                return block(currentAttempt)
+            } catch (e: Exception) {
+                val msg = e.message ?: ""
+                val isTimeout = e is java.io.InterruptedIOException || msg.contains("timeout", ignoreCase = true)
+                val isRateLimit = msg.contains("429") || msg.contains("rate", ignoreCase = true)
+                val isServerBusy = msg.contains("503") || msg.contains("502") || msg.contains("500") || msg.contains("504")
+                val isConnectionError = e is java.net.ConnectException || e is java.net.SocketException
+                val isRetryable = isTimeout || isRateLimit || isServerBusy || isConnectionError
+
+                if (currentAttempt < maxRetries && isRetryable) {
+                    val backoffMs = if (isRateLimit) 3000L * currentAttempt else 2000L * currentAttempt
+                    AiDebugLogger.log(
+                        false,
+                        "$operationName 遭遇网络波动 (将在 ${backoffMs / 1000}s 后重试第 ${currentAttempt + 1}/$maxRetries 次)",
+                        "原因: ${e.javaClass.simpleName}: $msg"
+                    )
+                    delay(backoffMs)
+                    currentAttempt++
+                } else {
+                    throw e
+                }
+            }
+        }
+    }
+
+    /**
+     * 智能歌词与标题解析器
+     * 能够从模型统一输出中提取 TITLE: 标题，并过滤 Markdown ``` 代码块标记
+     */
+    private fun parseTranslationResponse(rawResponse: String, originalTitle: String): TranslationResult {
+        val clean = rawResponse.trim()
+        val lines = clean.lines().toMutableList()
+
+        // 剥离可能由模型生成的 Markdown 代码块标记 (如 ``` 或 ```markdown 或 ```text)
+        while (lines.isNotEmpty() && lines.first().trim().startsWith("```")) {
+            lines.removeAt(0)
+        }
+        while (lines.isNotEmpty() && lines.last().trim().startsWith("```")) {
+            lines.removeAt(lines.size - 1)
+        }
+
+        var extractedTitle: String? = null
+        val firstLine = lines.firstOrNull()?.trim() ?: ""
+
+        if (firstLine.startsWith("TITLE:", ignoreCase = true) ||
+            firstLine.startsWith("TITLE：", ignoreCase = true) ||
+            firstLine.startsWith("标题:", ignoreCase = true) ||
+            firstLine.startsWith("标题：", ignoreCase = true)
+        ) {
+            val colonIndex = firstLine.indexOfAny(charArrayOf(':', '：'))
+            if (colonIndex != -1) {
+                val candidate = firstLine.substring(colonIndex + 1)
+                    .replace("\"", "")
+                    .replace("《", "")
+                    .replace("》", "")
+                    .trim()
+                if (candidate.isNotBlank()) {
+                    extractedTitle = candidate
+                }
+            }
+            lines.removeAt(0)
+            // 如果标题下一行为空行，剔除空行以保证歌词从实际第一句开始
+            if (lines.isNotEmpty() && lines.first().trim().isEmpty()) {
+                lines.removeAt(0)
+            }
+        }
+
+        val finalLyrics = lines.joinToString("\n")
+        return TranslationResult(
+            translatedTitle = extractedTitle,
+            translatedLyrics = finalLyrics
+        )
+    }
+
+    /**
+     * Google Gemini 原生官方 API 调用 (支持最新的 AQ. 格式及 AIza 密钥)
+     * 单一合并请求：曲名与歌词合并于单条 Prompt 输出，节省 50% 接口请求并杜绝并发超限 (429)。
+     * 内置指数退避重试 (最大 3 次)。
+     */
+    private suspend fun translateWithGeminiNative(trackTitle: String, originalLyrics: String): TranslationResult {
         val model = aiPreferences.modelName.trim().ifBlank { "gemini-3.6-flash" }
         val key = aiPreferences.apiKey.trim()
         val targetLang = TranslationTargetLanguage.fromCode(aiPreferences.targetLanguage)
         val targetName = targetLang.promptName
         val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key"
-        AiDebugLogger.log(true, "Gemini 翻译", "并发启动《$trackTitle》翻译，目标语言: $targetName，模型: $model")
 
-        val lyricsDeferred = async(Dispatchers.IO) {
-            val promptLyrics = "你是一位精通多国流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌词逐行翻译为优美、符合原意、押韵自然的【$targetName】。务必保持与原歌词严格一一对应的行数和空行，每一行原文对应一行【$targetName】译文，绝对不要添加任何编号、多余解释、前后缀或代码块标签。\n\n歌曲标题：$trackTitle\n\n歌词全文：\n$originalLyrics"
+        val prompt = "你是一位精通多国流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌曲标题和歌词逐行翻译为优美、符合原意、押韵自然的【$targetName】。\n\n" +
+            "【输出格式要求】：\n" +
+            "1. 第一行必须严格输出单曲标题在【$targetName】中的公认/流行译名，格式为：TITLE: <单曲译名>（若目标语言为英语且原曲名为英文，则保持原样）。\n" +
+            "2. 第二行必须为空行。\n" +
+            "3. 从第三行开始，逐行输出原歌词对应的【$targetName】译文。\n" +
+            "4. 必须保持与原歌词严格一一对应的行数和空行，绝对不要添加任何行号、多余解释、前后缀或 Markdown 代码块标签。\n\n" +
+            "歌曲标题：$trackTitle\n\n歌词全文：\n$originalLyrics"
+
+        return executeWithRetry("Gemini 翻译《$trackTitle》") { attempt ->
+            AiDebugLogger.log(true, "Gemini 翻译", "请求翻译《$trackTitle》，目标语言: $targetName，模型: $model" + (if (attempt > 1) " (重试第 $attempt 次)" else ""))
 
             val requestJson = JSONObject().apply {
                 put("contents", JSONArray().apply {
@@ -221,7 +315,7 @@ class AiTranslationService @Inject constructor(
                         put("role", "user")
                         put("parts", JSONArray().apply {
                             put(JSONObject().apply {
-                                put("text", promptLyrics)
+                                put("text", prompt)
                             })
                         })
                     })
@@ -237,15 +331,9 @@ class AiTranslationService @Inject constructor(
                 .post(requestJson.toRequestBody(jsonMediaType))
                 .build()
 
-            var response = client.newCall(request).execute()
-            if (response.code == 503 || response.code == 429) {
-                AiDebugLogger.log(false, "Gemini 拥堵 (${response.code})", "Google 官方节点高并发排队，1.5 秒后自动重试...")
-                response.close()
-                try { Thread.sleep(1500) } catch (ignored: Exception) {}
-                response = client.newCall(request).execute()
-            }
-
+            val response = client.newCall(request).execute()
             val responseBody = response.body?.string() ?: throw IllegalStateException("Gemini 服务无响应")
+
             if (!response.isSuccessful) {
                 val errMsg = try {
                     val errJson = JSONObject(responseBody)
@@ -255,7 +343,7 @@ class AiTranslationService @Inject constructor(
                     "HTTP ${response.code}: ${response.message}"
                 }
                 val fullErr = if (response.code == 503) {
-                    "Google 官方 $model 当前全球排队拥堵 (HTTP 503)。建议在设置里点「Gemini 2.0」切换为更稳定的模型，或稍候再点翻译！"
+                    "Google 官方 $model 当前全球排队拥堵 (HTTP 503)。建议稍候再试或在设置中更换模型！"
                 } else {
                     "HTTP ${response.code} 报错: $errMsg"
                 }
@@ -266,55 +354,11 @@ class AiTranslationService @Inject constructor(
             val json = JSONObject(responseBody)
             val candidates = json.optJSONArray("candidates")
             val parts = candidates?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
-            parts?.optJSONObject(0)?.optString("text")?.trim() ?: ""
+            val content = parts?.optJSONObject(0)?.optString("text") ?: ""
+            val result = parseTranslationResponse(content, trackTitle)
+            AiDebugLogger.log(true, "Gemini 成功", "《$trackTitle》翻译完成，译名: ${result.translatedTitle ?: "(保持原名)"}")
+            result
         }
-
-        val titleDeferred = async(Dispatchers.IO) {
-            try {
-                val titlePrompt = "请给出这首歌曲标题在【$targetName】中的经典公认/流行译名（若目标语言为英语且原曲名为英文，则保持原样）。仅输出译名本身，不要附带任何多余标点或解释。\n\n歌曲标题：$trackTitle"
-                val titleRequestJson = JSONObject().apply {
-                    put("contents", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("role", "user")
-                            put("parts", JSONArray().apply {
-                                put(JSONObject().apply {
-                                    put("text", titlePrompt)
-                                })
-                            })
-                        })
-                    })
-                    put("generationConfig", JSONObject().apply {
-                        put("temperature", 0.2)
-                    })
-                }.toString()
-
-                val titleReq = Request.Builder()
-                    .url(url)
-                    .addHeader("x-goog-api-key", key)
-                    .post(titleRequestJson.toRequestBody(jsonMediaType))
-                    .build()
-
-                val titleResp = client.newCall(titleReq).execute()
-                val titleBody = titleResp.body?.string()
-                if (titleBody != null && titleResp.isSuccessful) {
-                    val tJson = JSONObject(titleBody)
-                    val tCandidates = tJson.optJSONArray("candidates")
-                    val tParts = tCandidates?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
-                    val tContent = tParts?.optJSONObject(0)?.optString("text")?.trim()
-                    if (!tContent.isNullOrBlank()) {
-                        return@async tContent.replace("\"", "").replace("《", "").replace("》", "").trim()
-                    }
-                }
-                null
-            } catch (e: Exception) {
-                null
-            }
-        }
-
-        val lyrics = lyricsDeferred.await()
-        val title = titleDeferred.await()
-        AiDebugLogger.log(true, "Gemini 成功", "歌词与单曲名并发翻译完成")
-        TranslationResult(translatedTitle = title, translatedLyrics = lyrics)
     }
 
     private fun sanitizeOpenAiUrl(rawBase: String): String {
@@ -324,27 +368,37 @@ class AiTranslationService @Inject constructor(
 
     /**
      * 通用 OpenAI 兼容格式调用 (中转站、DeepSeek, OpenAI, Moonshot, 通义千问等)
+     * 单一合并请求：单曲标题与歌词合并于单条 Prompt 输出，节省 50% 接口请求并彻底消除并发超限 (429)。
+     * 内置指数退避重试 (最大 3 次)。
      */
-    private suspend fun translateWithOpenAi(trackTitle: String, originalLyrics: String): TranslationResult = coroutineScope {
+    private suspend fun translateWithOpenAi(trackTitle: String, originalLyrics: String): TranslationResult {
         val url = sanitizeOpenAiUrl(aiPreferences.baseUrl)
         val targetLang = TranslationTargetLanguage.fromCode(aiPreferences.targetLanguage)
         val targetName = targetLang.promptName
-        AiDebugLogger.log(true, "OpenAI 翻译", "并发启动《$trackTitle》翻译，目标语言: $targetName，模型: ${aiPreferences.modelName}")
+        val model = aiPreferences.modelName.trim().ifBlank { "gpt-5.6-terra" }
 
-        val lyricsDeferred = async(Dispatchers.IO) {
-            val promptSystem = "你是一位精通多国流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌词逐行翻译为优美、符合原意、押韵自然的【$targetName】。务必保持与原歌词严格一一对应的行数和空行，每一行原文对应一行【$targetName】译文，绝对不要添加任何编号、多余解释、前后缀或代码块标签。"
-            val promptUser = "歌曲标题：$trackTitle\n\n歌词全文：\n$originalLyrics"
+        val systemPrompt = "你是一位精通多国流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌曲标题和歌词逐行翻译为优美、符合原意、押韵自然的【$targetName】。\n\n" +
+            "【输出格式要求】：\n" +
+            "1. 第一行必须严格输出单曲标题在【$targetName】中的公认/流行译名，格式为：TITLE: <单曲译名>（若目标语言为英语且原曲名为英文，则保持原样）。\n" +
+            "2. 第二行必须为空行。\n" +
+            "3. 从第三行开始，逐行输出原歌词对应的【$targetName】译文。\n" +
+            "4. 必须保持与原歌词严格一一对应的行数和空行，绝对不要添加任何行号、多余解释、前后缀或 Markdown 代码块标签。"
+
+        val userPrompt = "歌曲标题：$trackTitle\n\n歌词全文：\n$originalLyrics"
+
+        return executeWithRetry("OpenAI 翻译《$trackTitle》") { attempt ->
+            AiDebugLogger.log(true, "OpenAI 翻译", "请求翻译《$trackTitle》，目标语言: $targetName，模型: $model" + (if (attempt > 1) " (重试第 $attempt 次)" else ""))
 
             val requestBodyJson = JSONObject().apply {
-                put("model", aiPreferences.modelName)
+                put("model", model)
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")
-                        put("content", promptSystem)
+                        put("content", systemPrompt)
                     })
                     put(JSONObject().apply {
                         put("role", "user")
-                        put("content", promptUser)
+                        put("content", userPrompt)
                     })
                 })
                 put("temperature", 0.3)
@@ -381,56 +435,11 @@ class AiTranslationService @Inject constructor(
             }
 
             val choices = json.getJSONArray("choices")
-            choices.getJSONObject(0).getJSONObject("message").getString("content").trim()
+            val content = choices.getJSONObject(0).getJSONObject("message").getString("content")
+            val result = parseTranslationResponse(content, trackTitle)
+            AiDebugLogger.log(true, "OpenAI 成功", "《$trackTitle》翻译完成，译名: ${result.translatedTitle ?: "(保持原名)"}")
+            result
         }
-
-        val titleDeferred = async(Dispatchers.IO) {
-            try {
-                val titlePrompt = "请给出这首歌曲标题在【$targetName】中的经典公认/流行译名（若目标语言为英语且原曲名为英文，则保持原样）。仅输出译名本身，不要附带任何多余标点或解释。"
-                val titleRequestJson = JSONObject().apply {
-                    put("model", aiPreferences.modelName)
-                    put("messages", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("role", "system")
-                            put("content", titlePrompt)
-                        })
-                        put(JSONObject().apply {
-                            put("role", "user")
-                            put("content", trackTitle)
-                        })
-                    })
-                    put("temperature", 0.2)
-                }.toString()
-
-                val titleRequest = Request.Builder()
-                    .url(url)
-                    .addHeader("Authorization", "Bearer ${aiPreferences.apiKey.trim()}")
-                    .addHeader("User-Agent", "okhttp/4.12.0")
-                    .post(titleRequestJson.toRequestBody(jsonMediaType))
-                    .build()
-
-                val titleResp = client.newCall(titleRequest).execute()
-                val titleBody = titleResp.body?.string()
-                if (titleBody != null && titleResp.isSuccessful) {
-                    val tJson = JSONObject(titleBody)
-                    if (!tJson.has("error")) {
-                        val tChoices = tJson.optJSONArray("choices")
-                        val tContent = tChoices?.optJSONObject(0)?.optJSONObject("message")?.optString("content")?.trim()
-                        if (!tContent.isNullOrBlank()) {
-                            return@async tContent.replace("\"", "").replace("《", "").replace("》", "").trim()
-                        }
-                    }
-                }
-                null
-            } catch (e: Exception) {
-                null
-            }
-        }
-
-        val lyrics = lyricsDeferred.await()
-        val title = titleDeferred.await()
-        AiDebugLogger.log(true, "OpenAI 成功", "歌词与单曲名并发翻译完成")
-        TranslationResult(translatedTitle = title, translatedLyrics = lyrics)
     }
 
     /**

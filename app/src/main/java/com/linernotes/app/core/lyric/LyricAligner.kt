@@ -14,8 +14,11 @@ object LyricAligner {
             return emptyList()
         }
 
-        val origLines = (originalRaw ?: "").lines().map { cleanLine(it) }
-        val transLines = (translatedRaw ?: "").lines().map { cleanLine(it) }
+        val cleanOriginal = sanitizeText(originalRaw)
+        val cleanTranslated = sanitizeText(translatedRaw)
+
+        val origLines = cleanOriginal.lines().map { cleanLine(it) }
+        val transLines = cleanTranslated.lines().map { cleanLine(it) }
 
         val maxLines = maxOf(origLines.size, transLines.size)
         val result = ArrayList<BilingualLyricLine>(maxLines)
@@ -35,6 +38,19 @@ object LyricAligner {
             )
         }
         return result
+    }
+
+    private fun sanitizeText(text: String?): String {
+        if (text.isNullOrBlank()) return ""
+        val lines = text.lines().toMutableList()
+        // 移除开头与结尾可能存在的 markdown 代码块标签（如 ``` 或 ```markdown）
+        while (lines.isNotEmpty() && lines.first().trim().startsWith("```")) {
+            lines.removeAt(0)
+        }
+        while (lines.isNotEmpty() && lines.last().trim().startsWith("```")) {
+            lines.removeAt(lines.size - 1)
+        }
+        return lines.joinToString("\n")
     }
 
     private fun cleanLine(line: String): String {
