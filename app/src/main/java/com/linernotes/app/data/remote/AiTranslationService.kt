@@ -1,5 +1,6 @@
 package com.linernotes.app.data.remote
 
+import com.linernotes.app.core.debug.AiDebugLogger
 import com.linernotes.app.core.preference.AiPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,8 +25,10 @@ class AiTranslationService @Inject constructor(
     private val aiPreferences: AiPreferences
 ) {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS)
+        .callTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .writeTimeout(6, TimeUnit.SECONDS)
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -40,6 +43,127 @@ class AiTranslationService @Inject constructor(
                model.contains("gemini")
     }
 
+    suspend fun testConnection(
+        apiKey: String,
+        baseUrl: String,
+        modelName: String
+    ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val trimmedKey = apiKey.trim()
+        val trimmedBase = baseUrl.trim().trimEnd('/')
+        val trimmedModel = modelName.trim()
+
+        if (trimmedKey.isBlank()) {
+            val msg = "API Key 为空，请输入后再测试"
+            AiDebugLogger.log(false, "测试连接", msg)
+            return@withContext Pair(false, msg)
+        }
+
+        val isGemini = trimmedBase.contains("generativelanguage.googleapis.com") ||
+                       trimmedKey.startsWith("AQ.") ||
+                       trimmedKey.startsWith("AIza") ||
+                       trimmedModel.contains("gemini", ignoreCase = true)
+
+        val startTime = System.currentTimeMillis()
+        try {
+            if (isGemini) {
+                val model = trimmedModel.ifBlank { "gemini-3.8-flash" }
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$trimmedKey"
+                AiDebugLogger.log(true, "测试开始", "发起 Gemini 测试: $model")
+
+                val testJson = JSONObject().apply {
+                    put("contents", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("role", "user")
+                            put("parts", JSONArray().apply {
+                                put(JSONObject().apply { put("text", "Hi, reply 1 word.") })
+                            })
+                        })
+                    })
+                    put("generationConfig", JSONObject().apply {
+                        put("maxOutputTokens", 10)
+                    })
+                }.toString()
+
+                val req = Request.Builder()
+                    .url(url)
+                    .addHeader("x-goog-api-key", trimmedKey)
+                    .post(testJson.toRequestBody(jsonMediaType))
+                    .build()
+
+                val resp = client.newCall(req).execute()
+                val body = resp.body?.string() ?: ""
+                val duration = System.currentTimeMillis() - startTime
+
+                if (!resp.isSuccessful) {
+                    val errMsg = try {
+                        val obj = JSONObject(body)
+                        obj.optJSONObject("error")?.optString("message") ?: body
+                    } catch (e: Exception) {
+                        "HTTP ${resp.code}: ${resp.message}"
+                    }
+                    val fullMsg = "HTTP ${resp.code} 报错: $errMsg"
+                    AiDebugLogger.log(false, "Gemini 测试失败", fullMsg, "详情: $body")
+                    return@withContext Pair(false, fullMsg)
+                }
+
+                AiDebugLogger.log(true, "Gemini 测试成功", "耗时 ${duration}ms，状态码 200 OK")
+                return@withContext Pair(true, "连接成功！(耗时 ${duration}ms，Gemini 响应正常)")
+            } else {
+                val url = if (trimmedBase.endsWith("/chat/completions")) trimmedBase else "$trimmedBase/chat/completions"
+                val model = trimmedModel.ifBlank { "deepseek-chat" }
+                AiDebugLogger.log(true, "测试开始", "发起 OpenAI 格式测试: $url ($model)")
+
+                val testJson = JSONObject().apply {
+                    put("model", model)
+                    put("messages", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("role", "user")
+                            put("content", "Hi")
+                        })
+                    })
+                    put("max_tokens", 10)
+                }.toString()
+
+                val req = Request.Builder()
+                    .url(url)
+                    .addHeader("Authorization", "Bearer $trimmedKey")
+                    .post(testJson.toRequestBody(jsonMediaType))
+                    .build()
+
+                val resp = client.newCall(req).execute()
+                val body = resp.body?.string() ?: ""
+                val duration = System.currentTimeMillis() - startTime
+
+                if (!resp.isSuccessful) {
+                    val errMsg = try {
+                        val obj = JSONObject(body)
+                        obj.optJSONObject("error")?.optString("message") ?: body
+                    } catch (e: Exception) {
+                        "HTTP ${resp.code}: ${resp.message}"
+                    }
+                    val fullMsg = "HTTP ${resp.code} 报错: $errMsg"
+                    AiDebugLogger.log(false, "OpenAI 测试失败", fullMsg, "详情: $body")
+                    return@withContext Pair(false, fullMsg)
+                }
+
+                AiDebugLogger.log(true, "OpenAI 测试成功", "耗时 ${duration}ms，状态码 200 OK")
+                return@withContext Pair(true, "连接成功！(耗时 ${duration}ms，接口响应正常)")
+            }
+        } catch (e: java.net.SocketTimeoutException) {
+            val msg = "连接超时 (10s)。若使用 Gemini，国内手机请开启代理/科学上网；或改用免代理的 DeepSeek。"
+            AiDebugLogger.log(false, "测试超时", msg, e.message)
+            Pair(false, msg)
+        } catch (e: java.net.UnknownHostException) {
+            val msg = "无法解析服务器域名。请检查手机网络或代理设置是否允许应用联网。"
+            AiDebugLogger.log(false, "解析域名失败", msg, e.message)
+            Pair(false, msg)
+        } catch (e: Exception) {
+            val msg = "连接异常: ${e.javaClass.simpleName} (${e.message})"
+            AiDebugLogger.log(false, "测试异常", msg, e.stackTraceToString().take(500))
+            Pair(false, msg)
+        }
+    }
+
     suspend fun translateTrack(
         trackTitle: String,
         originalLyrics: String
@@ -52,11 +176,20 @@ class AiTranslationService @Inject constructor(
                     translateWithOpenAi(trackTitle, originalLyrics)
                 }
             } catch (e: java.net.SocketTimeoutException) {
-                throw IllegalStateException("连接 AI 超时。若使用 Gemini，国内网络请开启手机代理/科学上网。")
+                val err = "连接 AI 超时。若使用 Gemini，国内网络请开启手机代理/科学上网；或改用免代理的 DeepSeek。"
+                AiDebugLogger.log(false, "翻译超时", err)
+                throw IllegalStateException(err)
             } catch (e: java.net.UnknownHostException) {
-                throw IllegalStateException("无法解析域名。请检查手机网络或代理设置是否允许应用联网。")
+                val err = "无法解析域名。请检查手机网络或代理设置是否允许应用联网。"
+                AiDebugLogger.log(false, "网络错误", err)
+                throw IllegalStateException(err)
             } catch (e: java.net.ConnectException) {
-                throw IllegalStateException("网络连接失败。若使用 Gemini，请确认代理生效。")
+                val err = "网络连接失败。若使用 Gemini，请确认手机代理正常生效。"
+                AiDebugLogger.log(false, "连接拒绝", err)
+                throw IllegalStateException(err)
+            } catch (e: Exception) {
+                AiDebugLogger.log(false, "翻译失败", e.message ?: "未知异常")
+                throw e
             }
         } else {
             fallbackTranslate(trackTitle, originalLyrics)
@@ -68,7 +201,9 @@ class AiTranslationService @Inject constructor(
      */
     private fun translateWithGeminiNative(trackTitle: String, originalLyrics: String): TranslationResult {
         val model = aiPreferences.modelName.trim().ifBlank { "gemini-3.8-flash" }
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
+        val key = aiPreferences.apiKey.trim()
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key"
+        AiDebugLogger.log(true, "Gemini 翻译", "开始翻译《$trackTitle》，模型: $model")
 
         val promptLyrics = "你是一位精通欧美流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌词逐行翻译为优美、符合原意、押韵自然的中文。务必保持与原歌词严格一一对应的行数和空行，每一行英文对应一行中文译文，绝对不要添加任何编号、多余解释、前后缀或代码块标签。\n\n歌曲标题：$trackTitle\n\n歌词全文：\n$originalLyrics"
 
@@ -90,7 +225,7 @@ class AiTranslationService @Inject constructor(
 
         val request = Request.Builder()
             .url(url)
-            .addHeader("x-goog-api-key", aiPreferences.apiKey.trim())
+            .addHeader("x-goog-api-key", key)
             .post(requestJson.toRequestBody(jsonMediaType))
             .build()
 
@@ -105,13 +240,16 @@ class AiTranslationService @Inject constructor(
             } catch (e: Exception) {
                 "HTTP ${response.code}: ${response.message}"
             }
-            throw IllegalStateException("Gemini 报错: $errMsg")
+            val fullErr = "HTTP ${response.code} 报错: $errMsg"
+            AiDebugLogger.log(false, "Gemini 失败", fullErr)
+            throw IllegalStateException(fullErr)
         }
 
         val json = JSONObject(responseBody)
         val candidates = json.optJSONArray("candidates")
         val parts = candidates?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
         val lyricsContent = parts?.optJSONObject(0)?.optString("text")?.trim() ?: ""
+        AiDebugLogger.log(true, "Gemini 成功", "歌词主体翻译完成")
 
         // 单曲中文译名
         var translatedTitle: String? = null
@@ -166,6 +304,7 @@ class AiTranslationService @Inject constructor(
     private fun translateWithOpenAi(trackTitle: String, originalLyrics: String): TranslationResult {
         var cleanBase = aiPreferences.baseUrl.trim().trimEnd('/')
         val url = if (cleanBase.endsWith("/chat/completions")) cleanBase else "$cleanBase/chat/completions"
+        AiDebugLogger.log(true, "OpenAI 翻译", "开始翻译《$trackTitle》，模型: ${aiPreferences.modelName}")
 
         val promptSystem = "你是一位精通欧美流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌词逐行翻译为优美、符合原意、押韵自然的中文。务必保持与原歌词严格一一对应的行数和空行，每一行英文对应一行中文译文，绝对不要添加任何编号、多余解释、前后缀或代码块标签。"
         val promptUser = "歌曲标题：$trackTitle\n\n歌词全文：\n$originalLyrics"
@@ -202,17 +341,21 @@ class AiTranslationService @Inject constructor(
             } catch (e: Exception) {
                 "HTTP ${response.code}: ${response.message}"
             }
-            throw IllegalStateException("AI 接口报错: $errMsg")
+            val fullErr = "HTTP ${response.code} 报错: $errMsg"
+            AiDebugLogger.log(false, "OpenAI 失败", fullErr)
+            throw IllegalStateException(fullErr)
         }
 
         val json = JSONObject(responseBody)
         if (json.has("error")) {
             val errMsg = json.optJSONObject("error")?.optString("message") ?: json.optString("error", "未知错误")
+            AiDebugLogger.log(false, "OpenAI 报错", errMsg)
             throw IllegalStateException("AI 接口报错: $errMsg")
         }
 
         val choices = json.getJSONArray("choices")
         val content = choices.getJSONObject(0).getJSONObject("message").getString("content").trim()
+        AiDebugLogger.log(true, "OpenAI 成功", "歌词主体翻译完成")
 
         var translatedTitle: String? = null
         try {

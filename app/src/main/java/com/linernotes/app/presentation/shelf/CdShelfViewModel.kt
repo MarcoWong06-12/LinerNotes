@@ -3,6 +3,7 @@ package com.linernotes.app.presentation.shelf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.linernotes.app.core.preference.AiPreferences
+import com.linernotes.app.data.remote.AiTranslationService
 import com.linernotes.app.data.local.entity.AlbumEntity
 import com.linernotes.app.data.local.entity.TrackEntity
 import com.linernotes.app.domain.repository.AlbumRepository
@@ -17,7 +18,8 @@ import javax.inject.Inject
 @HiltViewModel
 class CdShelfViewModel @Inject constructor(
     private val repository: AlbumRepository,
-    val aiPreferences: AiPreferences
+    val aiPreferences: AiPreferences,
+    private val aiTranslationService: AiTranslationService
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -73,5 +75,9 @@ class CdShelfViewModel @Inject constructor(
         viewModelScope.launch {
             repository.removeAlbumFromShelf(albumId)
         }
+    }
+
+    suspend fun testAiConnection(apiKey: String, baseUrl: String, modelName: String): Pair<Boolean, String> {
+        return aiTranslationService.testConnection(apiKey, baseUrl, modelName)
     }
 }

@@ -37,27 +37,3 @@ jobs:
           name: LinerNotes-v1.0-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
-
-      - name: Publish to GitHub Releases
-        uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/main'
-        with:
-          tag_name: v1.0.3
-          name: "LinerNotes v1.0.3 (原生支持 Gemini AQ Key 与 3.8 Flash)"
-          body: |
-            ## 🎵 LinerNotes (唱片内页) v1.0.3 升级版
-
-            ### 🚀 重磅升级与网络优化：
-            - ⚡ **原生支持 Google Gemini 官方端点**：全面兼容 2026 最新 `AQ.` 格式 Key，解决 OpenAI 兼容层的 400 认证冲突。
-            - 🌟 **新增 Gemini 3.8 Flash 一键预设**：直接使用 Google 最新一代 3.8 Flash 旗舰模型。
-            - ⏱️ **连接超时缩减至 15 秒**：告别无限转圈卡顿，提供清晰明确的网络与代理提示。
-            - 🤖 **全面支持国内免翻墙大模型**：内置 DeepSeek 等一键预设，无需代理也能飞速翻译。
-            - 🤖 **全面兼容 OpenAI 格式大模型**：内置 Google Gemini、DeepSeek、OpenAI 等一键预设，亦可自定义填写通义千问、Kimi 等服务。
-            - 🎼 **文学级逐行诗意歌词推敲**：中文与英文歌词保持严格逐行对应，并自动智能翻译单曲中文名称。
-            - ⚙️ **更贴心的输入体验**：自动识别并补全 Gemini 官方接口地址，提供清晰的报错与网络提示。
-            - 💿 **官方高清封面与全曲目同步**：支持从相册导入封面与 LRCLIB 全量歌词库智能搜索。
-
-            **点击下方的 `app-debug.apk` 即可直接在手机上下载安装！**
-          files: app/build/outputs/apk/debug/*.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

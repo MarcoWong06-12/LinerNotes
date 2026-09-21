@@ -161,4 +161,8 @@ class LyricBookletViewModel @Inject constructor(
         val state = _uiState.value
         return state.albumWithTracks?.tracks?.getOrNull(state.currentTrackIndex)
     }
+
+    suspend fun testAiConnection(apiKey: String, baseUrl: String, modelName: String): Pair<Boolean, String> {
+        return aiTranslationService.testConnection(apiKey, baseUrl, modelName)
+    }
 }

@@ -124,6 +124,7 @@ fun CdShelfScreen(
     if (state.isAiConfigOpen) {
         AiConfigDialog(
             aiPreferences = viewModel.aiPreferences,
+            onTestConnection = { k, b, m -> viewModel.testAiConnection(k, b, m) },
             onDismiss = { viewModel.setAiConfigOpen(false) },
             onSaved = { viewModel.setAiConfigOpen(false) }
         )

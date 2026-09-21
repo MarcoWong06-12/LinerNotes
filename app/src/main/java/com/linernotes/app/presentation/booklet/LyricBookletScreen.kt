@@ -217,6 +217,7 @@ fun LyricBookletScreen(
     if (state.isAiConfigOpen) {
         AiConfigDialog(
             aiPreferences = viewModel.aiPreferences,
+            onTestConnection = { k, b, m -> viewModel.testAiConnection(k, b, m) },
             onDismiss = { viewModel.openAiConfig(false) },
             onSaved = {
                 viewModel.openAiConfig(false)
