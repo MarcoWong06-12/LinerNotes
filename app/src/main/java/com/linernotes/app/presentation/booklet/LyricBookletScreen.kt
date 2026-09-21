@@ -329,6 +329,7 @@ fun LyricBookletScreen(
             }
         }
     }
+}
 
     if (state.isEditingSheetOpen && currentTrack != null) {
         EditLyricSheet(
