@@ -33,20 +33,18 @@ class AiTranslationService @Inject constructor(
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
+    private fun isGeminiNative(key: String, base: String): Boolean {
+        val trimmedKey = key.trim()
+        val trimmedBase = base.lowercase().trim()
+        // 任何以 sk- 开头的密钥均为 OpenAI 兼容格式中转站/代理，绝不走 Google 官方接口
+        if (trimmedKey.startsWith("sk-")) return false
+        return trimmedBase.contains("generativelanguage.googleapis.com") ||
+               trimmedKey.startsWith("AQ.") ||
+               trimmedKey.startsWith("AIza")
+    }
+
     private fun isGeminiService(): Boolean {
-        val base = aiPreferences.baseUrl.lowercase().trim()
-        val model = aiPreferences.modelName.lowercase().trim()
-
-        if (base.contains("deepseek.com") || model.contains("deepseek")) return false
-        if (base.contains("openai.com") || model.startsWith("gpt-")) return false
-        if (base.contains("moonshot.cn") || model.contains("kimi")) return false
-        if (base.contains("dashscope.aliyuncs.com") || model.contains("qwen")) return false
-
-        val key = aiPreferences.apiKey.trim()
-        return base.contains("generativelanguage.googleapis.com") ||
-               model.contains("gemini") ||
-               key.startsWith("AQ.") ||
-               key.startsWith("AIza")
+        return isGeminiNative(aiPreferences.apiKey, aiPreferences.baseUrl)
     }
 
     suspend fun testConnection(
@@ -55,7 +53,7 @@ class AiTranslationService @Inject constructor(
         modelName: String
     ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
         val trimmedKey = apiKey.trim()
-        val trimmedBase = baseUrl.trim().trimEnd('/')
+        val trimmedBase = baseUrl.trim()
         val trimmedModel = modelName.trim()
 
         if (trimmedKey.isBlank()) {
@@ -64,10 +62,7 @@ class AiTranslationService @Inject constructor(
             return@withContext Pair(false, msg)
         }
 
-        val isGemini = trimmedBase.contains("generativelanguage.googleapis.com") ||
-                       trimmedKey.startsWith("AQ.") ||
-                       trimmedKey.startsWith("AIza") ||
-                       trimmedModel.contains("gemini", ignoreCase = true)
+        val isGemini = isGeminiNative(trimmedKey, trimmedBase)
 
         val startTime = System.currentTimeMillis()
         try {
@@ -318,23 +313,8 @@ class AiTranslationService @Inject constructor(
     }
 
     private fun sanitizeOpenAiUrl(rawBase: String): String {
-        var clean = rawBase.trim()
-            .replace("POST ", "")
-            .replace("post ", "")
-            .replace("GET ", "")
-            .replace("\n", "")
-            .replace("\r", "")
-            .trimEnd('/')
-
-        if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
-            clean = "https://$clean"
-        }
-
-        while (clean.endsWith("/chat/completions")) {
-            clean = clean.removeSuffix("/chat/completions").trimEnd('/')
-        }
-
-        return "$clean/chat/completions"
+        val cleanBase = AiPreferences.sanitizeBaseUrl(rawBase)
+        return "$cleanBase/chat/completions"
     }
 
     /**

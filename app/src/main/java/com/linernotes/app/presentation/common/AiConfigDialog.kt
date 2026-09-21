@@ -31,7 +31,7 @@ fun AiConfigDialog(
     onSaved: () -> Unit
 ) {
     var apiKey by remember { mutableStateOf(aiPreferences.apiKey) }
-    var baseUrl by remember { mutableStateOf(aiPreferences.baseUrl) }
+    var baseUrl by remember { mutableStateOf(AiPreferences.sanitizeBaseUrl(aiPreferences.baseUrl)) }
     var modelName by remember { mutableStateOf(aiPreferences.modelName) }
     var isKeyVisible by remember { mutableStateOf(false) }
 
@@ -73,6 +73,13 @@ fun AiConfigDialog(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    SuggestionChip(
+                        onClick = {
+                            baseUrl = "https://www.kuaiaiapi.com/v1"
+                            modelName = "gpt-5.6-terra"
+                        },
+                        label = { Text("快爱 API (中转推荐)") }
+                    )
                     SuggestionChip(
                         onClick = {
                             baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
@@ -153,7 +160,7 @@ fun AiConfigDialog(
                         IconButton(onClick = {
                             val clip = clipboardManager.getText()?.text?.trim()
                             if (!clip.isNullOrBlank()) {
-                                baseUrl = clip.replace("POST ", "").replace("post ", "").replace("\n", "").trim()
+                                baseUrl = AiPreferences.sanitizeBaseUrl(clip)
                             }
                         }) {
                             Icon(Icons.Default.ContentPaste, contentDescription = "粘贴剪贴板内容")
@@ -197,7 +204,9 @@ fun AiConfigDialog(
                             coroutineScope.launch {
                                 isTesting = true
                                 testResult = null
-                                testResult = onTestConnection?.invoke(apiKey, baseUrl, modelName)
+                                val cleanBase = AiPreferences.sanitizeBaseUrl(baseUrl)
+                                baseUrl = cleanBase
+                                testResult = onTestConnection?.invoke(apiKey.trim(), cleanBase, modelName.trim())
                                     ?: Pair(false, "测试服务未就绪")
                                 isTesting = false
                             }
@@ -304,9 +313,9 @@ fun AiConfigDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    aiPreferences.apiKey = apiKey
-                    aiPreferences.baseUrl = baseUrl
-                    aiPreferences.modelName = modelName
+                    aiPreferences.apiKey = apiKey.trim()
+                    aiPreferences.baseUrl = AiPreferences.sanitizeBaseUrl(baseUrl)
+                    aiPreferences.modelName = modelName.trim()
                     onSaved()
                 }
             ) {
