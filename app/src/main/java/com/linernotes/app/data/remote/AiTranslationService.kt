@@ -149,9 +149,9 @@ class AiTranslationService @Inject constructor(
                 AiDebugLogger.log(true, "OpenAI 测试成功", "耗时 ${duration}ms，状态码 200 OK")
                 return@withContext Pair(true, "连接成功！(耗时 ${duration}ms，接口响应正常)")
             }
-        } catch (e: java.net.SocketTimeoutException) {
-            val msg = "连接超时 (10s)。若使用 Gemini，国内手机请开启代理/科学上网；或改用免代理的 DeepSeek。"
-            AiDebugLogger.log(false, "测试超时", msg, e.message)
+        } catch (e: java.io.InterruptedIOException) {
+            val msg = "连接超时 (10s)。手机网络无法直连 Google 服务器。若使用 Gemini，国内 5G 请开启手机代理软件（如 Clash/v2rayNG，并确认未开启分应用绕过）；或直接在上方点击切换为国内免代理的 DeepSeek。"
+            AiDebugLogger.log(false, "连接超时", msg, e.message)
             Pair(false, msg)
         } catch (e: java.net.UnknownHostException) {
             val msg = "无法解析服务器域名。请检查手机网络或代理设置是否允许应用联网。"
@@ -175,8 +175,8 @@ class AiTranslationService @Inject constructor(
                 } else {
                     translateWithOpenAi(trackTitle, originalLyrics)
                 }
-            } catch (e: java.net.SocketTimeoutException) {
-                val err = "连接 AI 超时。若使用 Gemini，国内网络请开启手机代理/科学上网；或改用免代理的 DeepSeek。"
+            } catch (e: java.io.InterruptedIOException) {
+                val err = "连接 AI 超时。手机网络无法直连 Google 服务器。若使用 Gemini，国内网络请开启手机代理/科学上网；或改用免代理的 DeepSeek。"
                 AiDebugLogger.log(false, "翻译超时", err)
                 throw IllegalStateException(err)
             } catch (e: java.net.UnknownHostException) {
