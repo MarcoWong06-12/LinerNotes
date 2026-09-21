@@ -76,23 +76,16 @@ fun AiConfigDialog(
                     SuggestionChip(
                         onClick = {
                             baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
+                            modelName = "gemini-3.6-flash"
+                        },
+                        label = { Text("Gemini 3.6 (官方推荐)") }
+                    )
+                    SuggestionChip(
+                        onClick = {
+                            baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
                             modelName = "gemini-3.8-flash"
                         },
-                        label = { Text("Gemini 3.8 (最新)") }
-                    )
-                    SuggestionChip(
-                        onClick = {
-                            baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
-                            modelName = "gemini-2.0-flash"
-                        },
-                        label = { Text("Gemini 2.0") }
-                    )
-                    SuggestionChip(
-                        onClick = {
-                            baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
-                            modelName = "gemini-1.5-flash"
-                        },
-                        label = { Text("Gemini 1.5") }
+                        label = { Text("Gemini 3.8 (最新尝鲜)") }
                     )
                     SuggestionChip(
                         onClick = {
@@ -150,7 +143,7 @@ fun AiConfigDialog(
                     value = modelName,
                     onValueChange = { modelName = it },
                     label = { Text("模型名称 (Model)") },
-                    placeholder = { Text("gemini-3.8-flash / deepseek-chat") },
+                    placeholder = { Text("gemini-3.6-flash / gemini-3.8-flash") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

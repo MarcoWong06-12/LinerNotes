@@ -66,7 +66,7 @@ class AiTranslationService @Inject constructor(
         val startTime = System.currentTimeMillis()
         try {
             if (isGemini) {
-                val model = trimmedModel.ifBlank { "gemini-3.8-flash" }
+                val model = trimmedModel.ifBlank { "gemini-3.6-flash" }
                 val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$trimmedKey"
                 AiDebugLogger.log(true, "测试开始", "发起 Gemini 测试: $model")
 
@@ -200,7 +200,7 @@ class AiTranslationService @Inject constructor(
      * Google Gemini 原生官方 API 调用 (支持最新的 AQ. 格式及 AIza 密钥)
      */
     private fun translateWithGeminiNative(trackTitle: String, originalLyrics: String): TranslationResult {
-        val model = aiPreferences.modelName.trim().ifBlank { "gemini-3.8-flash" }
+        val model = aiPreferences.modelName.trim().ifBlank { "gemini-3.6-flash" }
         val key = aiPreferences.apiKey.trim()
         val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key"
         AiDebugLogger.log(true, "Gemini 翻译", "开始翻译《$trackTitle》，模型: $model")
