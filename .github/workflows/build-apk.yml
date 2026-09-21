@@ -30,9 +30,7 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          sed -i 's/\r$//' ./gradlew
-          chmod +x ./gradlew
-          ./gradlew :app:assembleDebug --stacktrace
+          gradle :app:assembleDebug --stacktrace
 
       - name: Upload Debug APK to Artifacts
         uses: actions/upload-artifact@v4
