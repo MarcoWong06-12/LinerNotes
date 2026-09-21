@@ -229,7 +229,15 @@ class AiTranslationService @Inject constructor(
             .post(requestJson.toRequestBody(jsonMediaType))
             .build()
 
-        val response = client.newCall(request).execute()
+        var response = client.newCall(request).execute()
+        // 若遇到 Google 官方 503 高峰拥堵或 429 限流，自动等待 1.5 秒重试一次
+        if (response.code == 503 || response.code == 429) {
+            AiDebugLogger.log(false, "Gemini 拥堵 (${response.code})", "Google 官方节点高并发排队，1.5 秒后自动重试...")
+            response.close()
+            try { Thread.sleep(1500) } catch (ignored: Exception) {}
+            response = client.newCall(request).execute()
+        }
+
         val responseBody = response.body?.string() ?: throw IllegalStateException("Gemini 服务无响应")
 
         if (!response.isSuccessful) {
@@ -240,7 +248,11 @@ class AiTranslationService @Inject constructor(
             } catch (e: Exception) {
                 "HTTP ${response.code}: ${response.message}"
             }
-            val fullErr = "HTTP ${response.code} 报错: $errMsg"
+            val fullErr = if (response.code == 503) {
+                "Google 官方 $model 当前全球排队拥堵 (HTTP 503)。建议在设置里点「Gemini 2.0」切换为更稳定的模型，或稍候再点翻译！"
+            } else {
+                "HTTP ${response.code} 报错: $errMsg"
+            }
             AiDebugLogger.log(false, "Gemini 失败", fullErr)
             throw IllegalStateException(fullErr)
         }
