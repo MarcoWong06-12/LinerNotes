@@ -5,6 +5,9 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build & Package Android APK
@@ -26,11 +29,31 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --stacktrace --info
+        run: gradle :app:assembleDebug --stacktrace
 
-      - name: Upload Debug APK
+      - name: Upload Debug APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: LinerNotes-v1.0-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0
+          name: "LinerNotes v1.0.0 (手机安装包)"
+          body: |
+            ## 🎵 LinerNotes (唱片内页) v1.0.0 安装包
+            
+            ### 更新亮点：
+            - ✨ **高清封面修复**：接入官方高清唱片源（600x600 纯正无损封面，告别黑块）
+            - 📖 **全碟曲目与真实完整歌词**：接入 LRCLIB 完整歌词库，自动同步专辑全部曲目与全篇长歌词
+            - 📷 **支持手机本地相册**：新增相册图片挑选器，可直接拍下实体 CD 封面归档入库
+            - 🌐 **网络安全协议强化**：支持所有网络图床与本地内容图片解析
+            
+            **点击下方的 `app-debug.apk` 即可直接在手机上下载安装！**
+          files: app/build/outputs/apk/debug/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
