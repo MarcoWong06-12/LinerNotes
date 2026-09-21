@@ -25,10 +25,10 @@ class AiTranslationService @Inject constructor(
     private val aiPreferences: AiPreferences
 ) {
     private val client = OkHttpClient.Builder()
-        .callTimeout(10, TimeUnit.SECONDS)
-        .connectTimeout(6, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
-        .writeTimeout(6, TimeUnit.SECONDS)
+        .callTimeout(35, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(25, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -150,7 +150,7 @@ class AiTranslationService @Inject constructor(
                 return@withContext Pair(true, "连接成功！(耗时 ${duration}ms，接口响应正常)")
             }
         } catch (e: java.io.InterruptedIOException) {
-            val msg = "连接超时 (10s)。手机网络无法直连 Google 服务器。若使用 Gemini，国内 5G 请开启手机代理软件（如 Clash/v2rayNG，并确认未开启分应用绕过）；或直接在上方点击切换为国内免代理的 DeepSeek。"
+            val msg = "连接超时 (35s)。代理节点响应过慢或未允许本应用联网。建议检查代理节点地区（请避开中国香港节点，推荐日本/新加坡/美国），或改用国内免翻的 DeepSeek。"
             AiDebugLogger.log(false, "连接超时", msg, e.message)
             Pair(false, msg)
         } catch (e: java.net.UnknownHostException) {
