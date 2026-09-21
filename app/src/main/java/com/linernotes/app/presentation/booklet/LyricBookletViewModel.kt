@@ -4,7 +4,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.linernotes.app.core.lyric.LyricAligner
+import com.linernotes.app.core.preference.AiPreferences
 import com.linernotes.app.data.local.entity.TrackEntity
+import com.linernotes.app.data.remote.AiTranslationService
 import com.linernotes.app.domain.model.LyricDisplayMode
 import com.linernotes.app.domain.repository.AlbumRepository
 import com.linernotes.app.presentation.booklet.model.BookletUiState
@@ -18,19 +20,15 @@ import javax.inject.Inject
 
 @HiltViewModel
 class LyricBookletViewModel @Inject constructor(
-    private val repository: AlbumRepository
+    private val repository: AlbumRepository,
+    val aiPreferences: AiPreferences,
+    private val aiTranslationService: AiTranslationService
 ) : ViewModel() {
 
     private var currentAlbumId: String = ""
 
     private val _uiState = MutableStateFlow(BookletUiState())
     val uiState: StateFlow<BookletUiState> = _uiState.asStateFlow()
-
-    init {
-        if (currentAlbumId.isNotBlank()) {
-            loadBooklet(currentAlbumId)
-        }
-    }
 
     fun setAlbumId(id: String) {
         if (currentAlbumId != id) {
@@ -101,6 +99,10 @@ class LyricBookletViewModel @Inject constructor(
         _uiState.update { it.copy(isEditingSheetOpen = isOpen) }
     }
 
+    fun openAiConfig(isOpen: Boolean) {
+        _uiState.update { it.copy(isAiConfigOpen = isOpen) }
+    }
+
     fun saveManualEdits(trackId: Long, newTitleZh: String?, newOriginal: String?, newTranslated: String?) {
         viewModelScope.launch {
             repository.updateTrackTranslation(
@@ -113,24 +115,40 @@ class LyricBookletViewModel @Inject constructor(
         }
     }
 
+    fun onAiTranslateClicked() {
+        if (!aiPreferences.hasKey) {
+            // 如果尚未配置 AI API Key，直接弹出配置窗口引导配置
+            _uiState.update { it.copy(isAiConfigOpen = true) }
+        } else {
+            retranslateCurrentTrack()
+        }
+    }
+
     fun retranslateCurrentTrack() {
         val currentTrack = getCurrentTrack() ?: return
+        if (currentTrack.originalLyrics.isNullOrBlank()) {
+            _uiState.update { it.copy(userMessage = "当前曲目无歌词，无法进行翻译") }
+            return
+        }
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isTranslating = true) }
+            val msg = if (aiPreferences.hasKey) "AI 正在逐行推敲翻译歌词中..." else "正在进行基础翻译中..."
+            _uiState.update { it.copy(isTranslating = true, userMessage = msg) }
             try {
-                val mockTranslated = (currentTrack.originalLyrics ?: "")
-                    .lines()
-                    .joinToString("\n") { line -> if (line.isNotBlank()) "【译】$line" else "" }
+                val result = aiTranslationService.translateTrack(
+                    trackTitle = currentTrack.title,
+                    originalLyrics = currentTrack.originalLyrics
+                )
 
                 repository.updateTrackTranslation(
                     trackId = currentTrack.id,
-                    translatedTitle = currentTrack.translatedTitle ?: "（已翻译曲目）",
+                    translatedTitle = result.translatedTitle ?: currentTrack.translatedTitle,
                     originalLyrics = currentTrack.originalLyrics,
-                    translatedLyrics = mockTranslated
+                    translatedLyrics = result.translatedLyrics
                 )
-                _uiState.update { it.copy(isTranslating = false, userMessage = "翻译更新完成") }
+                _uiState.update { it.copy(isTranslating = false, userMessage = "翻译完成并已对齐保存！") }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isTranslating = false, userMessage = "翻译失败: ${e.message}") }
+                _uiState.update { it.copy(isTranslating = false, userMessage = "翻译遇到问题: ${e.message}") }
             }
         }
     }

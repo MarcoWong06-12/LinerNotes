@@ -42,17 +42,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.0
-          name: "LinerNotes v1.0.0 (手机安装包)"
+          tag_name: v1.0.1
+          name: "LinerNotes v1.0.1 (支持 AI 翻译与自定义 API Key)"
           body: |
-            ## 🎵 LinerNotes (唱片内页) v1.0.0 安装包
-            
-            ### 更新亮点：
-            - ✨ **高清封面修复**：接入官方高清唱片源（600x600 纯正无损封面，告别黑块）
-            - 📖 **全碟曲目与真实完整歌词**：接入 LRCLIB 完整歌词库，自动同步专辑全部曲目与全篇长歌词
-            - 📷 **支持手机本地相册**：新增相册图片挑选器，可直接拍下实体 CD 封面归档入库
-            - 🌐 **网络安全协议强化**：支持所有网络图床与本地内容图片解析
-            
+            ## 🎵 LinerNotes (唱片内页) v1.0.1 升级版
+
+            ### 🚀 重磅新增与修复：
+            - 🤖 **全面支持自定义 AI 歌词翻译**：支持输入任意兼容 OpenAI 格式的 API Key（DeepSeek、OpenAI、Kimi、通义千问、硅基流动等）
+            - 🎼 **AI 逐行文学级歌词推敲**：保留歌词韵律与结构，中英双语严格逐行对应，曲名自动汉化
+            - ⚙️ **双入口便捷配置**：可在主页面右上角 ⚙️ 或歌词本内随时修改 API Key 与模型（默认推荐高性价比 DeepSeek）
+            - 🛡️ **内置无感降级保护**：未填写 API Key 或网络波动时，自动降级为基础翻译，告别空译文
+            - 💿 **官方高清封面与全曲目同步**：支持从相册自选照片与 LRCLIB 全量歌词库同步
+
             **点击下方的 `app-debug.apk` 即可直接在手机上下载安装！**
           files: app/build/outputs/apk/debug/*.apk
         env:

@@ -2,6 +2,7 @@ package com.linernotes.app.presentation.shelf
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.linernotes.app.core.preference.AiPreferences
 import com.linernotes.app.data.local.entity.AlbumEntity
 import com.linernotes.app.data.local.entity.TrackEntity
 import com.linernotes.app.domain.repository.AlbumRepository
@@ -15,12 +16,14 @@ import javax.inject.Inject
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class CdShelfViewModel @Inject constructor(
-    private val repository: AlbumRepository
+    private val repository: AlbumRepository,
+    val aiPreferences: AiPreferences
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
     private val _isSearchActive = MutableStateFlow(false)
     private val _isAddSheetOpen = MutableStateFlow(false)
+    private val _isAiConfigOpen = MutableStateFlow(false)
 
     val uiState: StateFlow<ShelfUiState> = combine(
         _searchQuery.flatMapLatest { query ->
@@ -29,13 +32,15 @@ class CdShelfViewModel @Inject constructor(
         },
         _searchQuery,
         _isSearchActive,
-        _isAddSheetOpen
-    ) { albums, query, isSearchActive, isAddSheetOpen ->
+        _isAddSheetOpen,
+        _isAiConfigOpen
+    ) { albums, query, isSearchActive, isAddSheetOpen, isAiConfigOpen ->
         ShelfUiState(
             albums = albums,
             searchQuery = query,
             isSearchActive = isSearchActive,
             isAddSheetOpen = isAddSheetOpen,
+            isAiConfigOpen = isAiConfigOpen,
             isLoading = false
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ShelfUiState())
@@ -51,6 +56,10 @@ class CdShelfViewModel @Inject constructor(
 
     fun setAddSheetOpen(open: Boolean) {
         _isAddSheetOpen.value = open
+    }
+
+    fun setAiConfigOpen(open: Boolean) {
+        _isAiConfigOpen.value = open
     }
 
     fun saveNewAlbum(album: AlbumEntity, tracks: List<TrackEntity>) {

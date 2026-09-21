@@ -10,10 +10,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import com.linernotes.app.presentation.common.AiConfigDialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,13 +94,28 @@ fun LyricBookletScreen(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     IconButton(
-                        onClick = { viewModel.retranslateCurrentTrack() },
+                        onClick = { viewModel.onAiTranslateClicked() },
                         enabled = !state.isTranslating
                     ) {
+                        if (state.isTranslating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "AI 逐行推敲翻译",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    IconButton(onClick = { viewModel.openAiConfig(true) }) {
                         Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "重新翻译该曲",
-                            tint = MaterialTheme.colorScheme.primary
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "配置 AI API Key",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(onClick = { viewModel.openEditSheet(true) }) {
@@ -193,6 +210,17 @@ fun LyricBookletScreen(
             onDismiss = { viewModel.openEditSheet(false) },
             onSave = { zhTitle, origLyrics, transLyrics ->
                 viewModel.saveManualEdits(currentTrack.id, zhTitle, origLyrics, transLyrics)
+            }
+        )
+    }
+
+    if (state.isAiConfigOpen) {
+        AiConfigDialog(
+            aiPreferences = viewModel.aiPreferences,
+            onDismiss = { viewModel.openAiConfig(false) },
+            onSaved = {
+                viewModel.openAiConfig(false)
+                viewModel.retranslateCurrentTrack()
             }
         )
     }

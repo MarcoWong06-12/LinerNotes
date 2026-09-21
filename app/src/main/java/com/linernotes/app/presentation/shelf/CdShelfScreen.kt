@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -15,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.linernotes.app.presentation.common.AiConfigDialog
 import com.linernotes.app.presentation.shelf.components.AddCdBottomSheet
 import com.linernotes.app.presentation.shelf.components.CdCard
 import com.linernotes.app.presentation.shelf.components.EmptyShelfState
@@ -59,6 +61,14 @@ fun CdShelfScreen(
                         IconButton(onClick = { viewModel.setSearchActive(true) }) {
                             Icon(Icons.Default.Search, contentDescription = "搜索唱片")
                         }
+                    }
+
+                    IconButton(onClick = { viewModel.setAiConfigOpen(true) }) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "AI 翻译设置",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
 
                     IconButton(onClick = { viewModel.setAddSheetOpen(true) }) {
@@ -108,6 +118,14 @@ fun CdShelfScreen(
             onSaveAlbum = { album, tracks ->
                 viewModel.saveNewAlbum(album, tracks)
             }
+        )
+    }
+
+    if (state.isAiConfigOpen) {
+        AiConfigDialog(
+            aiPreferences = viewModel.aiPreferences,
+            onDismiss = { viewModel.setAiConfigOpen(false) },
+            onSaved = { viewModel.setAiConfigOpen(false) }
         )
     }
 }

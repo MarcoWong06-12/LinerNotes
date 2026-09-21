@@ -13,6 +13,7 @@ data class BookletUiState(
     val alignedLyrics: List<BilingualLyricLine> = emptyList(),
     val ambientCoverColor: Color = Color(0xFF1E1E24),
     val isEditingSheetOpen: Boolean = false,
+    val isAiConfigOpen: Boolean = false,
     val isTranslating: Boolean = false,
     val userMessage: String? = null
 )
