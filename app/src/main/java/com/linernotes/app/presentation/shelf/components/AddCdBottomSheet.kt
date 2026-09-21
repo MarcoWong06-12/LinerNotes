@@ -34,6 +34,7 @@ fun AddCdBottomSheet(
     onSaveAlbum: (AlbumEntity, List<TrackEntity>) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val strings = com.linernotes.app.core.i18n.LocalStrings.current
     var selectedTab by remember { mutableIntStateOf(0) }
 
     var searchQuery by remember { mutableStateOf("") }
@@ -67,7 +68,7 @@ fun AddCdBottomSheet(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                text = "收纳新唱片入库",
+                text = strings.addAlbumTitle,
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -76,12 +77,12 @@ fun AddCdBottomSheet(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("联网精准抓取") }
+                    text = { Text(strings.tabOnlineSearch) }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("手动录入档案") }
+                    text = { Text(strings.tabManualEntry) }
                 )
             }
 
@@ -91,8 +92,8 @@ fun AddCdBottomSheet(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    label = { Text("搜索唱片 (如: Abbey Road / 周杰伦 / 1989)") },
-                    placeholder = { Text("输入专辑名或艺术家搜索") },
+                    label = { Text(strings.searchAlbumLabel) },
+                    placeholder = { Text(strings.searchAlbumPlaceholder) },
                     trailingIcon = {
                         IconButton(
                             onClick = {
@@ -112,14 +113,14 @@ fun AddCdBottomSheet(
                                                 translatedTitle = "修道院之路"
                                             }
                                         } else {
-                                            searchError = "未搜索到对应专辑，请尝试更精确的名称"
+                                            searchError = strings.searchNotFound
                                         }
                                     }
                                 }
                             },
                             enabled = searchQuery.isNotBlank() && !isSearching
                         ) {
-                            Icon(Icons.Default.Search, contentDescription = "搜索")
+                            Icon(Icons.Default.Search, contentDescription = "Search")
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -135,7 +136,7 @@ fun AddCdBottomSheet(
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "正在联网抓取高清封面、曲目与年份...",
+                            text = strings.searchingOnline,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -184,7 +185,7 @@ fun AddCdBottomSheet(
                 ) {
                     Icon(Icons.Default.Image, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (coverUrl.isBlank()) "从相册选择封面" else "更换相册图片")
+                    Text(if (coverUrl.isBlank()) strings.pickFromGallery else strings.albumCover)
                 }
             }
 
@@ -193,7 +194,7 @@ fun AddCdBottomSheet(
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text("专辑名 (原版)") },
+                label = { Text(strings.albumTitleLabel) },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -201,7 +202,7 @@ fun AddCdBottomSheet(
             OutlinedTextField(
                 value = translatedTitle,
                 onValueChange = { translatedTitle = it },
-                label = { Text("中文译名 (可选)") },
+                label = { Text(strings.albumTranslatedTitleLabel) },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -210,14 +211,14 @@ fun AddCdBottomSheet(
                 OutlinedTextField(
                     value = artist,
                     onValueChange = { artist = it },
-                    label = { Text("艺术家") },
+                    label = { Text(strings.artistLabel) },
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 OutlinedTextField(
                     value = releaseYear,
                     onValueChange = { releaseYear = it },
-                    label = { Text("年份") },
+                    label = { Text(strings.releaseYearLabel) },
                     modifier = Modifier.width(110.dp)
                 )
             }
@@ -226,7 +227,7 @@ fun AddCdBottomSheet(
             OutlinedTextField(
                 value = coverUrl,
                 onValueChange = { coverUrl = it },
-                label = { Text("封面图片链接 (支持网络链接或本地相册)") },
+                label = { Text("Cover URL / Local Path") },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -234,7 +235,7 @@ fun AddCdBottomSheet(
             OutlinedTextField(
                 value = barcode,
                 onValueChange = { barcode = it },
-                label = { Text("唱片条形码 / Catalog No. (可选)") },
+                label = { Text("Barcode / Catalog No.") },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -242,7 +243,7 @@ fun AddCdBottomSheet(
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
-                label = { Text("版本收藏备注 (如：日版首版、带侧封 OBI)") },
+                label = { Text("Notes / Remarks") },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(20.dp))
@@ -257,7 +258,7 @@ fun AddCdBottomSheet(
                             title = title,
                             translatedTitle = translatedTitle.ifBlank { null },
                             artist = artist,
-                            releaseYear = releaseYear.ifBlank { "未知年份" },
+                            releaseYear = releaseYear.ifBlank { "N/A" },
                             coverUrl = coverUrl,
                             barcode = barcode.ifBlank { null },
                             purchaseDate = System.currentTimeMillis(),
@@ -281,7 +282,7 @@ fun AddCdBottomSheet(
                                         trackNumber = 1,
                                         title = title,
                                         translatedTitle = translatedTitle.ifBlank { null },
-                                        originalLyrics = "（可在歌词本页面点击右上角笔形图标编辑并录入歌词）",
+                                        originalLyrics = "",
                                         translatedLyrics = null
                                     )
                                 )
@@ -297,9 +298,9 @@ fun AddCdBottomSheet(
                 if (isSearching) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("正在同步全碟曲目与完整歌词...")
+                    Text(strings.searchingOnline)
                 } else {
-                    Text("确认归档入架")
+                    Text(strings.saveAlbumBtn)
                 }
             }
         }

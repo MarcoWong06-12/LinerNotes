@@ -44,6 +44,8 @@ fun CdCard(
             .fillMaxWidth()
             .padding(6.dp)
     ) {
+        val strings = com.linernotes.app.core.i18n.LocalStrings.current
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -128,14 +130,14 @@ fun CdCard(
                 onDismissRequest = { isMenuExpanded = false }
             ) {
                 DropdownMenuItem(
-                    text = { Text("翻阅歌词内页 (Booklet)") },
+                    text = { Text(strings.viewBooklet) },
                     onClick = {
                         isMenuExpanded = false
                         onViewBooklet()
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("从唱片架移出", color = MaterialTheme.colorScheme.error) },
+                    text = { Text(strings.removeFromShelf, color = MaterialTheme.colorScheme.error) },
                     onClick = {
                         isMenuExpanded = false
                         onRemove()

@@ -76,13 +76,14 @@ fun LyricBookletScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
+            val strings = com.linernotes.app.core.i18n.LocalStrings.current
             TopAppBar(
                 title = {},
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
+                            contentDescription = strings.back,
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -106,7 +107,7 @@ fun LyricBookletScreen(
                         } else {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = "AI 逐行推敲翻译",
+                                contentDescription = strings.aiTranslateAction,
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -114,14 +115,14 @@ fun LyricBookletScreen(
                     IconButton(onClick = { viewModel.openAiConfig(true) }) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "配置 AI API Key",
+                            contentDescription = strings.settingsTitle,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(onClick = { viewModel.openEditSheet(true) }) {
                         Icon(
                             imageVector = Icons.Default.EditNote,
-                            contentDescription = "校对修改",
+                            contentDescription = strings.editLyricsAction,
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -184,8 +185,9 @@ fun LyricBookletScreen(
 
                     if (state.alignedLyrics.isEmpty()) {
                         item {
+                            val strings = com.linernotes.app.core.i18n.LocalStrings.current
                             Text(
-                                text = "（暂无歌词，可点击右上角校对录入）",
+                                text = strings.noLyrics,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                 modifier = Modifier.padding(top = 64.dp)
@@ -382,6 +384,7 @@ private fun SingleChoiceSegmentedControl(
     currentMode: LyricDisplayMode,
     onModeSelected: (LyricDisplayMode) -> Unit
 ) {
+    val strings = com.linernotes.app.core.i18n.LocalStrings.current
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -391,13 +394,13 @@ private fun SingleChoiceSegmentedControl(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(2.dp)
         ) {
-            SegmentItem("双语", currentMode == LyricDisplayMode.BILINGUAL) {
+            SegmentItem(strings.modeBilingual, currentMode == LyricDisplayMode.BILINGUAL) {
                 onModeSelected(LyricDisplayMode.BILINGUAL)
             }
-            SegmentItem("原文", currentMode == LyricDisplayMode.ORIGINAL_ONLY) {
+            SegmentItem(strings.modeOriginal, currentMode == LyricDisplayMode.ORIGINAL_ONLY) {
                 onModeSelected(LyricDisplayMode.ORIGINAL_ONLY)
             }
-            SegmentItem("译文", currentMode == LyricDisplayMode.TRANSLATED_ONLY) {
+            SegmentItem(strings.modeTranslated, currentMode == LyricDisplayMode.TRANSLATED_ONLY) {
                 onModeSelected(LyricDisplayMode.TRANSLATED_ONLY)
             }
         }
@@ -431,6 +434,7 @@ private fun TrackNavigationBar(
     onPrevious: () -> Unit,
     onNext: () -> Unit
 ) {
+    val strings = com.linernotes.app.core.i18n.LocalStrings.current
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         tonalElevation = 8.dp
@@ -444,7 +448,7 @@ private fun TrackNavigationBar(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = onPrevious, enabled = hasPrevious) {
-                Icon(Icons.Default.SkipPrevious, contentDescription = "上一首")
+                Icon(Icons.Default.SkipPrevious, contentDescription = strings.prevTrack)
             }
 
             Column(
@@ -469,7 +473,7 @@ private fun TrackNavigationBar(
             }
 
             IconButton(onClick = onNext, enabled = hasNext) {
-                Icon(Icons.Default.SkipNext, contentDescription = "下一首")
+                Icon(Icons.Default.SkipNext, contentDescription = strings.nextTrack)
             }
         }
     }

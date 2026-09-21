@@ -20,9 +20,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.linernotes.app.core.debug.AiDebugLogger
+import com.linernotes.app.core.i18n.AppLanguage
+import com.linernotes.app.core.i18n.LocalStrings
+import com.linernotes.app.core.i18n.TranslationTargetLanguage
 import com.linernotes.app.core.preference.AiPreferences
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiConfigDialog(
     aiPreferences: AiPreferences,
@@ -30,6 +34,11 @@ fun AiConfigDialog(
     onDismiss: () -> Unit,
     onSaved: () -> Unit
 ) {
+    val strings = LocalStrings.current
+
+    var appLanguage by remember { mutableStateOf(aiPreferences.appLanguage) }
+    var targetLanguage by remember { mutableStateOf(aiPreferences.targetLanguage) }
+
     var apiKey by remember { mutableStateOf(aiPreferences.apiKey) }
     var baseUrl by remember { mutableStateOf(AiPreferences.sanitizeBaseUrl(aiPreferences.baseUrl)) }
     var modelName by remember { mutableStateOf(aiPreferences.modelName) }
@@ -45,9 +54,9 @@ fun AiConfigDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("配置 AI 歌词翻译引擎", fontWeight = FontWeight.Bold)
+                Text(strings.settingsDialogTitle, fontWeight = FontWeight.Bold)
             }
         },
         text = {
@@ -56,16 +65,84 @@ fun AiConfigDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
+                // ==========================================
+                // 1. 语言与本地化配置专区
+                // ==========================================
                 Text(
-                    text = "支持 Google Gemini、DeepSeek、OpenAI、Moonshot/Kimi、通义千问等所有兼容 OpenAI 格式的 API。",
+                    text = strings.sectionLocalization,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 应用界面语言
+                Text(strings.appLanguageLabel, style = MaterialTheme.typography.labelSmall)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    AppLanguage.entries.forEach { lang ->
+                        FilterChip(
+                            selected = appLanguage == lang.code,
+                            onClick = {
+                                appLanguage = lang.code
+                                aiPreferences.appLanguage = lang.code
+                            },
+                            label = { Text(lang.displayName) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 歌词翻译目标语言
+                Text(strings.targetLanguageLabel, style = MaterialTheme.typography.labelSmall)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    TranslationTargetLanguage.entries.forEach { lang ->
+                        FilterChip(
+                            selected = targetLanguage == lang.code,
+                            onClick = {
+                                targetLanguage = lang.code
+                            },
+                            label = { Text(lang.displayName) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // ==========================================
+                // 2. AI 翻译引擎配置专区
+                // ==========================================
+                Text(
+                    text = strings.sectionAiEngine,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = strings.aiEngineDesc,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // 快捷预设按钮
-                Text("常用引擎预设快速填充：", style = MaterialTheme.typography.labelSmall)
+                Text(strings.presetsTitle, style = MaterialTheme.typography.labelSmall)
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     modifier = Modifier
@@ -78,35 +155,35 @@ fun AiConfigDialog(
                             baseUrl = "https://www.kuaiaiapi.com/v1"
                             modelName = "gpt-5.6-terra"
                         },
-                        label = { Text("快爱 API (中转推荐)") }
+                        label = { Text(strings.presetKuaiai) }
                     )
                     SuggestionChip(
                         onClick = {
                             baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
                             modelName = "gemini-3.6-flash"
                         },
-                        label = { Text("Gemini 3.6 (官方推荐)") }
+                        label = { Text(strings.presetGemini36) }
                     )
                     SuggestionChip(
                         onClick = {
                             baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
                             modelName = "gemini-3.8-flash"
                         },
-                        label = { Text("Gemini 3.8 (最新尝鲜)") }
+                        label = { Text(strings.presetGemini38) }
                     )
                     SuggestionChip(
                         onClick = {
                             baseUrl = "https://api.deepseek.com/v1"
                             modelName = "deepseek-chat"
                         },
-                        label = { Text("DeepSeek (国内免翻)") }
+                        label = { Text(strings.presetDeepSeek) }
                     )
                     SuggestionChip(
                         onClick = {
                             baseUrl = "https://api.openai.com/v1"
                             modelName = "gpt-4o-mini"
                         },
-                        label = { Text("OpenAI") }
+                        label = { Text(strings.presetOpenAi) }
                     )
                 }
 
@@ -116,8 +193,8 @@ fun AiConfigDialog(
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = { apiKey = it.replace("\n", "").replace("\r", "").trim() },
-                    label = { Text("API Key") },
-                    placeholder = { Text("粘贴 API Key (如 sk-... 或 AQ...)") },
+                    label = { Text(strings.apiKeyLabel) },
+                    placeholder = { Text(strings.apiKeyPlaceholder) },
                     singleLine = true,
                     visualTransformation = if (isKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
@@ -153,8 +230,8 @@ fun AiConfigDialog(
                             .replace("\r", "")
                             .trim()
                     },
-                    label = { Text("API 接口地址 (Base URL)") },
-                    placeholder = { Text("https://www.kuaiaiapi.com/v1") },
+                    label = { Text(strings.baseUrlLabel) },
+                    placeholder = { Text(strings.baseUrlPlaceholder) },
                     singleLine = true,
                     trailingIcon = {
                         IconButton(onClick = {
@@ -175,8 +252,8 @@ fun AiConfigDialog(
                 OutlinedTextField(
                     value = modelName,
                     onValueChange = { modelName = it.replace("\n", "").replace("\r", "").trim() },
-                    label = { Text("模型名称 (Model)") },
-                    placeholder = { Text("gpt-5.6-terra / gemini-3.6-flash") },
+                    label = { Text(strings.modelLabel) },
+                    placeholder = { Text(strings.modelPlaceholder) },
                     singleLine = true,
                     trailingIcon = {
                         IconButton(onClick = {
@@ -216,18 +293,18 @@ fun AiConfigDialog(
                         if (isTesting) {
                             CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("正在连接测试...")
+                            Text(strings.testingStatus)
                         } else {
                             Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("测试连通性")
+                            Text(strings.testConnectionBtn)
                         }
                     }
 
                     TextButton(onClick = { showLogs = !showLogs }) {
                         Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (showLogs) "隐藏日志" else "诊断日志 (${AiDebugLogger.logs.size})")
+                        Text(if (showLogs) strings.hideLogsBtn else "${strings.diagnosticLogsBtn} (${AiDebugLogger.logs.size})")
                     }
                 }
 
@@ -263,7 +340,7 @@ fun AiConfigDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    "实时网络与调用诊断日志",
+                                    strings.logsTitle,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -271,17 +348,17 @@ fun AiConfigDialog(
                                     TextButton(onClick = {
                                         clipboardManager.setText(AnnotatedString(AiDebugLogger.exportAsText()))
                                     }) {
-                                        Text("复制全部", fontSize = 11.sp)
+                                        Text(strings.copyAll, fontSize = 11.sp)
                                     }
                                     TextButton(onClick = { AiDebugLogger.clear() }) {
-                                        Text("清空", fontSize = 11.sp)
+                                        Text(strings.clearLogs, fontSize = 11.sp)
                                     }
                                 }
                             }
 
                             if (AiDebugLogger.logs.isEmpty()) {
                                 Text(
-                                    "暂无日志记录，可点击上方「测试连通性」发起一次网络检测",
+                                    strings.noLogsYet,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -313,18 +390,20 @@ fun AiConfigDialog(
         confirmButton = {
             Button(
                 onClick = {
+                    aiPreferences.appLanguage = appLanguage
+                    aiPreferences.targetLanguage = targetLanguage
                     aiPreferences.apiKey = apiKey.trim()
                     aiPreferences.baseUrl = AiPreferences.sanitizeBaseUrl(baseUrl)
                     aiPreferences.modelName = modelName.trim()
                     onSaved()
                 }
             ) {
-                Text("保存配置")
+                Text(strings.saveConfigBtn)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(strings.cancel)
             }
         }
     )

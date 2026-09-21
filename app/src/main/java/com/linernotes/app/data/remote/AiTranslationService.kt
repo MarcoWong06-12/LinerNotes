@@ -1,6 +1,7 @@
 package com.linernotes.app.data.remote
 
 import com.linernotes.app.core.debug.AiDebugLogger
+import com.linernotes.app.core.i18n.TranslationTargetLanguage
 import com.linernotes.app.core.preference.AiPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -204,10 +205,12 @@ class AiTranslationService @Inject constructor(
     private fun translateWithGeminiNative(trackTitle: String, originalLyrics: String): TranslationResult {
         val model = aiPreferences.modelName.trim().ifBlank { "gemini-3.6-flash" }
         val key = aiPreferences.apiKey.trim()
+        val targetLang = TranslationTargetLanguage.fromCode(aiPreferences.targetLanguage)
+        val targetName = targetLang.promptName
         val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key"
-        AiDebugLogger.log(true, "Gemini 翻译", "开始翻译《$trackTitle》，模型: $model")
+        AiDebugLogger.log(true, "Gemini 翻译", "开始翻译《$trackTitle》，目标语言: $targetName，模型: $model")
 
-        val promptLyrics = "你是一位精通欧美流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌词逐行翻译为优美、符合原意、押韵自然的中文。务必保持与原歌词严格一一对应的行数和空行，每一行英文对应一行中文译文，绝对不要添加任何编号、多余解释、前后缀或代码块标签。\n\n歌曲标题：$trackTitle\n\n歌词全文：\n$originalLyrics"
+        val promptLyrics = "你是一位精通多国流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌词逐行翻译为优美、符合原意、押韵自然的【$targetName】。务必保持与原歌词严格一一对应的行数和空行，每一行原文对应一行【$targetName】译文，绝对不要添加任何编号、多余解释、前后缀或代码块标签。\n\n歌曲标题：$trackTitle\n\n歌词全文：\n$originalLyrics"
 
         val requestJson = JSONObject().apply {
             put("contents", JSONArray().apply {
@@ -265,10 +268,10 @@ class AiTranslationService @Inject constructor(
         val lyricsContent = parts?.optJSONObject(0)?.optString("text")?.trim() ?: ""
         AiDebugLogger.log(true, "Gemini 成功", "歌词主体翻译完成")
 
-        // 单曲中文译名
+        // 单曲目标语言译名
         var translatedTitle: String? = null
         try {
-            val titlePrompt = "请给出这首歌曲标题的经典中文译名（例如 Complicated -> 复杂，Come Together -> 聚在一起，Let Go -> 展翅高飞/放手）。仅输出译名本身，不要附带任何多余标点或解释。\n\n歌曲标题：$trackTitle"
+            val titlePrompt = "请给出这首歌曲标题在【$targetName】中的经典公认/流行译名（若目标语言为英语且原曲名为英文，则保持原样）。仅输出译名本身，不要附带任何多余标点或解释。\n\n歌曲标题：$trackTitle"
             val titleRequestJson = JSONObject().apply {
                 put("contents", JSONArray().apply {
                     put(JSONObject().apply {
@@ -322,9 +325,11 @@ class AiTranslationService @Inject constructor(
      */
     private fun translateWithOpenAi(trackTitle: String, originalLyrics: String): TranslationResult {
         val url = sanitizeOpenAiUrl(aiPreferences.baseUrl)
-        AiDebugLogger.log(true, "OpenAI 翻译", "开始翻译《$trackTitle》，模型: ${aiPreferences.modelName}")
+        val targetLang = TranslationTargetLanguage.fromCode(aiPreferences.targetLanguage)
+        val targetName = targetLang.promptName
+        AiDebugLogger.log(true, "OpenAI 翻译", "开始翻译《$trackTitle》，目标语言: $targetName，模型: ${aiPreferences.modelName}")
 
-        val promptSystem = "你是一位精通欧美流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌词逐行翻译为优美、符合原意、押韵自然的中文。务必保持与原歌词严格一一对应的行数和空行，每一行英文对应一行中文译文，绝对不要添加任何编号、多余解释、前后缀或代码块标签。"
+        val promptSystem = "你是一位精通多国流行音乐与诗意文学的专业歌词翻译家。请将用户提供的歌词逐行翻译为优美、符合原意、押韵自然的【$targetName】。务必保持与原歌词严格一一对应的行数和空行，每一行原文对应一行【$targetName】译文，绝对不要添加任何编号、多余解释、前后缀或代码块标签。"
         val promptUser = "歌曲标题：$trackTitle\n\n歌词全文：\n$originalLyrics"
 
         val requestBodyJson = JSONObject().apply {
@@ -378,7 +383,7 @@ class AiTranslationService @Inject constructor(
 
         var translatedTitle: String? = null
         try {
-            val titlePrompt = "请给出这首歌曲标题的经典中文译名（例如 Complicated -> 复杂，Come Together -> 聚在一起，Let Go -> 展翅高飞/放手）。仅输出译名本身，不要附带任何多余标点或解释。"
+            val titlePrompt = "请给出这首歌曲标题在【$targetName】中的经典公认/流行译名（若目标语言为英语且原曲名为英文，则保持原样）。仅输出译名本身，不要附带任何多余标点或解释。"
             val titleRequestJson = JSONObject().apply {
                 put("model", aiPreferences.modelName)
                 put("messages", JSONArray().apply {
@@ -428,6 +433,8 @@ class AiTranslationService @Inject constructor(
     private fun fallbackTranslate(trackTitle: String, originalLyrics: String): TranslationResult {
         val lines = originalLyrics.lines()
         val translatedLines = mutableListOf<String>()
+        val targetLang = TranslationTargetLanguage.fromCode(aiPreferences.targetLanguage)
+        val iso = targetLang.fallbackIso
 
         for (line in lines) {
             val trimmed = line.trim()
@@ -436,7 +443,7 @@ class AiTranslationService @Inject constructor(
             } else {
                 try {
                     val encoded = URLEncoder.encode(trimmed, "UTF-8")
-                    val queryUrl = "https://api.mymemory.translated.net/get?q=$encoded&langpair=en|zh"
+                    val queryUrl = "https://api.mymemory.translated.net/get?q=$encoded&langpair=en|$iso"
                     val req = Request.Builder().url(queryUrl).build()
                     val resp = client.newCall(req).execute()
                     val body = resp.body?.string()

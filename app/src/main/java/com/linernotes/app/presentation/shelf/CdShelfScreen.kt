@@ -28,6 +28,7 @@ fun CdShelfScreen(
     viewModel: CdShelfViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val strings = com.linernotes.app.core.i18n.LocalStrings.current
 
     Scaffold(
         topBar = {
@@ -37,7 +38,7 @@ fun CdShelfScreen(
                         TextField(
                             value = state.searchQuery,
                             onValueChange = { viewModel.onSearchQueryChange(it) },
-                            placeholder = { Text("搜索唱片名、译名、艺术家...") },
+                            placeholder = { Text(strings.searchPlaceholder) },
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent
@@ -47,7 +48,7 @@ fun CdShelfScreen(
                         )
                     } else {
                         Text(
-                            text = "LinerNotes 唱片架",
+                            text = strings.shelfTitle,
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                         )
                     }
@@ -55,18 +56,18 @@ fun CdShelfScreen(
                 actions = {
                     if (state.isSearchActive) {
                         IconButton(onClick = { viewModel.setSearchActive(false) }) {
-                            Icon(Icons.Default.Close, contentDescription = "关闭搜索")
+                            Icon(Icons.Default.Close, contentDescription = strings.closeSearch)
                         }
                     } else {
                         IconButton(onClick = { viewModel.setSearchActive(true) }) {
-                            Icon(Icons.Default.Search, contentDescription = "搜索唱片")
+                            Icon(Icons.Default.Search, contentDescription = strings.searchCd)
                         }
                     }
 
                     IconButton(onClick = { viewModel.setAiConfigOpen(true) }) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "AI 翻译设置",
+                            contentDescription = strings.settingsTitle,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -74,7 +75,7 @@ fun CdShelfScreen(
                     IconButton(onClick = { viewModel.setAddSheetOpen(true) }) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "入库新唱片",
+                            contentDescription = strings.addAlbumTooltip,
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }

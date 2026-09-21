@@ -11,6 +11,22 @@ class AiPreferences @Inject constructor(
 ) {
     private val prefs = context.getSharedPreferences("ai_settings", Context.MODE_PRIVATE)
 
+    private val _appLanguageFlow = kotlinx.coroutines.flow.MutableStateFlow(
+        prefs.getString("app_language", com.linernotes.app.core.i18n.AppLanguage.SYSTEM.code) ?: com.linernotes.app.core.i18n.AppLanguage.SYSTEM.code
+    )
+    val appLanguageFlow: kotlinx.coroutines.flow.StateFlow<String> = _appLanguageFlow
+
+    var appLanguage: String
+        get() = _appLanguageFlow.value
+        set(value) {
+            prefs.edit().putString("app_language", value).apply()
+            _appLanguageFlow.value = value
+        }
+
+    var targetLanguage: String
+        get() = prefs.getString("target_language", com.linernotes.app.core.i18n.TranslationTargetLanguage.ZH_CN.code) ?: com.linernotes.app.core.i18n.TranslationTargetLanguage.ZH_CN.code
+        set(value) = prefs.edit().putString("target_language", value).apply()
+
     var apiKey: String
         get() = prefs.getString("api_key", "") ?: ""
         set(value) = prefs.edit().putString("api_key", value.trim()).apply()

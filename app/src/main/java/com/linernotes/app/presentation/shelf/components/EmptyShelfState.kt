@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun EmptyShelfState(modifier: Modifier = Modifier) {
+    val strings = com.linernotes.app.core.i18n.LocalStrings.current
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -64,7 +66,7 @@ fun EmptyShelfState(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "唱片架空空如也",
+            text = strings.emptyShelfTitle,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -72,7 +74,7 @@ fun EmptyShelfState(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "点击右上角「+」收纳你的第一张实体 CD\n翻开属于你的数字化双语内页",
+            text = strings.emptyShelfSubtitle,
             style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
