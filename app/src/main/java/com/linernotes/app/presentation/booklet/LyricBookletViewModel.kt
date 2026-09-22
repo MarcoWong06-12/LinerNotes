@@ -7,6 +7,7 @@ import com.linernotes.app.core.lyric.LyricAligner
 import com.linernotes.app.core.preference.AiPreferences
 import com.linernotes.app.data.local.entity.TrackEntity
 import com.linernotes.app.data.remote.AiTranslationService
+import com.linernotes.app.domain.model.BilingualLyricLine
 import com.linernotes.app.domain.model.LyricDisplayMode
 import com.linernotes.app.domain.repository.AlbumRepository
 import com.linernotes.app.presentation.booklet.model.BookletUiState
