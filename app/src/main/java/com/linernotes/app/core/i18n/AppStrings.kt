@@ -499,6 +499,7 @@ val JaStrings = AppStrings(
     apiKeyLabel = "API Key",
     apiKeyPlaceholder = "APIキーを入力 (sk-... または AQ...)",
     baseUrlLabel = "API Base URL",
+    baseUrlPlaceholder = "https://www.kuaiaiapi.com/v1",
     modelLabel = "モデル名 (Model)",
     modelPlaceholder = "gpt-4o-mini / gemini-2.0-flash",
     testConnectionBtn = "接続テスト",
