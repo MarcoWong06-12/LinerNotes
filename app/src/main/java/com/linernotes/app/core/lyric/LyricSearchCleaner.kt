@@ -13,12 +13,12 @@ object LyricSearchCleaner {
     )
 
     private val PARENTHETICAL_NOISE_REGEX = Regex(
-        """\s*[\(\[]\s*(?:official\s*(?:music\s*)?video|official\s*audio|music\s*video|lyric\s*video|mv|audio|live(?:\s+at.*?)?|instrumental|off\s*vocal|karaoke|tv\s*size|anime\s*ver(?:sion)?|remastered(?:\s*\d{4})?|\d{4}\s*remaster(?:ed)?|deluxe\s*edition|bonus\s*track|feat\..*?|featuring.*?)\s*[\)\]]""",
+        """\s*[\(\[]\s*(?:official\s*(?:music\s*)?video|official\s*audio|music\s*video|lyric\s*video|mv|audio|live(?:\s+.*?)?|instrumental|off\s*vocal|karaoke|tv\s*size|(?:anime|movie|film|album|single|radio|original|acoustic)?\s*ver(?:\.|sion)?|remastered(?:\s*\d{4})?|\d{4}\s*remaster(?:ed)?|deluxe\s*edition|bonus\s*track|feat\..*?|featuring.*?)\s*[\)\]]""",
         RegexOption.IGNORE_CASE
     )
 
     private val HYPHEN_NOISE_REGEX = Regex(
-        """\s*-\s*(?:remastered.*|live.*|single.*|ep.*|instrumental.*|feat\..*|off\s*vocal.*)""",
+        """\s*-\s*(?:remastered.*|\d{4}\s*remaster.*|live.*|single.*|ep.*|instrumental.*|feat\..*|off\s*vocal.*)""",
         RegexOption.IGNORE_CASE
     )
 
