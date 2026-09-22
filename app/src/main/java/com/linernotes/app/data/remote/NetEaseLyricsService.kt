@@ -1,103 +1,95 @@
 package com.linernotes.app.data.remote
 
 import com.linernotes.app.core.lyric.LyricAligner
+import com.linernotes.app.core.lyric.LyricSearchCleaner
+import com.linernotes.app.core.network.LinerNotesHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
-
-data class OnlineLyricsResult(
-    val songId: Long,
-    val title: String,
-    val artist: String,
-    val originalLyrics: String,
-    val translatedLyrics: String?,
-    val isBilingual: Boolean
-)
 
 object NetEaseLyricsService {
 
-    private const val SEARCH_API = "https://music.163.com/api/search/get/web"
+    private const val CLOUD_SEARCH_API = "https://music.163.com/api/cloudsearch/pc"
+    private const val WEB_SEARCH_API = "https://music.163.com/api/search/get/web"
     private const val LYRIC_API = "https://music.163.com/api/song/lyric"
 
-    private val CLEAN_SUFFIX_REGEX = Regex(
-        """\s*(\(feat\..*?\)|feat\..*|\(featuring.*?\)|featuring.*|\([0-9]{4}\s*Mix\)|\(Remastered.*?\)|-\s*Remastered.*|-\s*feat\..*|\(.*?Version\)|\(.*?Edition\))""",
-        RegexOption.IGNORE_CASE
+    private val HEADERS = mapOf(
+        "Referer" to "https://music.163.com/",
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     )
-
-    fun cleanTrackTitle(title: String): String {
-        return title.replace(CLEAN_SUFFIX_REGEX, "").trim()
-    }
 
     suspend fun fetchLyrics(
         trackTitle: String,
         artistName: String
     ): OnlineLyricsResult? = withContext(Dispatchers.IO) {
-        try {
-            val cleanTitle = cleanTrackTitle(trackTitle)
-            val query = if (artistName.isNotBlank() && !artistName.equals("Unknown Artist", ignoreCase = true)) {
-                "$cleanTitle $artistName"
-            } else {
-                cleanTitle
+        val queries = LyricSearchCleaner.buildSearchQueries(trackTitle, artistName)
+        val cleanArtist = LyricSearchCleaner.cleanArtist(artistName).lowercase()
+
+        for (query in queries) {
+            val result = searchAndFetch(query, cleanArtist, trackTitle, artistName)
+            if (result != null && result.originalLyrics.isNotBlank()) {
+                return@withContext result
             }
+        }
+        null
+    }
 
-            val encodedQuery = URLEncoder.encode(query.trim(), "UTF-8")
-            val searchUrl = "$SEARCH_API?s=$encodedQuery&type=1&limit=5"
-            val searchJson = httpGet(searchUrl) ?: return@withContext null
-            val searchRoot = JSONObject(searchJson)
-            val resultObj = searchRoot.optJSONObject("result") ?: return@withContext null
-            val songs = resultObj.optJSONArray("songs") ?: return@withContext null
-            if (songs.length() == 0) return@withContext null
+    private fun searchAndFetch(
+        query: String,
+        cleanArtist: String,
+        fallbackTitle: String,
+        fallbackArtist: String
+    ): OnlineLyricsResult? {
+        val songs = searchSongs(query) ?: return null
+        if (songs.length() == 0) return null
 
-            // 优先选择歌手名称匹配的最佳条目，若无匹配则选第 1 个结果
-            var bestSong: JSONObject? = null
-            val cleanArtist = artistName.trim().lowercase()
+        var bestSong: JSONObject? = null
 
+        // 1. 若提供了歌手名，优先挑选包含匹配歌手的条目
+        if (cleanArtist.isNotBlank()) {
             for (i in 0 until songs.length()) {
-                val s = songs.getJSONObject(i)
-                val artists = s.optJSONArray("artists")
-                var artistMatched = false
+                val s = songs.optJSONObject(i) ?: continue
+                val artists = s.optJSONArray("ar") ?: s.optJSONArray("artists")
                 if (artists != null) {
                     for (j in 0 until artists.length()) {
-                        val aName = artists.getJSONObject(j).optString("name", "").lowercase()
-                        if (aName.contains(cleanArtist) || cleanArtist.contains(aName)) {
-                            artistMatched = true
+                        val aName = artists.optJSONObject(j)?.optString("name", "")?.lowercase() ?: ""
+                        if (aName.isNotBlank() && (aName.contains(cleanArtist) || cleanArtist.contains(aName))) {
+                            bestSong = s
                             break
                         }
                     }
                 }
-                if (artistMatched) {
-                    bestSong = s
-                    break
-                }
+                if (bestSong != null) break
             }
+        }
 
-            if (bestSong == null) {
-                bestSong = songs.getJSONObject(0)
-            }
+        // 2. 无匹配或未指定歌手时，使用检索权重最高的第 1 个结果
+        if (bestSong == null) {
+            bestSong = songs.optJSONObject(0) ?: return null
+        }
 
-            val songId = bestSong.optLong("id", 0L)
-            if (songId <= 0L) return@withContext null
+        val songId = bestSong.optLong("id", 0L)
+        if (songId <= 0L) return null
 
-            val matchedTitle = bestSong.optString("name", trackTitle)
-            val matchedArtist = bestSong.optJSONArray("artists")?.optJSONObject(0)?.optString("name", artistName) ?: artistName
+        val matchedTitle = bestSong.optString("name", fallbackTitle)
+        val matchedArtists = bestSong.optJSONArray("ar") ?: bestSong.optJSONArray("artists")
+        val matchedArtist = matchedArtists?.optJSONObject(0)?.optString("name", fallbackArtist) ?: fallbackArtist
 
-            val lyricUrl = "$LYRIC_API?id=$songId&lv=1&kv=1&tv=1"
-            val lyricJson = httpGet(lyricUrl) ?: return@withContext null
+        // 获取原版与翻译歌词
+        val lyricUrl = "$LYRIC_API?id=$songId&lv=1&kv=1&tv=1"
+        val lyricJson = LinerNotesHttpClient.get(lyricUrl, HEADERS) ?: return null
+
+        return try {
             val lyricRoot = JSONObject(lyricJson)
-
             val lrcObj = lyricRoot.optJSONObject("lrc")
-            val origLrc = lrcObj?.optString("lyric", "") ?: ""
-            if (origLrc.isBlank()) return@withContext null
+            val origLrc = lrcObj?.optString("lyric", "")?.trim() ?: ""
+            if (origLrc.isBlank()) return null
 
             val tlyricObj = lyricRoot.optJSONObject("tlyric")
-            val transLrc = tlyricObj?.optString("lyric", "") ?: ""
+            val transLrc = tlyricObj?.optString("lyric", "")?.trim() ?: ""
 
-            // 利用时间戳精准对齐
             val alignedPair = LyricAligner.alignLrcTimestamps(origLrc, transLrc)
 
             OnlineLyricsResult(
@@ -109,38 +101,41 @@ object NetEaseLyricsService {
                 isBilingual = alignedPair.second.isNotBlank()
             )
         } catch (e: Exception) {
-            e.printStackTrace()
             null
         }
     }
 
-    private fun httpGet(urlStr: String): String? {
-        var connection: HttpURLConnection? = null
-        return try {
-            val url = URL(urlStr)
-            connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 8000
-                readTimeout = 8000
-                setRequestProperty(
-                    "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
-                setRequestProperty("Referer", "https://music.163.com/")
-                instanceFollowRedirects = true
-            }
-
-            if (connection.responseCode in 200..299) {
-                BufferedReader(InputStreamReader(connection.inputStream, "UTF-8")).use { reader ->
-                    reader.readText()
+    private fun searchSongs(query: String): JSONArray? {
+        // 首选 CloudSearch POST
+        try {
+            val postParams = mapOf(
+                "s" to query,
+                "type" to "1",
+                "offset" to "0",
+                "limit" to "5"
+            )
+            val jsonStr = LinerNotesHttpClient.postForm(CLOUD_SEARCH_API, postParams, HEADERS)
+            if (!jsonStr.isNullOrBlank()) {
+                val root = JSONObject(jsonStr)
+                val result = root.optJSONObject("result")
+                val songs = result?.optJSONArray("songs")
+                if (songs != null && songs.length() > 0) {
+                    return songs
                 }
-            } else {
-                null
             }
         } catch (e: Exception) {
+            // 继续回退
+        }
+
+        // 回退 WebSearch GET
+        return try {
+            val encQuery = URLEncoder.encode(query, "UTF-8")
+            val getUrl = "$WEB_SEARCH_API?s=$encQuery&type=1&limit=5"
+            val jsonStr = LinerNotesHttpClient.get(getUrl, HEADERS) ?: return null
+            val root = JSONObject(jsonStr)
+            root.optJSONObject("result")?.optJSONArray("songs")
+        } catch (e: Exception) {
             null
-        } finally {
-            connection?.disconnect()
         }
     }
 }

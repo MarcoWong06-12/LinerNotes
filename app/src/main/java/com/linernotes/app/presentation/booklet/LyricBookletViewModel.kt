@@ -159,8 +159,25 @@ class LyricBookletViewModel @Inject constructor(
                         originalLyrics = result.originalLyrics,
                         translatedLyrics = result.translatedLyrics
                     )
-                    val msg = if (result.isBilingual) "官方双语歌词已匹配并同步入库！" else "已检索到官方原版歌词（暂无官方译文）"
-                    _uiState.update { it.copy(isTranslating = false, userMessage = msg) }
+
+                    // 若官方库仅检索到原版（无官方译文），且启用了智能回退与 AI 引擎，则自动推敲补全翻译
+                    if (!result.isBilingual && aiPreferences.lyricsSource == AiPreferences.LyricsSourcePreference.AUTO_FIRST.code && aiPreferences.hasKey) {
+                        _uiState.update { it.copy(userMessage = "已匹配官方原版歌词，正在由 AI 自动推敲翻译...") }
+                        val aiResult = aiTranslationService.translateTrack(
+                            trackTitle = currentTrack.title,
+                            originalLyrics = result.originalLyrics
+                        )
+                        repository.updateTrackTranslation(
+                            trackId = currentTrack.id,
+                            translatedTitle = aiResult.translatedTitle ?: currentTrack.translatedTitle,
+                            originalLyrics = result.originalLyrics,
+                            translatedLyrics = aiResult.translatedLyrics
+                        )
+                        _uiState.update { it.copy(isTranslating = false, userMessage = "官方原版歌词已入库，AI 翻译已同步补全！") }
+                    } else {
+                        val msg = if (result.isBilingual) "官方双语歌词已匹配并同步入库！" else "已检索到官方原版歌词（暂无官方译文）"
+                        _uiState.update { it.copy(isTranslating = false, userMessage = msg) }
+                    }
                 } else {
                     // 若官方库未搜到且启用了智能回退并且有 key，则尝试 AI 翻译
                     if (aiPreferences.lyricsSource == AiPreferences.LyricsSourcePreference.AUTO_FIRST.code && aiPreferences.hasKey && !currentTrack.originalLyrics.isNullOrBlank()) {

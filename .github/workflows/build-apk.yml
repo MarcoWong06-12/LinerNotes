@@ -30,7 +30,7 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          gradle :app:assembleDebug --stacktrace > build.log 2>&1 || {
+          gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace > build.log 2>&1 || {
             grep -E "e: " build.log | head -n 30 | while IFS= read -r line; do
               clean=$(echo "$line" | tr -d '\r')
               [ -n "$clean" ] && echo "::error title=KotlinError::$clean"

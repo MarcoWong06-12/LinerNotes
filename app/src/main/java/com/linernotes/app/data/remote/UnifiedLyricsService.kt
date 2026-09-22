@@ -1,8 +1,13 @@
 package com.linernotes.app.data.remote
 
 import com.linernotes.app.core.preference.AiPreferences
+import kotlinx.coroutines.async
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withTimeoutOrNull
 
 object UnifiedLyricsService {
+
+    private val TIMESTAMP_REGEX = Regex("""\[\d{2}:\d{2}(?:\.\d{1,3})?\]""")
 
     suspend fun fetchLyrics(
         trackTitle: String,
@@ -31,55 +36,76 @@ object UnifiedLyricsService {
                 null
             }
             AiPreferences.LyricsSourcePreference.AUTO_FIRST -> {
-                // 智能多源聚合回退 (Smart Multi-Source Aggregator Pipeline)
-                // 1. 优先尝试网易云音乐 (官方人工精翻覆盖率最高，毫秒级时间戳精准)
-                var bestCandidate: OnlineLyricsResult? = null
-
-                val neteaseRes = NetEaseLyricsService.fetchLyrics(trackTitle, artistName)
-                if (neteaseRes != null && neteaseRes.originalLyrics.isNotBlank()) {
-                    if (neteaseRes.isBilingual) {
-                        return neteaseRes
-                    }
-                    bestCandidate = neteaseRes
-                }
-
-                // 2. 尝试 QQ 音乐 (曲库海量，拥有官方双语及大曲库)
-                val qqRes = QQMusicLyricsService.fetchLyrics(trackTitle, artistName)
-                if (qqRes != null && qqRes.originalLyrics.isNotBlank()) {
-                    if (qqRes.isBilingual) {
-                        return qqRes
-                    }
-                    if (bestCandidate == null) bestCandidate = qqRes
-                }
-
-                // 3. 尝试 酷狗音乐 (原版精准时间轴歌词庞大)
-                val kugouRes = KugouLyricsService.fetchLyrics(trackTitle, artistName)
-                if (kugouRes != null && kugouRes.originalLyrics.isNotBlank()) {
-                    if (kugouRes.isBilingual) {
-                        return kugouRes
-                    }
-                    if (bestCandidate == null) bestCandidate = kugouRes
-                }
-
-                // 4. 尝试 Musixmatch (全球最大歌词平台，包含丰富外文及逐行翻译)
-                val mxmRes = MusixmatchLyricsService.fetchLyrics(trackTitle, artistName)
-                if (mxmRes != null && mxmRes.originalLyrics.isNotBlank()) {
-                    if (mxmRes.isBilingual) {
-                        return mxmRes
-                    }
-                    if (bestCandidate == null) bestCandidate = mxmRes
-                }
-
-                // 5. 尝试 LRCLIB (全球国际开源同步歌词库)
-                if (bestCandidate == null) {
-                    val lrclibRes = LrclibLyricsService.fetchLyrics(trackTitle, artistName)
-                    if (lrclibRes != null && lrclibRes.originalLyrics.isNotBlank()) {
-                        bestCandidate = lrclibRes
-                    }
-                }
-
-                bestCandidate
+                fetchAutoAggregated(trackTitle, artistName)
             }
+        }
+    }
+
+    /**
+     * 智能多源并发竞速检索 (High-Performance Parallel Multi-Source Engine)
+     * 同步发起并发请求，通过加权评分锁定最优官方双语与高精度时间轴歌词。
+     */
+    private suspend fun fetchAutoAggregated(
+        trackTitle: String,
+        artistName: String
+    ): OnlineLyricsResult? = supervisorScope {
+        // 并发检索网易云与 QQ 音乐（具备官方双语翻译的最优源）
+        val neteaseDeferred = async {
+            withTimeoutOrNull(3500L) {
+                NetEaseLyricsService.fetchLyrics(trackTitle, artistName)
+            }
+        }
+        val qqDeferred = async {
+            withTimeoutOrNull(3500L) {
+                QQMusicLyricsService.fetchLyrics(trackTitle, artistName)
+            }
+        }
+        // 并发检索酷狗与 LRCLIB（具备海量时间轴原版歌词的坚实后盾）
+        val kugouDeferred = async {
+            withTimeoutOrNull(3500L) {
+                KugouLyricsService.fetchLyrics(trackTitle, artistName)
+            }
+        }
+        val lrclibDeferred = async {
+            withTimeoutOrNull(3500L) {
+                LrclibLyricsService.fetchLyrics(trackTitle, artistName)
+            }
+        }
+
+        val neteaseRes = neteaseDeferred.await()
+        if (neteaseRes != null && neteaseRes.isBilingual && neteaseRes.originalLyrics.isNotBlank()) {
+            return@supervisorScope neteaseRes
+        }
+
+        val qqRes = qqDeferred.await()
+        if (qqRes != null && qqRes.isBilingual && qqRes.originalLyrics.isNotBlank()) {
+            return@supervisorScope qqRes
+        }
+
+        val kugouRes = kugouDeferred.await()
+        val lrclibRes = lrclibDeferred.await()
+
+        // 收集所有有效候选结果
+        val candidates = listOfNotNull(neteaseRes, qqRes, kugouRes, lrclibRes)
+            .filter { it.originalLyrics.isNotBlank() }
+
+        if (candidates.isEmpty()) {
+            // 尝试轻量 Musixmatch 兜底
+            return@supervisorScope withTimeoutOrNull(2500L) {
+                MusixmatchLyricsService.fetchLyrics(trackTitle, artistName)
+            }
+        }
+
+        // 质量评分系统：
+        // 1. 双语官方精翻 (权重 +1000)
+        // 2. 含有时间戳对齐 (权重 +500)
+        // 3. 歌词行数丰满度
+        candidates.maxByOrNull { res ->
+            var score = 0
+            if (res.isBilingual) score += 1000
+            if (res.originalLyrics.contains(TIMESTAMP_REGEX)) score += 500
+            score += (res.originalLyrics.lines().size).coerceAtMost(100)
+            score
         }
     }
 }

@@ -1,13 +1,11 @@
 package com.linernotes.app.data.remote
 
 import com.linernotes.app.core.lyric.LyricAligner
+import com.linernotes.app.core.lyric.LyricSearchCleaner
+import com.linernotes.app.core.network.LinerNotesHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 import java.util.UUID
 
@@ -15,8 +13,10 @@ object MusixmatchLyricsService {
 
     private const val BASE_URL = "https://apic.musixmatch.com/ws/1.1/"
     private const val APP_ID = "android-player-v1.0"
-    private const val USER_AGENT = "Dalvik/2.1.0 (Linux; U; Android 13)"
-    private const val COOKIE = "AWSELB=0; AWSELBCORS=0"
+    private val HEADERS = mapOf(
+        "User-Agent" to "Dalvik/2.1.0 (Linux; U; Android 13)",
+        "Cookie" to "AWSELB=0; AWSELBCORS=0"
+    )
 
     @Volatile
     private var cachedUserToken: String? = null
@@ -36,8 +36,14 @@ object MusixmatchLyricsService {
             try {
                 val t = generateT()
                 val url = "${BASE_URL}token.get?user_language=en&app_id=$APP_ID&t=$t"
-                val jsonStr = httpGet(url) ?: return@withContext null
+                val jsonStr = LinerNotesHttpClient.get(url, HEADERS) ?: return@withContext null
                 val root = JSONObject(jsonStr)
+                val header = root.optJSONObject("message")?.optJSONObject("header")
+                val statusCode = header?.optInt("status_code", 0) ?: 0
+                if (statusCode != 200) {
+                    return@withContext null
+                }
+
                 val token = root.optJSONObject("message")
                     ?.optJSONObject("body")
                     ?.optString("user_token", "")
@@ -66,13 +72,14 @@ object MusixmatchLyricsService {
     ): OnlineLyricsResult? = withContext(Dispatchers.IO) {
         try {
             val token = ensureUserToken(customToken) ?: return@withContext null
-            val cleanTitle = NetEaseLyricsService.cleanTrackTitle(trackTitle)
+            val cleanTitle = LyricSearchCleaner.cleanTrackTitle(trackTitle)
+            val cleanArt = LyricSearchCleaner.cleanArtist(artistName)
             val encTrack = URLEncoder.encode(cleanTitle, "UTF-8")
-            val encArtist = URLEncoder.encode(artistName, "UTF-8")
+            val encArtist = URLEncoder.encode(cleanArt, "UTF-8")
             val tSearch = generateT()
 
             val searchUrl = "${BASE_URL}track.search?page_size=5&page=1&s_track_rating=desc&q_track=$encTrack&q_artist=$encArtist&usertoken=$token&format=json&app_id=$APP_ID&t=$tSearch"
-            val searchJson = httpGet(searchUrl) ?: return@withContext null
+            val searchJson = LinerNotesHttpClient.get(searchUrl, HEADERS) ?: return@withContext null
             val searchRoot = JSONObject(searchJson)
 
             val statusCode = searchRoot.optJSONObject("message")
@@ -90,7 +97,6 @@ object MusixmatchLyricsService {
 
             if (trackList.length() == 0) return@withContext null
 
-            // 优先选择有同步字幕的条目
             var bestTrackObj: JSONObject? = null
             for (i in 0 until trackList.length()) {
                 val item = trackList.optJSONObject(i)?.optJSONObject("track") ?: continue
@@ -125,7 +131,7 @@ object MusixmatchLyricsService {
             if (hasSubtitles) {
                 val tSub = generateT()
                 val subUrl = "${BASE_URL}track.subtitle.get?subtitle_format=lrc&track_id=$trackId&usertoken=$token&format=json&app_id=$APP_ID&t=$tSub"
-                val subJson = httpGet(subUrl)
+                val subJson = LinerNotesHttpClient.get(subUrl, HEADERS)
                 if (subJson != null) {
                     val subRoot = JSONObject(subJson)
                     val subBody = subRoot.optJSONObject("message")
@@ -138,11 +144,11 @@ object MusixmatchLyricsService {
                 }
             }
 
-            // 2. 无同步时间戳时，回退获取纯文本歌词
+            // 2. 无同步时间戳时回退纯文本歌词
             if (originalLyrics.isNullOrBlank()) {
                 val tLyr = generateT()
                 val lyrUrl = "${BASE_URL}track.lyrics.get?track_id=$trackId&usertoken=$token&format=json&app_id=$APP_ID&t=$tLyr"
-                val lyrJson = httpGet(lyrUrl)
+                val lyrJson = LinerNotesHttpClient.get(lyrUrl, HEADERS)
                 if (lyrJson != null) {
                     val lyrRoot = JSONObject(lyrJson)
                     val lyrBody = lyrRoot.optJSONObject("message")
@@ -150,7 +156,6 @@ object MusixmatchLyricsService {
                         ?.optJSONObject("lyrics")
                         ?.optString("lyrics_body", "")
                     if (!lyrBody.isNullOrBlank()) {
-                        // 移除 Musixmatch 版权免责声明尾缀 (e.g. "******* This Lyrics is NOT for Commercial use *******")
                         val cleanBody = lyrBody.lines()
                             .filterNot { it.contains("This Lyrics is NOT for Commercial use", ignoreCase = true) }
                             .joinToString("\n")
@@ -164,118 +169,67 @@ object MusixmatchLyricsService {
 
             if (originalLyrics.isNullOrBlank()) return@withContext null
 
-            // 3. 尝试获取官方众包逐行翻译 (Crowd Translations)
+            // 3. 尝试拉取众包翻译
             var translatedLyrics: String? = null
-            var isBilingual = false
-
-            val langCode = when {
-                targetLanguage.startsWith("zh", ignoreCase = true) -> "zh"
-                targetLanguage.startsWith("ja", ignoreCase = true) -> "ja"
-                targetLanguage.startsWith("ko", ignoreCase = true) -> "ko"
-                targetLanguage.startsWith("es", ignoreCase = true) -> "es"
-                targetLanguage.startsWith("fr", ignoreCase = true) -> "fr"
-                targetLanguage.startsWith("de", ignoreCase = true) -> "de"
-                else -> targetLanguage.lowercase().trim()
-            }
-
             val tTrans = generateT()
-            val transUrl = "${BASE_URL}crowd.track.translations.get?translation_fields_set=minimal&selected_language=$langCode&track_id=$trackId&comment_format=text&part=user&usertoken=$token&format=json&app_id=$APP_ID&t=$tTrans"
-            val transJson = httpGet(transUrl)
+            val transUrl = "${BASE_URL}crowd.track.translations.get?track_id=$trackId&selected_language=$targetLanguage&usertoken=$token&format=json&app_id=$APP_ID&t=$tTrans"
+            val transJson = LinerNotesHttpClient.get(transUrl, HEADERS)
             if (transJson != null) {
-                val transRoot = JSONObject(transJson)
-                val transList = transRoot.optJSONObject("message")
-                    ?.optJSONObject("body")
-                    ?.optJSONArray("translations_list")
+                try {
+                    val transRoot = JSONObject(transJson)
+                    val transList = transRoot.optJSONObject("message")
+                        ?.optJSONObject("body")
+                        ?.optJSONArray("translations_list")
 
-                if (transList != null && transList.length() > 0) {
-                    val transMap = mutableMapOf<String, String>()
-                    for (j in 0 until transList.length()) {
-                        val transItem = transList.optJSONObject(j)?.optJSONObject("translation") ?: continue
-                        val origLine = transItem.optString("subtitle_matched_line", "").trim()
-                        val transText = transItem.optString("description", "").trim()
-                        if (origLine.isNotEmpty() && transText.isNotEmpty()) {
-                            transMap[origLine] = transText
-                        }
-                    }
-
-                    if (transMap.isNotEmpty()) {
-                        // 根据原版 LRC 逐行合成对应的翻译时间轴
-                        val transSb = StringBuilder()
-                        var matchedCount = 0
-                        for (line in originalLyrics.lines()) {
-                            val match = TIMESTAMP_LINE_REGEX.find(line)
-                            if (match != null) {
-                                val ts = match.groupValues[1]
-                                val text = match.groupValues[2].trim()
-                                val translated = transMap[text]
-                                if (!translated.isNullOrBlank()) {
-                                    transSb.append("$ts $translated\n")
-                                    matchedCount++
-                                } else {
-                                    transSb.append("$ts\n")
-                                }
-                            } else {
-                                val translated = transMap[line.trim()]
-                                if (!translated.isNullOrBlank()) {
-                                    transSb.append("$translated\n")
-                                    matchedCount++
-                                }
+                    if (transList != null && transList.length() > 0) {
+                        val transMap = mutableMapOf<String, String>()
+                        for (i in 0 until transList.length()) {
+                            val tObj = transList.optJSONObject(i)?.optJSONObject("translation") ?: continue
+                            val originalSnippet = tObj.optString("snippet", "").trim()
+                            val translatedSnippet = tObj.optString("description", "").trim()
+                            if (originalSnippet.isNotBlank() && translatedSnippet.isNotBlank()) {
+                                transMap[originalSnippet] = translatedSnippet
                             }
                         }
 
-                        if (matchedCount > 0) {
-                            val aligned = LyricAligner.alignLrcTimestamps(originalLyrics, transSb.toString().trim())
-                            originalLyrics = aligned.first
-                            translatedLyrics = aligned.second
-                            isBilingual = !translatedLyrics.isNullOrBlank()
+                        if (transMap.isNotEmpty()) {
+                            val transLines = mutableListOf<String>()
+                            val origLines = originalLyrics.lines()
+                            for (line in origLines) {
+                                val match = TIMESTAMP_LINE_REGEX.find(line)
+                                if (match != null) {
+                                    val timestamp = match.groupValues[1]
+                                    val text = match.groupValues[2].trim()
+                                    val transText = transMap[text] ?: ""
+                                    transLines.add("$timestamp$transText")
+                                } else {
+                                    val transText = transMap[line.trim()] ?: ""
+                                    transLines.add(transText)
+                                }
+                            }
+                            val candidateTrans = transLines.joinToString("\n").trim()
+                            if (candidateTrans.lines().any { it.replace(TIMESTAMP_LINE_REGEX, "$2").isNotBlank() }) {
+                                translatedLyrics = candidateTrans
+                            }
                         }
                     }
+                } catch (e: Exception) {
+                    // 忽略翻译解析错误
                 }
             }
 
-            if (!isBilingual && originalLyrics.contains("[")) {
-                originalLyrics = LyricAligner.alignLrcTimestamps(originalLyrics, null).first
-            }
+            val alignedPair = LyricAligner.alignLrcTimestamps(originalLyrics, translatedLyrics)
 
             OnlineLyricsResult(
                 songId = trackId,
                 title = matchedTitle,
                 artist = matchedArtist,
-                originalLyrics = originalLyrics,
-                translatedLyrics = translatedLyrics,
-                isBilingual = isBilingual
+                originalLyrics = alignedPair.first,
+                translatedLyrics = alignedPair.second.ifBlank { null },
+                isBilingual = alignedPair.second.isNotBlank()
             )
         } catch (e: Exception) {
-            e.printStackTrace()
             null
-        }
-    }
-
-    private fun httpGet(urlStr: String): String? {
-        var connection: HttpURLConnection? = null
-        return try {
-            val url = URL(urlStr)
-            connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 8000
-                readTimeout = 8000
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Cookie", COOKIE)
-                setRequestProperty("Accept", "application/json")
-                instanceFollowRedirects = true
-            }
-
-            if (connection.responseCode in 200..299) {
-                BufferedReader(InputStreamReader(connection.inputStream, "UTF-8")).use { reader ->
-                    reader.readText()
-                }
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            null
-        } finally {
-            connection?.disconnect()
         }
     }
 }
