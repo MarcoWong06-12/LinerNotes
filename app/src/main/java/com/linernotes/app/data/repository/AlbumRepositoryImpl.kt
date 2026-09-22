@@ -61,6 +61,13 @@ class AlbumRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun updateAlbumTranslation(albumId: String, translatedTitle: String?) {
+        withContext(ioDispatcher) {
+            val existing = albumDao.getAlbumWithTracksOnce(albumId)?.album ?: return@withContext
+            albumDao.updateAlbum(existing.copy(translatedTitle = translatedTitle))
+        }
+    }
+
     override suspend fun removeAlbumFromShelf(albumId: String) {
         withContext(ioDispatcher) {
             albumDao.deleteAlbumById(albumId)

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import com.linernotes.app.presentation.common.AiConfigDialog
@@ -214,6 +215,67 @@ fun LyricBookletScreen(
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            )
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                            DropdownMenuItem(
+                                text = {
+                                    Text(strings.convertCurrentTrackToTraditional, style = MaterialTheme.typography.bodyMedium)
+                                },
+                                onClick = {
+                                    viewModel.convertCurrentTrackTranslation(toTraditional = true)
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Translate,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(strings.convertCurrentTrackToSimplified, style = MaterialTheme.typography.bodyMedium)
+                                },
+                                onClick = {
+                                    viewModel.convertCurrentTrackTranslation(toTraditional = false)
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Translate,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(strings.convertAlbumToTraditional, style = MaterialTheme.typography.bodyMedium)
+                                },
+                                onClick = {
+                                    viewModel.convertAlbumTranslation(toTraditional = true)
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Album,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(strings.convertAlbumToSimplified, style = MaterialTheme.typography.bodyMedium)
+                                },
+                                onClick = {
+                                    viewModel.convertAlbumTranslation(toTraditional = false)
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Album,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.secondary
                                     )

@@ -12,6 +12,7 @@ import com.linernotes.app.domain.repository.AlbumRepository
 import com.linernotes.app.presentation.booklet.model.BookletUiState
 import com.linernotes.app.core.translation.BatchTranslationManager
 import com.linernotes.app.core.translation.BatchTranslationState
+import com.linernotes.app.core.util.ChineseConverter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -268,6 +269,106 @@ class LyricBookletViewModel @Inject constructor(
                 _uiState.update { it.copy(isTranslating = false, userMessage = "翻译完成并已对齐保存！") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isTranslating = false, userMessage = "翻译遇到问题: ${e.message}") }
+            }
+        }
+    }
+
+    fun convertCurrentTrackTranslation(toTraditional: Boolean) {
+        _uiState.update { it.copy(isTranslateMenuOpen = false) }
+        val currentTrack = getCurrentTrack() ?: return
+        if (currentTrack.translatedLyrics.isNullOrBlank() && currentTrack.translatedTitle.isNullOrBlank()) {
+            _uiState.update { it.copy(userMessage = "当前曲目暂无译文可转换") }
+            return
+        }
+
+        viewModelScope.launch {
+            val newTitle = if (toTraditional) {
+                ChineseConverter.toTraditional(currentTrack.translatedTitle)
+            } else {
+                ChineseConverter.toSimplified(currentTrack.translatedTitle)
+            }
+            val newLyrics = if (toTraditional) {
+                ChineseConverter.toTraditional(currentTrack.translatedLyrics)
+            } else {
+                ChineseConverter.toSimplified(currentTrack.translatedLyrics)
+            }
+
+            repository.updateTrackTranslation(
+                trackId = currentTrack.id,
+                translatedTitle = newTitle.ifBlank { null },
+                originalLyrics = currentTrack.originalLyrics,
+                translatedLyrics = newLyrics
+            )
+
+            val aligned = LyricAligner.align(currentTrack.originalLyrics, newLyrics)
+            _uiState.update { state ->
+                state.copy(
+                    alignedLyrics = aligned,
+                    userMessage = if (toTraditional) "当前曲目译文已成功转换为繁体中文" else "当前曲目译文已成功转换为简体中文"
+                )
+            }
+        }
+    }
+
+    fun convertAlbumTranslation(toTraditional: Boolean) {
+        _uiState.update { it.copy(isTranslateMenuOpen = false) }
+        val albumWithTracks = _uiState.value.albumWithTracks ?: return
+        val tracks = albumWithTracks.tracks
+        if (tracks.isEmpty()) return
+
+        viewModelScope.launch {
+            var convertedCount = 0
+            val album = albumWithTracks.album
+            if (!album.translatedTitle.isNullOrBlank()) {
+                val newAlbumTitle = if (toTraditional) {
+                    ChineseConverter.toTraditional(album.translatedTitle)
+                } else {
+                    ChineseConverter.toSimplified(album.translatedTitle)
+                }
+                repository.updateAlbumTranslation(album.id, newAlbumTitle.ifBlank { null })
+            }
+
+            for (track in tracks) {
+                if (!track.translatedLyrics.isNullOrBlank() || !track.translatedTitle.isNullOrBlank()) {
+                    val newTitle = if (toTraditional) {
+                        ChineseConverter.toTraditional(track.translatedTitle)
+                    } else {
+                        ChineseConverter.toSimplified(track.translatedTitle)
+                    }
+                    val newLyrics = if (toTraditional) {
+                        ChineseConverter.toTraditional(track.translatedLyrics)
+                    } else {
+                        ChineseConverter.toSimplified(track.translatedLyrics)
+                    }
+
+                    repository.updateTrackTranslation(
+                        trackId = track.id,
+                        translatedTitle = newTitle.ifBlank { null },
+                        originalLyrics = track.originalLyrics,
+                        translatedLyrics = newLyrics
+                    )
+                    convertedCount++
+                }
+            }
+
+            val currentTrack = getCurrentTrack()
+            val newAligned = if (currentTrack != null) {
+                val newLyrics = if (toTraditional) {
+                    ChineseConverter.toTraditional(currentTrack.translatedLyrics)
+                } else {
+                    ChineseConverter.toSimplified(currentTrack.translatedLyrics)
+                }
+                LyricAligner.align(currentTrack.originalLyrics, newLyrics)
+            } else {
+                _uiState.value.alignedLyrics
+            }
+
+            val targetType = if (toTraditional) "繁体中文" else "简体中文"
+            _uiState.update {
+                it.copy(
+                    alignedLyrics = newAligned,
+                    userMessage = "全辑共 $convertedCount 首曲目译文已成功转换为$targetType"
+                )
             }
         }
     }

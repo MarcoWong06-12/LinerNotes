@@ -3,10 +3,14 @@ package com.linernotes.app.presentation.booklet.components
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.linernotes.app.core.util.ChineseConverter
 import com.linernotes.app.data.local.entity.TrackEntity
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,6 +58,42 @@ fun EditLyricSheet(
                 maxLines = 10
             )
             Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AssistChip(
+                    onClick = {
+                        zhTitle = ChineseConverter.toTraditional(zhTitle)
+                        transLyrics = ChineseConverter.toTraditional(transLyrics)
+                    },
+                    label = { Text(strings.convertToTraditional) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Translate,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                )
+                AssistChip(
+                    onClick = {
+                        zhTitle = ChineseConverter.toSimplified(zhTitle)
+                        transLyrics = ChineseConverter.toSimplified(transLyrics)
+                    },
+                    label = { Text(strings.convertToSimplified) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Translate,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
 
             OutlinedTextField(
                 value = transLyrics,

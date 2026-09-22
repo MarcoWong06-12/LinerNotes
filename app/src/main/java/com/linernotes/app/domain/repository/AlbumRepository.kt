@@ -17,5 +17,6 @@ interface AlbumRepository {
         originalLyrics: String?,
         translatedLyrics: String?
     )
+    suspend fun updateAlbumTranslation(albumId: String, translatedTitle: String?)
     suspend fun removeAlbumFromShelf(albumId: String)
 }
