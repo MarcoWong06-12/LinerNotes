@@ -142,6 +142,7 @@ fun AiConfigDialog(
                         AiPreferences.LyricsSourcePreference.NETEASE_ONLY.code to strings.sourceOfficial,
                         AiPreferences.LyricsSourcePreference.QQ_ONLY.code to strings.sourceQq,
                         AiPreferences.LyricsSourcePreference.KUGOU_ONLY.code to strings.sourceKugou,
+                        AiPreferences.LyricsSourcePreference.MUSIXMATCH_ONLY.code to strings.sourceMusixmatch,
                         AiPreferences.LyricsSourcePreference.LRCLIB_ONLY.code to strings.sourceLrclib,
                         AiPreferences.LyricsSourcePreference.AI_ONLY.code to strings.sourceAi
                     )

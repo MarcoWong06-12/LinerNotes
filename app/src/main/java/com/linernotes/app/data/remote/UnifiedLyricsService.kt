@@ -21,6 +21,9 @@ object UnifiedLyricsService {
             AiPreferences.LyricsSourcePreference.KUGOU_ONLY -> {
                 KugouLyricsService.fetchLyrics(trackTitle, artistName)
             }
+            AiPreferences.LyricsSourcePreference.MUSIXMATCH_ONLY -> {
+                MusixmatchLyricsService.fetchLyrics(trackTitle, artistName)
+            }
             AiPreferences.LyricsSourcePreference.LRCLIB_ONLY -> {
                 LrclibLyricsService.fetchLyrics(trackTitle, artistName)
             }
@@ -58,7 +61,16 @@ object UnifiedLyricsService {
                     if (bestCandidate == null) bestCandidate = kugouRes
                 }
 
-                // 4. 尝试 LRCLIB (全球国际开源同步歌词库)
+                // 4. 尝试 Musixmatch (全球最大歌词平台，包含丰富外文及逐行翻译)
+                val mxmRes = MusixmatchLyricsService.fetchLyrics(trackTitle, artistName)
+                if (mxmRes != null && mxmRes.originalLyrics.isNotBlank()) {
+                    if (mxmRes.isBilingual) {
+                        return mxmRes
+                    }
+                    if (bestCandidate == null) bestCandidate = mxmRes
+                }
+
+                // 5. 尝试 LRCLIB (全球国际开源同步歌词库)
                 if (bestCandidate == null) {
                     val lrclibRes = LrclibLyricsService.fetchLyrics(trackTitle, artistName)
                     if (lrclibRes != null && lrclibRes.originalLyrics.isNotBlank()) {

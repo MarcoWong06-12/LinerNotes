@@ -42,6 +42,10 @@ class AiPreferences @Inject constructor(
         get() = prefs.getString("model_name", "gpt-5.6-terra") ?: "gpt-5.6-terra"
         set(value) = prefs.edit().putString("model_name", value.trim()).apply()
 
+    var musixmatchToken: String
+        get() = prefs.getString("musixmatch_token", "") ?: ""
+        set(value) = prefs.edit().putString("musixmatch_token", value.trim()).apply()
+
     var lyricsSource: String
         get() = prefs.getString("lyrics_source", LyricsSourcePreference.AUTO_FIRST.code) ?: LyricsSourcePreference.AUTO_FIRST.code
         set(value) = prefs.edit().putString("lyrics_source", value).apply()
@@ -50,10 +54,11 @@ class AiPreferences @Inject constructor(
         get() = apiKey.isNotBlank()
 
     enum class LyricsSourcePreference(val code: String, val displayNameZh: String, val displayNameEn: String) {
-        AUTO_FIRST("auto_first", "智能多源聚合 (推荐：网易云+QQ+酷狗+LRCLIB)", "Smart Multi-Source (NetEase + QQ + Kugou + LRCLIB)"),
+        AUTO_FIRST("auto_first", "智能多源聚合 (推荐：网易云+QQ+酷狗+Musixmatch+LRCLIB)", "Smart Multi-Source (NetEase + QQ + Kugou + Musixmatch + LRCLIB)"),
         NETEASE_ONLY("netease_only", "网易云音乐 (Netease Cloud Music)", "Netease Cloud Music"),
         QQ_ONLY("qq_only", "QQ 音乐 (QQ Music)", "QQ Music"),
         KUGOU_ONLY("kugou_only", "酷狗音乐 (Kugou Music)", "Kugou Music"),
+        MUSIXMATCH_ONLY("musixmatch_only", "Musixmatch (国际曲库与逐行翻译)", "Musixmatch"),
         LRCLIB_ONLY("lrclib_only", "LRCLIB (全球开源歌词库)", "LRCLIB"),
         AI_ONLY("ai_only", "仅使用 AI 智能翻译", "AI Translation Only");
 
