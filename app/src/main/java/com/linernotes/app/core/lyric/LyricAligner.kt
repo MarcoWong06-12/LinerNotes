@@ -4,7 +4,16 @@ import com.linernotes.app.domain.model.BilingualLyricLine
 
 object LyricAligner {
 
-    private val LRC_TIMESTAMP_REGEX = Regex("""\[\d{2}:\d{2}(?:\.\d{2,3})?]""")
+    val LRC_TIMESTAMP_REGEX = Regex("""\[\d{2}:\d{2}(?:\.\d{2,3})?]""")
+    val LRC_METADATA_REGEX = Regex("""^\[(ti|ar|al|by|offset|length|re|ve|encoding):.*?]""", RegexOption.IGNORE_CASE)
+
+    fun cleanLine(line: String): String {
+        val withoutTime = line.replace(LRC_TIMESTAMP_REGEX, "").trim()
+        if (withoutTime.matches(LRC_METADATA_REGEX)) {
+            return ""
+        }
+        return withoutTime
+    }
 
     fun isRefusalText(text: String?): Boolean {
         if (text.isNullOrBlank()) return false
@@ -35,8 +44,6 @@ object LyricAligner {
         }
         return false
     }
-
-    private val LRC_METADATA_REGEX = Regex("""^\[(ti|ar|al|by|offset|length|re|ve|encoding):.*?]""", RegexOption.IGNORE_CASE)
 
     /**
      * 将存储的纯文本或 LRC 歌词对齐解析为逐行双语模型。
@@ -144,13 +151,5 @@ object LyricAligner {
             lines.removeAt(lines.size - 1)
         }
         return lines.joinToString("\n")
-    }
-
-    private fun cleanLine(line: String): String {
-        val withoutTime = line.replace(LRC_TIMESTAMP_REGEX, "").trim()
-        if (withoutTime.matches(LRC_METADATA_REGEX)) {
-            return ""
-        }
-        return withoutTime
     }
 }
