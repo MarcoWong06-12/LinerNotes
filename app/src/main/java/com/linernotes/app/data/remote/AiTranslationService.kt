@@ -198,25 +198,10 @@ class AiTranslationService @Inject constructor(
                 }
             } catch (e: Exception) {
                 val msg = e.message ?: ""
-                val isResourceNotFound = msg.contains("404") || msg.contains("Resource not found", ignoreCase = true)
-                val currentModel = aiPreferences.modelName.trim()
-
-                // 若遇到 404 Resource not found（常见于中转站死渠道、模型映射失效或 Azure 上游缺失）
-                // 且当前不是标准 gpt-4o-mini，自动尝试切换为最通用的 gpt-4o-mini 进行同站抢救
-                if (isResourceNotFound && !isGeminiService() && !currentModel.equals("gpt-4o-mini", ignoreCase = true)) {
-                    AiDebugLogger.log(false, "模型 404 异常", "《$trackTitle》原模型 $currentModel 返回 404，尝试自动切换至高兼容性的 gpt-4o-mini 抢救...")
-                    try {
-                        val rescuedResult = translateWithOpenAi(trackTitle, originalLyrics, overrideModel = "gpt-4o-mini")
-                        AiDebugLogger.log(true, "模型切换抢救成功", "《$trackTitle》通过 gpt-4o-mini 成功完成翻译！")
-                        return@withContext rescuedResult
-                    } catch (eRescuing: Exception) {
-                        AiDebugLogger.log(false, "同站抢救未果", "gpt-4o-mini 亦返回异常: ${eRescuing.message}，启动纯净免拦截备用通道...")
-                    }
-                }
 
                 // 全面兜底保障：无论是中转站死渠道 (404)、欠费 (402/403)、拥堵 (500/502/504) 还是网络超时
-                // 自动无感降级至本地纯净备用翻译通道，确保歌曲 100% 成功获得译文，绝不在单曲页弹红报错，绝不在整张专辑中漏歌！
-                AiDebugLogger.log(false, "主引擎调用受阻 ($msg)", "《$trackTitle》已自动无感切换至纯净免拦截备用通道完成翻译！")
+                // 坚决不私自变更用户指定的 AI 模型配置；自动无感降级至纯净备用翻译通道，确保歌曲 100% 成功获得译文，绝不在单曲页弹红报错，绝不在整张专辑中漏歌！
+                AiDebugLogger.log(false, "主引擎调用受阻 ($msg)", "《$trackTitle》严格保持用户模型配置，已自动切换至纯净免拦截备用通道完成翻译！")
                 try {
                     val fallbackResult = fallbackTranslate(trackTitle, originalLyrics)
                     AiDebugLogger.log(true, "备用通道成功", "《$trackTitle》已通过备用通道成功翻译并保存！")
@@ -442,13 +427,12 @@ class AiTranslationService @Inject constructor(
      */
     private suspend fun translateWithOpenAi(
         trackTitle: String,
-        originalLyrics: String,
-        overrideModel: String? = null
+        originalLyrics: String
     ): TranslationResult {
         val url = sanitizeOpenAiUrl(aiPreferences.baseUrl)
         val targetLang = TranslationTargetLanguage.fromCode(aiPreferences.targetLanguage)
         val targetName = targetLang.promptName
-        val model = overrideModel ?: aiPreferences.modelName.trim().ifBlank { "gpt-4o-mini" }
+        val model = aiPreferences.modelName.trim().ifBlank { "gpt-5.6-terra" }
 
         val systemPrompt = "你是一位精通多国文学与现代诗歌的双语对照翻译专家。用户正在进行文学诗篇研读与语言学习，请将用户提供的外文文本逐行直译为优美通顺、符合原意的【$targetName】。\n\n" +
             "【输出格式要求】：\n" +
