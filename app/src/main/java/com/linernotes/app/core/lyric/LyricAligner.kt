@@ -4,7 +4,7 @@ import com.linernotes.app.domain.model.BilingualLyricLine
 
 object LyricAligner {
 
-    val LRC_TIMESTAMP_REGEX = Regex("""\[\d{2}:\d{2}(?:\.\d{2,3})?]""")
+    val LRC_TIMESTAMP_REGEX = Regex("""\[\d{1,2}:\d{2}(?:\.\d{2,3})?]""")
     val LRC_METADATA_REGEX = Regex("""^\[(ti|ar|al|by|offset|length|re|ve|encoding):.*?]""", RegexOption.IGNORE_CASE)
 
     fun cleanLine(line: String): String {
@@ -13,6 +13,27 @@ object LyricAligner {
             return ""
         }
         return withoutTime
+    }
+
+    fun extractTimestampMs(line: String): Long? {
+        val match = TIMESTAMP_PARSER_REGEX.find(line) ?: return null
+        val min = match.groupValues[1].toLongOrNull() ?: 0L
+        val sec = match.groupValues[2].toLongOrNull() ?: 0L
+        val msStr = match.groupValues.getOrNull(3) ?: ""
+        val ms = when (msStr.length) {
+            2 -> (msStr.toLongOrNull() ?: 0L) * 10
+            3 -> msStr.toLongOrNull() ?: 0L
+            else -> 0L
+        }
+        return min * 60_000L + sec * 1000L + ms
+    }
+
+    fun formatTimestamp(ms: Long): String {
+        val totalSec = ms / 1000
+        val min = totalSec / 60
+        val sec = totalSec % 60
+        val frac = (ms % 1000) / 10
+        return String.format(java.util.Locale.US, "[%02d:%02d.%02d]", min, sec, frac)
     }
 
     fun isRefusalText(text: String?): Boolean {
@@ -46,8 +67,8 @@ object LyricAligner {
     }
 
     /**
-     * 将存储的纯文本或 LRC 歌词对齐解析为逐行双语模型。
-     * 具备智能段落容错对齐：彻底杜绝由于模型遗漏空行导致后续全部错位（“不齐”）的问题。
+     * 将存储的纯文本或 LRC 歌词对齐解析为逐行双语模型，
+     * 具备时间戳提取与智能段落容错对齐：彻底杜绝由于模型遗漏空行导致后续全部错位的问题。
      */
     fun align(originalRaw: String?, translatedRaw: String?): List<BilingualLyricLine> {
         if (originalRaw.isNullOrBlank() && translatedRaw.isNullOrBlank()) {
@@ -60,8 +81,12 @@ object LyricAligner {
         // 若本地存储的内容实际上是 AI 触发版权限制后的拒识文本，自动视为空，避免污染歌词界面
         val safeTranslated = if (isRefusalText(cleanTranslated)) "" else cleanTranslated
 
-        val origLines = cleanOriginal.lines().map { cleanLine(it) }
-        val transLines = safeTranslated.lines().map { cleanLine(it) }
+        val rawOrigLines = cleanOriginal.lines()
+        val rawTransLines = safeTranslated.lines()
+
+        val origLines = rawOrigLines.map { cleanLine(it) }
+        val transLines = rawTransLines.map { cleanLine(it) }
+        val origTimes = rawOrigLines.map { extractTimestampMs(it) }
 
         if (transLines.isEmpty() || transLines.all { it.isBlank() }) {
             // 没有翻译时，纯净展示原文
@@ -70,7 +95,8 @@ object LyricAligner {
                     lineNumber = index + 1,
                     original = line,
                     translation = "",
-                    isStanzaBreak = line.isBlank()
+                    isStanzaBreak = line.isBlank(),
+                    startTimeMs = origTimes.getOrNull(index)
                 )
             }
         }
@@ -89,7 +115,8 @@ object LyricAligner {
                         lineNumber = i + 1,
                         original = orig,
                         translation = trans,
-                        isStanzaBreak = orig.isBlank() && trans.isBlank()
+                        isStanzaBreak = orig.isBlank() && trans.isBlank(),
+                        startTimeMs = origTimes.getOrNull(i)
                     )
                 )
             }
@@ -101,14 +128,17 @@ object LyricAligner {
             var transIdx = 0
             var lineNum = 1
 
-            for (orig in origLines) {
+            for (i in origLines.indices) {
+                val orig = origLines[i]
+                val time = origTimes.getOrNull(i)
                 if (orig.isBlank()) {
                     result.add(
                         BilingualLyricLine(
                             lineNumber = lineNum++,
                             original = "",
                             translation = "",
-                            isStanzaBreak = true
+                            isStanzaBreak = true,
+                            startTimeMs = time
                         )
                     )
                 } else {
@@ -118,7 +148,8 @@ object LyricAligner {
                             lineNumber = lineNum++,
                             original = orig,
                             translation = trans,
-                            isStanzaBreak = false
+                            isStanzaBreak = false,
+                            startTimeMs = time
                         )
                     )
                 }
@@ -130,7 +161,8 @@ object LyricAligner {
                         lineNumber = lineNum++,
                         original = "",
                         translation = nonBlankTrans[transIdx++],
-                        isStanzaBreak = false
+                        isStanzaBreak = false,
+                        startTimeMs = null
                     )
                 )
             }
@@ -150,7 +182,7 @@ object LyricAligner {
 
     /**
      * 将网易云等平台返回的包含 [mm:ss.xx] 时间戳的原版歌词与翻译歌词，
-     * 通过毫秒级时间戳精准匹配并消除制作人名单，输出 1:1 行对齐的平行纯文本。
+     * 通过毫秒级时间戳精准匹配并消除制作人名单，输出 1:1 行对齐且保留时间标签的歌词文本。
      */
     fun alignLrcTimestamps(origLrc: String, transLrc: String?): Pair<String, String> {
         val origTimed = parseTimedLines(origLrc)
@@ -167,8 +199,16 @@ object LyricAligner {
         }
 
         if (transTimed.isEmpty()) {
-            val origClean = filteredOrig.joinToString("\n") { it.text }
-            return Pair(origClean, "")
+            val origResult = StringBuilder()
+            for (i in filteredOrig.indices) {
+                val current = filteredOrig[i]
+                if (i > 0 && current.ms - filteredOrig[i - 1].ms >= 6500) {
+                    origResult.append("\n")
+                }
+                val tag = formatTimestamp(current.ms)
+                origResult.append(tag).append(" ").append(current.text).append("\n")
+            }
+            return Pair(origResult.toString().trimEnd(), "")
         }
 
         val origResult = StringBuilder()
@@ -189,8 +229,13 @@ object LyricAligner {
             val matchedTrans = transTimed.find { Math.abs(it.ms - current.ms) <= 180 }
             val transText = matchedTrans?.text?.trim() ?: ""
 
-            origResult.append(current.text).append("\n")
-            transResult.append(transText).append("\n")
+            val tag = formatTimestamp(current.ms)
+            origResult.append(tag).append(" ").append(current.text).append("\n")
+            if (transText.isNotBlank()) {
+                transResult.append(tag).append(" ").append(transText).append("\n")
+            } else {
+                transResult.append("\n")
+            }
         }
 
         return Pair(origResult.toString().trimEnd(), transResult.toString().trimEnd())

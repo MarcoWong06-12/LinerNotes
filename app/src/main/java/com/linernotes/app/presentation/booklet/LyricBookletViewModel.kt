@@ -65,13 +65,15 @@ class LyricBookletViewModel @Inject constructor(
                         currentTrack?.originalLyrics,
                         currentTrack?.translatedLyrics
                     )
+                    val duration = computeTrackDuration(currentTrack, aligned)
 
                     _uiState.update { state ->
                         state.copy(
                             isLoading = false,
                             albumWithTracks = albumWithTracks.copy(tracks = tracks),
                             currentTrackIndex = safeIndex,
-                            alignedLyrics = aligned
+                            alignedLyrics = aligned,
+                            trackDurationMs = duration
                         )
                     }
                 } else {
@@ -85,18 +87,143 @@ class LyricBookletViewModel @Inject constructor(
         _uiState.update { it.copy(displayMode = mode) }
     }
 
+    private fun computeTrackDuration(track: TrackEntity?, aligned: List<BilingualLyricLine>): Long {
+        val dbDuration = track?.durationMs ?: 0L
+        if (dbDuration > 0L) return dbDuration
+        val lastTimed = aligned.lastOrNull { it.startTimeMs != null }?.startTimeMs ?: 0L
+        return if (lastTimed > 0L) lastTimed + 8000L else 180_000L
+    }
+
+    private fun findActiveLineIndex(lyrics: List<BilingualLyricLine>, posMs: Long): Int {
+        if (lyrics.isEmpty()) return -1
+        var lastIdx = -1
+        for (i in lyrics.indices) {
+            val t = lyrics[i].startTimeMs
+            if (t != null && t <= posMs) {
+                lastIdx = i
+            }
+        }
+        return lastIdx
+    }
+
     fun selectTrack(index: Int) {
         val tracks = _uiState.value.albumWithTracks?.tracks ?: return
         if (index in tracks.indices) {
             val track = tracks[index]
             val aligned = LyricAligner.align(track.originalLyrics, track.translatedLyrics)
+            val duration = computeTrackDuration(track, aligned)
             _uiState.update {
                 it.copy(
                     currentTrackIndex = index,
-                    alignedLyrics = aligned
+                    alignedLyrics = aligned,
+                    currentPositionMs = 0L,
+                    trackDurationMs = duration,
+                    activeLineIndex = -1
                 )
             }
         }
+    }
+
+    private var companionJob: kotlinx.coroutines.Job? = null
+
+    fun toggleCompanionPlay() {
+        if (_uiState.value.isCompanionPlaying) {
+            pauseCompanion()
+        } else {
+            startCompanion()
+        }
+    }
+
+    fun startCompanion() {
+        companionJob?.cancel()
+        _uiState.update { it.copy(isCompanionPlaying = true) }
+        companionJob = viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(100L)
+                val currentState = _uiState.value
+                if (!currentState.isCompanionPlaying) break
+
+                val currentPos = currentState.currentPositionMs + 100L
+                val duration = currentState.trackDurationMs.coerceAtLeast(10_000L)
+
+                if (currentPos >= duration) {
+                    val tracks = currentState.albumWithTracks?.tracks ?: emptyList()
+                    val nextIndex = currentState.currentTrackIndex + 1
+                    if (nextIndex in tracks.indices) {
+                        selectTrack(nextIndex)
+                        continue
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                isCompanionPlaying = false,
+                                currentPositionMs = 0L,
+                                activeLineIndex = -1
+                            )
+                        }
+                        break
+                    }
+                } else {
+                    val activeIdx = findActiveLineIndex(currentState.alignedLyrics, currentPos)
+                    _uiState.update {
+                        it.copy(
+                            currentPositionMs = currentPos,
+                            activeLineIndex = activeIdx
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun pauseCompanion() {
+        companionJob?.cancel()
+        companionJob = null
+        _uiState.update { it.copy(isCompanionPlaying = false) }
+    }
+
+    fun seekCompanion(targetMs: Long) {
+        val duration = _uiState.value.trackDurationMs.coerceAtLeast(1000L)
+        val clamped = targetMs.coerceIn(0L, duration)
+        val activeIdx = findActiveLineIndex(_uiState.value.alignedLyrics, clamped)
+        _uiState.update {
+            it.copy(
+                currentPositionMs = clamped,
+                activeLineIndex = activeIdx
+            )
+        }
+    }
+
+    fun adjustCompanionOffset(deltaMs: Long) {
+        seekCompanion(_uiState.value.currentPositionMs + deltaMs)
+    }
+
+    fun onLyricLineClicked(line: BilingualLyricLine) {
+        if (line.startTimeMs != null) {
+            seekCompanion(line.startTimeMs)
+        }
+    }
+
+    fun toggleCalibrationBar() {
+        _uiState.update { it.copy(showCalibrationBar = !it.showCalibrationBar) }
+    }
+
+    fun onExternalCdStateReceived(trackNo: Int, posMs: Long, isPlaying: Boolean) {
+        val tracks = _uiState.value.albumWithTracks?.tracks ?: return
+        val targetIndex = tracks.indexOfFirst { it.trackNumber == trackNo }
+        if (targetIndex != -1 && targetIndex != _uiState.value.currentTrackIndex) {
+            selectTrack(targetIndex)
+        }
+        seekCompanion(posMs)
+        if (isPlaying && !_uiState.value.isCompanionPlaying) {
+            startCompanion()
+        } else if (!isPlaying && _uiState.value.isCompanionPlaying) {
+            pauseCompanion()
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        companionJob?.cancel()
     }
 
     fun previousTrack() {

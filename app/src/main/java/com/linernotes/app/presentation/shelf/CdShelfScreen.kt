@@ -1,9 +1,11 @@
 package com.linernotes.app.presentation.shelf
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -35,17 +37,28 @@ fun CdShelfScreen(
             TopAppBar(
                 title = {
                     if (state.isSearchActive) {
-                        TextField(
-                            value = state.searchQuery,
-                            onValueChange = { viewModel.onSearchQueryChange(it) },
-                            placeholder = { Text(strings.searchPlaceholder) },
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent
-                            ),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp)
+                        ) {
+                            TextField(
+                                value = state.searchQuery,
+                                onValueChange = { viewModel.onSearchQueryChange(it) },
+                                placeholder = { Text(strings.searchPlaceholder, style = MaterialTheme.typography.bodyMedium) },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent
+                                ),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     } else {
                         Text(
                             text = strings.shelfTitle,
@@ -55,28 +68,64 @@ fun CdShelfScreen(
                 },
                 actions = {
                     if (state.isSearchActive) {
-                        IconButton(onClick = { viewModel.setSearchActive(false) }) {
-                            Icon(Icons.Default.Close, contentDescription = strings.closeSearch)
+                        FilledIconButton(
+                            onClick = { viewModel.setSearchActive(false) },
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = strings.closeSearch, modifier = Modifier.size(20.dp))
                         }
                     } else {
-                        IconButton(onClick = { viewModel.setSearchActive(true) }) {
-                            Icon(Icons.Default.Search, contentDescription = strings.searchCd)
+                        FilledIconButton(
+                            onClick = { viewModel.setSearchActive(true) },
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = strings.searchCd, modifier = Modifier.size(20.dp))
                         }
                     }
 
-                    IconButton(onClick = { viewModel.setAiConfigOpen(true) }) {
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    FilledIconButton(
+                        onClick = { viewModel.setAiConfigOpen(true) },
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        modifier = Modifier.size(38.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = strings.settingsTitle,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    IconButton(onClick = { viewModel.setAddSheetOpen(true) }) {
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    FilledIconButton(
+                        onClick = { viewModel.setAddSheetOpen(true) },
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier.padding(end = 8.dp).size(38.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = strings.addAlbumTooltip,
-                            tint = MaterialTheme.colorScheme.primary
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 },
@@ -127,7 +176,9 @@ fun CdShelfScreen(
             aiPreferences = viewModel.aiPreferences,
             onTestConnection = { k, b, m -> viewModel.testAiConnection(k, b, m) },
             onDismiss = { viewModel.setAiConfigOpen(false) },
-            onSaved = { viewModel.setAiConfigOpen(false) }
+            onSaved = {
+                viewModel.setAiConfigOpen(false)
+            }
         )
     }
 }
