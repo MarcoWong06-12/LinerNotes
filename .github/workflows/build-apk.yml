@@ -35,6 +35,10 @@ jobs:
               clean=$(echo "$line" | tr -d '\r')
               [ -n "$clean" ] && echo "::error title=KotlinError::$clean"
             done
+            grep -E "(FAILED|AssertionError|expected:|<Click to see difference>)" build.log | head -n 30 | while IFS= read -r line; do
+              clean=$(echo "$line" | tr -d '\r')
+              [ -n "$clean" ] && echo "::error title=TestFailure::$clean"
+            done
             grep -E "(What went wrong:|Caused by:)" build.log | head -n 10 | while IFS= read -r line; do
               clean=$(echo "$line" | tr -d '\r')
               [ -n "$clean" ] && echo "::error title=GradleFailure::$clean"

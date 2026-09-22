@@ -11,6 +11,10 @@ object ChineseConverter {
         for (i in 0 until minLen) {
             map[CHS_CHARS[i]] = CHT_CHARS[i]
         }
+        // Additional common simplified -> traditional mappings
+        map['后'] = '後'
+        map['里'] = '裡'
+        map['着'] = '著'
         map
     }
 
