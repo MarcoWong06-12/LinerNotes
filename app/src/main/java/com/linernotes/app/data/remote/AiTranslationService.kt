@@ -387,7 +387,7 @@ class AiTranslationService @Inject constructor(
 
         val nonBlankCount = prepared.indexedLines.size
         // 若匹配到了至少 40% 的行号，则按照行号锚点协议重构歌词
-        if (nonBlankCount > 0 && indexedMap.size >= (nonBlankCount * 0.4).coerceAtLeast(1)) {
+        if (nonBlankCount > 0 && indexedMap.size >= (nonBlankCount * 0.4).toInt().coerceAtLeast(1)) {
             val reconstructed = prepared.originalLines.mapIndexed { i, _ ->
                 val idx = prepared.lineToIndexMap[i]
                 if (idx != null) {
