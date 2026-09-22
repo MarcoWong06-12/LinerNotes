@@ -167,14 +167,14 @@ fun AiConfigDialog(
                     SuggestionChip(
                         onClick = {
                             baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
-                            modelName = "gemini-3.6-flash"
+                            modelName = "gemini-2.0-flash"
                         },
                         label = { Text(strings.presetGemini36) }
                     )
                     SuggestionChip(
                         onClick = {
                             baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
-                            modelName = "gemini-3.8-flash"
+                            modelName = "gemini-1.5-flash"
                         },
                         label = { Text(strings.presetGemini38) }
                     )

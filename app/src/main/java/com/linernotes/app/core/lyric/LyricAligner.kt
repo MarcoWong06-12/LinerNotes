@@ -36,8 +36,11 @@ object LyricAligner {
         return false
     }
 
+    private val LRC_METADATA_REGEX = Regex("""^\[(ti|ar|al|by|offset|length|re|ve|encoding):.*?]""", RegexOption.IGNORE_CASE)
+
     /**
      * 将存储的纯文本或 LRC 歌词对齐解析为逐行双语模型。
+     * 具备智能段落容错对齐：彻底杜绝由于模型遗漏空行导致后续全部错位（“不齐”）的问题。
      */
     fun align(originalRaw: String?, translatedRaw: String?): List<BilingualLyricLine> {
         if (originalRaw.isNullOrBlank() && translatedRaw.isNullOrBlank()) {
@@ -53,23 +56,80 @@ object LyricAligner {
         val origLines = cleanOriginal.lines().map { cleanLine(it) }
         val transLines = safeTranslated.lines().map { cleanLine(it) }
 
-        val maxLines = maxOf(origLines.size, transLines.size)
-        val result = ArrayList<BilingualLyricLine>(maxLines)
-
-        for (i in 0 until maxLines) {
-            val orig = origLines.getOrElse(i) { "" }
-            val trans = transLines.getOrElse(i) { "" }
-            val isBlank = orig.isBlank() && trans.isBlank()
-
-            result.add(
+        if (transLines.isEmpty() || transLines.all { it.isBlank() }) {
+            // 没有翻译时，纯净展示原文
+            return origLines.mapIndexed { index, line ->
                 BilingualLyricLine(
-                    lineNumber = i + 1,
-                    original = orig,
-                    translation = trans,
-                    isStanzaBreak = isBlank
+                    lineNumber = index + 1,
+                    original = line,
+                    translation = "",
+                    isStanzaBreak = line.isBlank()
                 )
-            )
+            }
         }
+
+        val isExactStructureMatch = origLines.size == transLines.size &&
+            origLines.indices.all { i -> origLines[i].isBlank() == transLines[i].isBlank() }
+
+        val result = ArrayList<BilingualLyricLine>()
+
+        if (isExactStructureMatch) {
+            // 结构与空行完全对齐时，按行一一对应
+            for (i in origLines.indices) {
+                val orig = origLines[i]
+                val trans = transLines[i]
+                result.add(
+                    BilingualLyricLine(
+                        lineNumber = i + 1,
+                        original = orig,
+                        translation = trans,
+                        isStanzaBreak = orig.isBlank() && trans.isBlank()
+                    )
+                )
+            }
+        } else {
+            // 智能段落容错对齐：
+            // 大模型经常会漏掉原歌词中的空行（导致原歌词第 10 行空行与译文第 10 行文字错位，引发后面全部移位“不齐”）。
+            // 策略：保留原歌词空行作为段落标记，原歌词的每一句非空歌词严格匹配译文的每一句非空歌词！
+            val nonBlankTrans = transLines.filter { it.isNotBlank() }
+            var transIdx = 0
+            var lineNum = 1
+
+            for (orig in origLines) {
+                if (orig.isBlank()) {
+                    result.add(
+                        BilingualLyricLine(
+                            lineNumber = lineNum++,
+                            original = "",
+                            translation = "",
+                            isStanzaBreak = true
+                        )
+                    )
+                } else {
+                    val trans = if (transIdx < nonBlankTrans.size) nonBlankTrans[transIdx++] else ""
+                    result.add(
+                        BilingualLyricLine(
+                            lineNumber = lineNum++,
+                            original = orig,
+                            translation = trans,
+                            isStanzaBreak = false
+                        )
+                    )
+                }
+            }
+
+            while (transIdx < nonBlankTrans.size) {
+                result.add(
+                    BilingualLyricLine(
+                        lineNumber = lineNum++,
+                        original = "",
+                        translation = nonBlankTrans[transIdx++],
+                        isStanzaBreak = false
+                    )
+                )
+            }
+        }
+
         return result
     }
 
@@ -87,6 +147,10 @@ object LyricAligner {
     }
 
     private fun cleanLine(line: String): String {
-        return line.replace(LRC_TIMESTAMP_REGEX, "").trim()
+        val withoutTime = line.replace(LRC_TIMESTAMP_REGEX, "").trim()
+        if (withoutTime.matches(LRC_METADATA_REGEX)) {
+            return ""
+        }
+        return withoutTime
     }
 }

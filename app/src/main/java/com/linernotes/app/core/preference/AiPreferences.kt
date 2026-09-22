@@ -39,7 +39,7 @@ class AiPreferences @Inject constructor(
         set(value) = prefs.edit().putString("base_url", sanitizeBaseUrl(value)).apply()
 
     var modelName: String
-        get() = prefs.getString("model_name", "gpt-5.6-terra") ?: "gpt-5.6-terra"
+        get() = prefs.getString("model_name", "gpt-4o-mini") ?: "gpt-4o-mini"
         set(value) = prefs.edit().putString("model_name", value.trim()).apply()
 
     val hasKey: Boolean
