@@ -1,5 +1,6 @@
 package com.linernotes.app.presentation.common
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -136,49 +137,33 @@ fun AiConfigDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        RadioButton(
-                            selected = lyricsSource == AiPreferences.LyricsSourcePreference.AUTO_FIRST.code,
-                            onClick = { lyricsSource = AiPreferences.LyricsSourcePreference.AUTO_FIRST.code }
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = strings.sourceAuto,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                    val options = listOf(
+                        AiPreferences.LyricsSourcePreference.AUTO_FIRST.code to strings.sourceAuto,
+                        AiPreferences.LyricsSourcePreference.NETEASE_ONLY.code to strings.sourceOfficial,
+                        AiPreferences.LyricsSourcePreference.QQ_ONLY.code to strings.sourceQq,
+                        AiPreferences.LyricsSourcePreference.KUGOU_ONLY.code to strings.sourceKugou,
+                        AiPreferences.LyricsSourcePreference.LRCLIB_ONLY.code to strings.sourceLrclib,
+                        AiPreferences.LyricsSourcePreference.AI_ONLY.code to strings.sourceAi
+                    )
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        RadioButton(
-                            selected = lyricsSource == AiPreferences.LyricsSourcePreference.NETEASE_ONLY.code,
-                            onClick = { lyricsSource = AiPreferences.LyricsSourcePreference.NETEASE_ONLY.code }
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = strings.sourceOfficial,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        RadioButton(
-                            selected = lyricsSource == AiPreferences.LyricsSourcePreference.AI_ONLY.code,
-                            onClick = { lyricsSource = AiPreferences.LyricsSourcePreference.AI_ONLY.code }
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = strings.sourceAi,
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                    options.forEach { (code, label) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { lyricsSource = code }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            RadioButton(
+                                selected = lyricsSource == code,
+                                onClick = { lyricsSource = code }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 }
 

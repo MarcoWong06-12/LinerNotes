@@ -144,9 +144,13 @@ class LyricBookletViewModel @Inject constructor(
         val artist = _uiState.value.albumWithTracks?.album?.artist ?: ""
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isTranslating = true, userMessage = "正在检索官方双语歌词...") }
+            _uiState.update { it.copy(isTranslating = true, userMessage = "正在检索多源官方歌词...") }
             try {
-                val result = com.linernotes.app.data.remote.NetEaseLyricsService.fetchLyrics(currentTrack.title, artist)
+                val result = com.linernotes.app.data.remote.UnifiedLyricsService.fetchLyrics(
+                    trackTitle = currentTrack.title,
+                    artistName = artist,
+                    sourcePref = aiPreferences.lyricsSource
+                )
                 if (result != null && result.originalLyrics.isNotBlank()) {
                     repository.updateTrackTranslation(
                         trackId = currentTrack.id,
@@ -159,7 +163,7 @@ class LyricBookletViewModel @Inject constructor(
                 } else {
                     // 若官方库未搜到且启用了智能回退并且有 key，则尝试 AI 翻译
                     if (aiPreferences.lyricsSource == AiPreferences.LyricsSourcePreference.AUTO_FIRST.code && aiPreferences.hasKey && !currentTrack.originalLyrics.isNullOrBlank()) {
-                        _uiState.update { it.copy(userMessage = "官方库未检索到，正在自动回退由 AI 翻译...") }
+                        _uiState.update { it.copy(userMessage = "在线歌词库未检索到，正在自动回退由 AI 翻译...") }
                         val aiResult = aiTranslationService.translateTrack(
                             trackTitle = currentTrack.title,
                             originalLyrics = currentTrack.originalLyrics
@@ -172,11 +176,11 @@ class LyricBookletViewModel @Inject constructor(
                         )
                         _uiState.update { it.copy(isTranslating = false, userMessage = "AI 翻译完成并已保存！") }
                     } else {
-                        _uiState.update { it.copy(isTranslating = false, userMessage = "未在官方库检索到该歌曲歌词，可尝试使用 AI 翻译") }
+                        _uiState.update { it.copy(isTranslating = false, userMessage = "未检索到该歌曲歌词，可尝试切换歌词源或使用 AI 翻译") }
                     }
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isTranslating = false, userMessage = "匹配官方歌词遇到问题: ${e.message}") }
+                _uiState.update { it.copy(isTranslating = false, userMessage = "匹配歌词遇到问题: ${e.message}") }
             }
         }
     }
@@ -188,12 +192,16 @@ class LyricBookletViewModel @Inject constructor(
         if (tracks.isEmpty()) return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isTranslating = true, userMessage = "正在极速匹配全辑官方歌词 (共 ${tracks.size} 首)...") }
+            _uiState.update { it.copy(isTranslating = true, userMessage = "正在极速多源检索全辑官方歌词 (共 ${tracks.size} 首)...") }
             var matchedCount = 0
             try {
                 for ((index, track) in tracks.withIndex()) {
-                    _uiState.update { it.copy(userMessage = "正在匹配 [${index + 1}/${tracks.size}] ${track.title}...") }
-                    val result = com.linernotes.app.data.remote.NetEaseLyricsService.fetchLyrics(track.title, artist)
+                    _uiState.update { it.copy(userMessage = "正在检索 [${index + 1}/${tracks.size}] ${track.title}...") }
+                    val result = com.linernotes.app.data.remote.UnifiedLyricsService.fetchLyrics(
+                        trackTitle = track.title,
+                        artistName = artist,
+                        sourcePref = aiPreferences.lyricsSource
+                    )
                     if (result != null && result.originalLyrics.isNotBlank()) {
                         repository.updateTrackTranslation(
                             trackId = track.id,

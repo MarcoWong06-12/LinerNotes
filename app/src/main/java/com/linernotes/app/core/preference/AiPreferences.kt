@@ -49,10 +49,13 @@ class AiPreferences @Inject constructor(
     val hasKey: Boolean
         get() = apiKey.isNotBlank()
 
-    enum class LyricsSourcePreference(val code: String) {
-        AUTO_FIRST("auto_first"),
-        NETEASE_ONLY("netease_only"),
-        AI_ONLY("ai_only");
+    enum class LyricsSourcePreference(val code: String, val displayNameZh: String, val displayNameEn: String) {
+        AUTO_FIRST("auto_first", "智能多源聚合 (推荐：网易云+QQ+酷狗+LRCLIB)", "Smart Multi-Source (NetEase + QQ + Kugou + LRCLIB)"),
+        NETEASE_ONLY("netease_only", "网易云音乐 (Netease Cloud Music)", "Netease Cloud Music"),
+        QQ_ONLY("qq_only", "QQ 音乐 (QQ Music)", "QQ Music"),
+        KUGOU_ONLY("kugou_only", "酷狗音乐 (Kugou Music)", "Kugou Music"),
+        LRCLIB_ONLY("lrclib_only", "LRCLIB (全球开源歌词库)", "LRCLIB"),
+        AI_ONLY("ai_only", "仅使用 AI 智能翻译", "AI Translation Only");
 
         companion object {
             fun fromCode(code: String): LyricsSourcePreference =
