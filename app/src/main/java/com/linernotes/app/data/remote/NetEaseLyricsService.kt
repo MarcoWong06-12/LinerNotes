@@ -20,6 +20,38 @@ object NetEaseLyricsService {
         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     )
 
+    suspend fun fetchLyricById(
+        songId: Long,
+        fallbackTitle: String = "",
+        fallbackArtist: String = ""
+    ): OnlineLyricsResult? = withContext(Dispatchers.IO) {
+        if (songId <= 0L) return@withContext null
+        val lyricUrl = "$LYRIC_API?id=$songId&lv=1&kv=1&tv=1"
+        val lyricJson = LinerNotesHttpClient.get(lyricUrl, HEADERS) ?: return@withContext null
+        try {
+            val lyricRoot = JSONObject(lyricJson)
+            val lrcObj = lyricRoot.optJSONObject("lrc")
+            val origLrc = lrcObj?.optString("lyric", "")?.trim() ?: ""
+            if (origLrc.isBlank()) return@withContext null
+
+            val tlyricObj = lyricRoot.optJSONObject("tlyric")
+            val transLrc = tlyricObj?.optString("lyric", "")?.trim() ?: ""
+
+            val alignedPair = LyricAligner.alignLrcTimestamps(origLrc, transLrc)
+
+            OnlineLyricsResult(
+                songId = songId,
+                title = fallbackTitle,
+                artist = fallbackArtist,
+                originalLyrics = alignedPair.first,
+                translatedLyrics = alignedPair.second.ifBlank { null },
+                isBilingual = alignedPair.second.isNotBlank()
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     suspend fun fetchLyrics(
         trackTitle: String,
         artistName: String
