@@ -135,16 +135,93 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun onAiTranslateClicked() {
-        if (!aiPreferences.hasKey) {
-            // 如果尚未配置 AI API Key，直接弹出配置窗口引导配置
-            _uiState.update { it.copy(isAiConfigOpen = true) }
-        } else {
-            _uiState.update { it.copy(isTranslateMenuOpen = true) }
+        _uiState.update { it.copy(isTranslateMenuOpen = true) }
+    }
+
+    fun fetchOfficialLyricsCurrentTrack() {
+        _uiState.update { it.copy(isTranslateMenuOpen = false) }
+        val currentTrack = getCurrentTrack() ?: return
+        val artist = _uiState.value.albumWithTracks?.album?.artist ?: ""
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isTranslating = true, userMessage = "正在检索官方双语歌词...") }
+            try {
+                val result = com.linernotes.app.data.remote.NetEaseLyricsService.fetchLyrics(currentTrack.title, artist)
+                if (result != null && result.originalLyrics.isNotBlank()) {
+                    repository.updateTrackTranslation(
+                        trackId = currentTrack.id,
+                        translatedTitle = currentTrack.translatedTitle,
+                        originalLyrics = result.originalLyrics,
+                        translatedLyrics = result.translatedLyrics
+                    )
+                    val msg = if (result.isBilingual) "官方双语歌词已匹配并同步入库！" else "已检索到官方原版歌词（暂无官方译文）"
+                    _uiState.update { it.copy(isTranslating = false, userMessage = msg) }
+                } else {
+                    // 若官方库未搜到且启用了智能回退并且有 key，则尝试 AI 翻译
+                    if (aiPreferences.lyricsSource == AiPreferences.LyricsSourcePreference.AUTO_FIRST.code && aiPreferences.hasKey && !currentTrack.originalLyrics.isNullOrBlank()) {
+                        _uiState.update { it.copy(userMessage = "官方库未检索到，正在自动回退由 AI 翻译...") }
+                        val aiResult = aiTranslationService.translateTrack(
+                            trackTitle = currentTrack.title,
+                            originalLyrics = currentTrack.originalLyrics
+                        )
+                        repository.updateTrackTranslation(
+                            trackId = currentTrack.id,
+                            translatedTitle = aiResult.translatedTitle ?: currentTrack.translatedTitle,
+                            originalLyrics = currentTrack.originalLyrics,
+                            translatedLyrics = aiResult.translatedLyrics
+                        )
+                        _uiState.update { it.copy(isTranslating = false, userMessage = "AI 翻译完成并已保存！") }
+                    } else {
+                        _uiState.update { it.copy(isTranslating = false, userMessage = "未在官方库检索到该歌曲歌词，可尝试使用 AI 翻译") }
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isTranslating = false, userMessage = "匹配官方歌词遇到问题: ${e.message}") }
+            }
+        }
+    }
+
+    fun batchFetchOfficialLyricsAlbum() {
+        _uiState.update { it.copy(isTranslateMenuOpen = false) }
+        val tracks = _uiState.value.albumWithTracks?.tracks ?: return
+        val artist = _uiState.value.albumWithTracks?.album?.artist ?: ""
+        if (tracks.isEmpty()) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isTranslating = true, userMessage = "正在极速匹配全辑官方歌词 (共 ${tracks.size} 首)...") }
+            var matchedCount = 0
+            try {
+                for ((index, track) in tracks.withIndex()) {
+                    _uiState.update { it.copy(userMessage = "正在匹配 [${index + 1}/${tracks.size}] ${track.title}...") }
+                    val result = com.linernotes.app.data.remote.NetEaseLyricsService.fetchLyrics(track.title, artist)
+                    if (result != null && result.originalLyrics.isNotBlank()) {
+                        repository.updateTrackTranslation(
+                            trackId = track.id,
+                            translatedTitle = track.translatedTitle,
+                            originalLyrics = result.originalLyrics,
+                            translatedLyrics = result.translatedLyrics
+                        )
+                        matchedCount++
+                    }
+                }
+                _uiState.update {
+                    it.copy(
+                        isTranslating = false,
+                        userMessage = "全辑官方歌词匹配完成！已成功收录 $matchedCount / ${tracks.size} 首曲目"
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isTranslating = false, userMessage = "全辑匹配中途出错: ${e.message}") }
+            }
         }
     }
 
     fun startBatchAlbumTranslation() {
         _uiState.update { it.copy(isTranslateMenuOpen = false) }
+        if (!aiPreferences.hasKey) {
+            _uiState.update { it.copy(isAiConfigOpen = true, userMessage = "请先配置 AI 引擎 API Key") }
+            return
+        }
         val album = _uiState.value.albumWithTracks?.album ?: return
         batchTranslationManager.startBatchTranslation(album.id, album.title)
     }
@@ -155,6 +232,10 @@ class LyricBookletViewModel @Inject constructor(
 
     fun retranslateCurrentTrack() {
         _uiState.update { it.copy(isTranslateMenuOpen = false) }
+        if (!aiPreferences.hasKey) {
+            _uiState.update { it.copy(isAiConfigOpen = true, userMessage = "请先配置 AI 引擎 API Key") }
+            return
+        }
         val currentTrack = getCurrentTrack() ?: return
         if (currentTrack.originalLyrics.isNullOrBlank()) {
             _uiState.update { it.copy(userMessage = "当前曲目无歌词，无法进行翻译") }

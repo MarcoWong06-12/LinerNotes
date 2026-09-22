@@ -38,6 +38,7 @@ fun AiConfigDialog(
 
     var appLanguage by remember { mutableStateOf(aiPreferences.appLanguage) }
     var targetLanguage by remember { mutableStateOf(aiPreferences.targetLanguage) }
+    var lyricsSource by remember { mutableStateOf(aiPreferences.lyricsSource) }
 
     var apiKey by remember { mutableStateOf(aiPreferences.apiKey) }
     var baseUrl by remember { mutableStateOf(AiPreferences.sanitizeBaseUrl(aiPreferences.baseUrl)) }
@@ -115,6 +116,68 @@ fun AiConfigDialog(
                                 targetLanguage = lang.code
                             },
                             label = { Text(lang.displayName) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // ==========================================
+                // 歌词与翻译首选源
+                // ==========================================
+                Text(
+                    text = "🎵 " + strings.lyricsSourceSetting,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        RadioButton(
+                            selected = lyricsSource == AiPreferences.LyricsSourcePreference.AUTO_FIRST.code,
+                            onClick = { lyricsSource = AiPreferences.LyricsSourcePreference.AUTO_FIRST.code }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = strings.sourceAuto,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        RadioButton(
+                            selected = lyricsSource == AiPreferences.LyricsSourcePreference.NETEASE_ONLY.code,
+                            onClick = { lyricsSource = AiPreferences.LyricsSourcePreference.NETEASE_ONLY.code }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = strings.sourceOfficial,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        RadioButton(
+                            selected = lyricsSource == AiPreferences.LyricsSourcePreference.AI_ONLY.code,
+                            onClick = { lyricsSource = AiPreferences.LyricsSourcePreference.AI_ONLY.code }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = strings.sourceAi,
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
@@ -399,6 +462,7 @@ fun AiConfigDialog(
                 onClick = {
                     aiPreferences.appLanguage = appLanguage
                     aiPreferences.targetLanguage = targetLanguage
+                    aiPreferences.lyricsSource = lyricsSource
                     aiPreferences.apiKey = apiKey.trim()
                     aiPreferences.baseUrl = AiPreferences.sanitizeBaseUrl(baseUrl)
                     aiPreferences.modelName = modelName.trim()

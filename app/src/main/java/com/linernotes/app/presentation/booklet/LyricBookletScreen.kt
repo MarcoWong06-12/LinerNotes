@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Settings
@@ -126,6 +127,59 @@ fun LyricBookletScreen(
                         ) {
                             DropdownMenuItem(
                                 text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text(
+                                            strings.fetchOfficialLyrics,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            strings.fetchOfficialLyricsDesc,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.fetchOfficialLyricsCurrentTrack()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudDownload,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text(
+                                            strings.batchFetchOfficialAlbum,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            strings.batchFetchOfficialAlbumDesc,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.batchFetchOfficialLyricsAlbum()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Album,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            )
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                            DropdownMenuItem(
+                                text = {
                                     Text(strings.translateCurrentTrack, style = MaterialTheme.typography.bodyMedium)
                                 },
                                 onClick = {
@@ -159,7 +213,7 @@ fun LyricBookletScreen(
                                 },
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = Icons.Default.Album,
+                                        imageVector = Icons.Default.AutoAwesome,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.secondary
                                     )
@@ -348,7 +402,6 @@ fun LyricBookletScreen(
             onDismiss = { viewModel.openAiConfig(false) },
             onSaved = {
                 viewModel.openAiConfig(false)
-                viewModel.retranslateCurrentTrack()
             }
         )
     }

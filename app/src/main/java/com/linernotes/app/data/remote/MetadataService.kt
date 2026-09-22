@@ -91,8 +91,19 @@ object MetadataService {
 
                 val duration = song.optLong("trackTimeMillis", 0L)
 
-                // 从 LRCLIB 获取真实完整歌词
-                val lyrics = fetchLyricsFromLrcLib(artistName, cleanTrackName, albumTitle)
+                // 优先从网易云音乐等官方源获取正版双语歌词（极速、人工精翻、毫秒级时间戳对齐）
+                val neteaseResult = NetEaseLyricsService.fetchLyrics(cleanTrackName, artistName)
+                val originalLyrics: String?
+                val translatedLyrics: String?
+
+                if (neteaseResult != null && neteaseResult.originalLyrics.isNotBlank()) {
+                    originalLyrics = neteaseResult.originalLyrics
+                    translatedLyrics = neteaseResult.translatedLyrics
+                } else {
+                    // 若网易云未检索到，回退从 LRCLIB 获取原版歌词
+                    originalLyrics = fetchLyricsFromLrcLib(artistName, cleanTrackName, albumTitle)
+                    translatedLyrics = null
+                }
 
                 tracksList.add(
                     TrackEntity(
@@ -100,8 +111,8 @@ object MetadataService {
                         trackNumber = trackNum,
                         title = cleanTrackName,
                         translatedTitle = null,
-                        originalLyrics = lyrics,
-                        translatedLyrics = null,
+                        originalLyrics = originalLyrics,
+                        translatedLyrics = translatedLyrics,
                         durationMs = if (duration > 0) duration else null
                     )
                 )

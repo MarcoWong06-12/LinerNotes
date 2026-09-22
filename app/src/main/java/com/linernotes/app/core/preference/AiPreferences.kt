@@ -42,8 +42,23 @@ class AiPreferences @Inject constructor(
         get() = prefs.getString("model_name", "gpt-5.6-terra") ?: "gpt-5.6-terra"
         set(value) = prefs.edit().putString("model_name", value.trim()).apply()
 
+    var lyricsSource: String
+        get() = prefs.getString("lyrics_source", LyricsSourcePreference.AUTO_FIRST.code) ?: LyricsSourcePreference.AUTO_FIRST.code
+        set(value) = prefs.edit().putString("lyrics_source", value).apply()
+
     val hasKey: Boolean
         get() = apiKey.isNotBlank()
+
+    enum class LyricsSourcePreference(val code: String) {
+        AUTO_FIRST("auto_first"),
+        NETEASE_ONLY("netease_only"),
+        AI_ONLY("ai_only");
+
+        companion object {
+            fun fromCode(code: String): LyricsSourcePreference =
+                entries.find { it.code.equals(code, ignoreCase = true) } ?: AUTO_FIRST
+        }
+    }
 
     companion object {
         fun sanitizeBaseUrl(raw: String): String {

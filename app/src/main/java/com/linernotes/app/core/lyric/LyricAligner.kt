@@ -75,13 +75,12 @@ object LyricAligner {
             }
         }
 
-        val isExactStructureMatch = origLines.size == transLines.size &&
-            origLines.indices.all { i -> origLines[i].isBlank() == transLines[i].isBlank() }
+        val isExactSizeMatch = origLines.size == transLines.size
 
         val result = ArrayList<BilingualLyricLine>()
 
-        if (isExactStructureMatch) {
-            // 结构与空行完全对齐时，按行一一对应
+        if (isExactSizeMatch) {
+            // 行数完全对齐时（如时间戳精准对齐生成的原歌词与译文），按行 1:1 绝对映射，杜绝错位
             for (i in origLines.indices) {
                 val orig = origLines[i]
                 val trans = transLines[i]
@@ -137,6 +136,93 @@ object LyricAligner {
             }
         }
 
+        return result
+    }
+
+    data class TimedLyric(val ms: Long, val text: String)
+
+    private val TIMESTAMP_PARSER_REGEX = Regex("""\[(\d{1,2}):(\d{2})(?:\.(\d{2,3}))?\]""")
+
+    private val CREDIT_FILTER_REGEX = Regex(
+        """(作词|作曲|编曲|制作人|监制|混音|母带|录音|吉他|贝斯|鼓|键盘|和音|弦乐|OP|SP|Producer|Writers|Written\s*by|Lyrics\s*by|Composed\s*by|Arranged\s*by|Mixed\s*by|Mastered\s*by|Sample)""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /**
+     * 将网易云等平台返回的包含 [mm:ss.xx] 时间戳的原版歌词与翻译歌词，
+     * 通过毫秒级时间戳精准匹配并消除制作人名单，输出 1:1 行对齐的平行纯文本。
+     */
+    fun alignLrcTimestamps(origLrc: String, transLrc: String?): Pair<String, String> {
+        val origTimed = parseTimedLines(origLrc)
+        val transTimed = if (!transLrc.isNullOrBlank()) parseTimedLines(transLrc) else emptyList()
+
+        // 过滤开头的制作信息行（前 3.5 秒内包含制作人、作词作曲等纯制作信息）
+        val filteredOrig = origTimed.filterNot { item ->
+            item.ms < 3500 && item.text.contains(CREDIT_FILTER_REGEX)
+        }
+
+        if (filteredOrig.isEmpty()) {
+            val fallbackClean = origLrc.lines().map { cleanLine(it) }.filter { it.isNotBlank() }.joinToString("\n")
+            return Pair(fallbackClean, "")
+        }
+
+        if (transTimed.isEmpty()) {
+            val origClean = filteredOrig.joinToString("\n") { it.text }
+            return Pair(origClean, "")
+        }
+
+        val origResult = StringBuilder()
+        val transResult = StringBuilder()
+
+        for (i in filteredOrig.indices) {
+            val current = filteredOrig[i]
+            if (i > 0) {
+                val prev = filteredOrig[i - 1]
+                // 若两句歌词之间间隔超过 6.5 秒，插入空行分段
+                if (current.ms - prev.ms >= 6500) {
+                    origResult.append("\n")
+                    transResult.append("\n")
+                }
+            }
+
+            // 查找时间戳偏差在 180ms 内的对应译文行
+            val matchedTrans = transTimed.find { Math.abs(it.ms - current.ms) <= 180 }
+            val transText = matchedTrans?.text?.trim() ?: ""
+
+            origResult.append(current.text).append("\n")
+            transResult.append(transText).append("\n")
+        }
+
+        return Pair(origResult.toString().trimEnd(), transResult.toString().trimEnd())
+    }
+
+    private fun parseTimedLines(lrc: String): List<TimedLyric> {
+        val result = mutableListOf<TimedLyric>()
+        for (rawLine in lrc.lines()) {
+            val trimmed = rawLine.trim()
+            if (trimmed.isBlank()) continue
+            if (trimmed.matches(LRC_METADATA_REGEX)) continue
+
+            val matches = TIMESTAMP_PARSER_REGEX.findAll(trimmed).toList()
+            if (matches.isEmpty()) continue
+
+            val cleanText = trimmed.replace(TIMESTAMP_PARSER_REGEX, "").trim()
+            if (cleanText.isEmpty()) continue
+
+            for (m in matches) {
+                val min = m.groupValues[1].toLongOrNull() ?: 0L
+                val sec = m.groupValues[2].toLongOrNull() ?: 0L
+                val msStr = m.groupValues.getOrNull(3) ?: ""
+                val ms = when (msStr.length) {
+                    2 -> (msStr.toLongOrNull() ?: 0L) * 10
+                    3 -> msStr.toLongOrNull() ?: 0L
+                    else -> 0L
+                }
+                val totalMs = min * 60_000L + sec * 1000L + ms
+                result.add(TimedLyric(totalMs, cleanText))
+            }
+        }
+        result.sortBy { it.ms }
         return result
     }
 
