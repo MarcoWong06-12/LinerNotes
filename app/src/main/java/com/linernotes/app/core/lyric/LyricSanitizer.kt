@@ -28,7 +28,7 @@ object LyricSanitizer {
 
     private val CENSOR_CHECK_REGEX = Regex("""[a-zA-Z]*\*+[a-zA-Z]*|\*{2,}""")
     private val WORD_TOKEN_REGEX = Regex("""[\w'’*]+""")
-    private val TIMESTAMP_REGEX = Regex("""^\[\d{2}:\d{2}(?:\.\d{1,3})?\]""")
+    private val TIMESTAMP_REGEX = Regex("""\[\d{2}:\d{2}(?:\.\d{1,3})?\]""")
 
     /**
      * 判断文本中是否包含审查掩码星号
@@ -81,7 +81,12 @@ object LyricSanitizer {
         val refWords = WORD_TOKEN_REGEX.findAll(cleanRefLine).map { it.value }.toList()
         if (refWords.isEmpty()) return stage1
 
-        val tokens = stage1.split(Regex("(?<=[\\w'’*])(?=[^\\w'’*])|(?<=[^\\w'’*])(?=[\\w'’*])"))
+        // 提取原行的起始时间戳标签（若有）
+        val tsMatch = TIMESTAMP_REGEX.find(stage1)
+        val tsPrefix = tsMatch?.value
+        val stage1Text = if (tsPrefix != null) stage1.replace(TIMESTAMP_REGEX, "").trim() else stage1
+
+        val tokens = stage1Text.split(Regex("(?<=[\\w'’*])(?=[^\\w'’*])|(?<=[^\\w'’*])(?=[\\w'’*])"))
         val result = StringBuilder()
         var wordIdx = 0
 
@@ -105,7 +110,8 @@ object LyricSanitizer {
             }
         }
 
-        return result.toString()
+        val textResult = result.toString()
+        return if (tsPrefix != null) "$tsPrefix $textResult" else textResult
     }
 
     /**
@@ -130,12 +136,12 @@ object LyricSanitizer {
 
         val rLines = uncensoredRefLyrics.lines()
 
-        // 构建参考行提取器（若有时间戳则按时间戳匹配，否则按顺序匹配）
+        // 构建参考行提取器（按时间戳优先匹配，否则按顺序匹配）
         val refMapByTimestamp = mutableMapOf<String, String>()
         val pureRefLines = mutableListOf<String>()
 
         for (rl in rLines) {
-            val tsMatch = TIMESTAMP_REGEX.find(rl.trim())
+            val tsMatch = TIMESTAMP_REGEX.find(rl)
             if (tsMatch != null) {
                 refMapByTimestamp[tsMatch.value] = rl
             }
@@ -147,7 +153,7 @@ object LyricSanitizer {
 
         var pureRefIdx = 0
         val sanitizedLines = cLines.map { cl ->
-            val tsMatch = TIMESTAMP_REGEX.find(cl.trim())
+            val tsMatch = TIMESTAMP_REGEX.find(cl)
             val refLine = if (tsMatch != null && refMapByTimestamp.containsKey(tsMatch.value)) {
                 refMapByTimestamp[tsMatch.value]
             } else if (cl.replace(TIMESTAMP_REGEX, "").trim().isNotBlank() && pureRefIdx < pureRefLines.size) {

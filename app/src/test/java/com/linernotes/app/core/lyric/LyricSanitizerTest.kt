@@ -8,8 +8,8 @@ class LyricSanitizerTest {
 
     @Test
     fun `test dictionary decensoring for common masked words`() {
-        assertEquals("Bitch", LyricSanitizer.decensorLine("Life's a B***h"))
-        assertEquals("bitch", LyricSanitizer.decensorLine("life's a b***h"))
+        assertEquals("Life's a Bitch", LyricSanitizer.decensorLine("Life's a B***h"))
+        assertEquals("life's a bitch", LyricSanitizer.decensorLine("life's a b***h"))
         assertEquals("straight out the fucking dungeons of rap", LyricSanitizer.decensorLine("straight out the ****ing dungeons of rap"))
         assertEquals("Where fake niggas don't make it back", LyricSanitizer.decensorLine("Where fake n****s don't make it back"))
         assertEquals("I don't know how to start this shit, yo, now", LyricSanitizer.decensorLine("I don't know how to start this s***, yo, now"))
