@@ -19,8 +19,10 @@ import com.linernotes.app.core.bluetooth.CdConnectionState
 import com.linernotes.app.core.bluetooth.ShanlingBluetoothManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -72,7 +74,11 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     val allShelfAlbums: StateFlow<List<com.linernotes.app.data.local.entity.AlbumEntity>> = repository.getCollectionStream()
-        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = emptyList()
+        )
 
     fun setAlbumId(id: String) {
         if (currentAlbumId != id) {

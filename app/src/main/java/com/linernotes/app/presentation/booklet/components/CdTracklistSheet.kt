@@ -258,8 +258,9 @@ fun CdTracklistSheet(
 
                     val titleText = track?.title?.takeIf { it.isNotBlank() } ?: "${strings.cdTrackFallback} ${String.format(Locale.getDefault(), "%02d", trackNumber)}"
                     val transText = track?.translatedTitle?.takeIf { !it.isNullOrBlank() }
-                    val durationText = if (track != null && track.durationMs > 0L) {
-                        formatDuration(track.durationMs)
+                    val durationMs = track?.durationMs
+                    val durationText = if (durationMs != null && durationMs > 0L) {
+                        formatDuration(durationMs)
                     } else null
 
                     Surface(
@@ -477,18 +478,13 @@ private fun CdMatchOnlineSearchDialog(
                                         coroutineScope.launch {
                                             try {
                                                 val albumId = java.util.UUID.randomUUID().toString()
-                                                val tracks = MetadataService.fetchAlbumTracks(item.collectionId, item.source)
-                                                val entityTracks = tracks.map { t ->
-                                                    TrackEntity(
-                                                        albumId = albumId,
-                                                        trackNumber = t.trackNumber,
-                                                        title = t.title,
-                                                        translatedTitle = t.translatedTitle,
-                                                        originalLyrics = t.originalLyrics,
-                                                        translatedLyrics = t.translatedLyrics,
-                                                        durationMs = t.durationMs
-                                                    )
-                                                }
+                                                val tracks = MetadataService.fetchTracksWithLyrics(
+                                                    collectionId = item.collectionId,
+                                                    source = item.source,
+                                                    albumId = albumId,
+                                                    artistName = item.artist,
+                                                    albumTitle = item.title
+                                                )
                                                 val albumEntity = AlbumEntity(
                                                     id = albumId,
                                                     title = item.title,
@@ -497,7 +493,7 @@ private fun CdMatchOnlineSearchDialog(
                                                     coverUrl = item.coverUrl,
                                                     purchaseDate = System.currentTimeMillis()
                                                 )
-                                                onSaveOnlineAlbum(albumEntity, entityTracks)
+                                                onSaveOnlineAlbum(albumEntity, tracks)
                                             } catch (e: Exception) {
                                                 isImporting = false
                                             }
