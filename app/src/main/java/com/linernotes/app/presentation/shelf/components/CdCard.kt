@@ -1,10 +1,16 @@
 package com.linernotes.app.presentation.shelf.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +44,16 @@ fun CdCard(
     modifier: Modifier = Modifier
 ) {
     var isMenuExpanded by remember { mutableStateOf(false) }
+    val cardInteractionSource = remember { MutableInteractionSource() }
+    val isCardPressed by cardInteractionSource.collectIsPressedAsState()
+    val cardScale by animateFloatAsState(
+        targetValue = if (isCardPressed) 0.95f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "cardScale"
+    )
 
     Column(
         modifier = modifier
@@ -50,6 +66,10 @@ fun CdCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1.0f)
+                .graphicsLayer {
+                    scaleX = cardScale
+                    scaleY = cardScale
+                }
                 .shadow(
                     elevation = 8.dp,
                     shape = RoundedCornerShape(3.dp),
@@ -111,6 +131,8 @@ fun CdCard(
                     )
                 }
                 .combinedClickable(
+                    interactionSource = cardInteractionSource,
+                    indication = null,
                     onClick = onClick,
                     onLongClick = { isMenuExpanded = true }
                 )

@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.linernotes.app.presentation.common.AiConfigDialog
+import com.linernotes.app.presentation.common.BouncyIconButton
 import com.linernotes.app.presentation.shelf.components.AddCdBottomSheet
 import com.linernotes.app.presentation.shelf.components.CdCard
 import com.linernotes.app.presentation.shelf.components.EmptyShelfState
@@ -68,7 +69,7 @@ fun CdShelfScreen(
                 },
                 actions = {
                     if (state.isSearchActive) {
-                        FilledIconButton(
+                        BouncyIconButton(
                             onClick = { viewModel.setSearchActive(false) },
                             shape = CircleShape,
                             colors = IconButtonDefaults.filledIconButtonColors(
@@ -80,7 +81,7 @@ fun CdShelfScreen(
                             Icon(Icons.Default.Close, contentDescription = strings.closeSearch, modifier = Modifier.size(20.dp))
                         }
                     } else {
-                        FilledIconButton(
+                        BouncyIconButton(
                             onClick = { viewModel.setSearchActive(true) },
                             shape = CircleShape,
                             colors = IconButtonDefaults.filledIconButtonColors(
@@ -95,7 +96,7 @@ fun CdShelfScreen(
 
                     Spacer(modifier = Modifier.width(6.dp))
 
-                    FilledIconButton(
+                    BouncyIconButton(
                         onClick = { viewModel.setAiConfigOpen(true) },
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
@@ -113,7 +114,7 @@ fun CdShelfScreen(
 
                     Spacer(modifier = Modifier.width(6.dp))
 
-                    FilledIconButton(
+                    BouncyIconButton(
                         onClick = { viewModel.setAddSheetOpen(true) },
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(

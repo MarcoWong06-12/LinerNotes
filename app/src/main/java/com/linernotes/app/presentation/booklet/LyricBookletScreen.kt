@@ -61,12 +61,14 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import com.linernotes.app.core.bluetooth.CdConnectionState
 import com.linernotes.app.domain.model.BilingualLyricLine
 import com.linernotes.app.domain.model.LyricDisplayMode
 import com.linernotes.app.presentation.booklet.components.CdSyncSheet
 import com.linernotes.app.presentation.booklet.components.EditLyricSheet
-import com.linernotes.app.presentation.common.AiConfigDialog
+import com.linernotes.app.presentation.common.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -168,7 +170,7 @@ fun LyricBookletScreen(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable { isCoverViewerOpen = true }
+                                    .bouncyClickable(pressedScale = 0.92f) { isCoverViewerOpen = true }
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                         }
@@ -191,7 +193,7 @@ fun LyricBookletScreen(
                     }
                 },
                 navigationIcon = {
-                    FilledIconButton(
+                    BouncyIconButton(
                         onClick = onNavigateBack,
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
@@ -209,7 +211,7 @@ fun LyricBookletScreen(
                 },
                 actions = {
                     // CD 蓝牙同步状态触钮
-                    FilledIconButton(
+                    BouncyIconButton(
                         onClick = { viewModel.openCdSheet(true) },
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
@@ -243,7 +245,7 @@ fun LyricBookletScreen(
 
                     // Apple Music 风格三点更多按钮（集成模式切换、翻译、校对、设置）
                     Box {
-                        FilledIconButton(
+                        BouncyIconButton(
                             onClick = { viewModel.setTranslateMenuOpen(!state.isTranslateMenuOpen) },
                             shape = CircleShape,
                             colors = IconButtonDefaults.filledIconButtonColors(
@@ -760,7 +762,7 @@ private fun FloatingCompanionCapsule(
             shadowElevation = 6.dp,
             modifier = Modifier
                 .padding(bottom = 8.dp)
-                .clickable { onOpenCdSheet() }
+                .bouncyClickable(pressedScale = 0.94f) { onOpenCdSheet() }
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -827,7 +829,7 @@ private fun FloatingCompanionCapsule(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    FilledTonalButton(
+                    BouncyTonalButton(
                         onClick = { onAdjustOffset(-1000L) },
                         shape = CircleShape,
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
@@ -842,7 +844,7 @@ private fun FloatingCompanionCapsule(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    FilledTonalButton(
+                    BouncyTonalButton(
                         onClick = { onAdjustOffset(1000L) },
                         shape = CircleShape,
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
@@ -930,7 +932,7 @@ private fun FloatingCompanionCapsule(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     // 上一曲（圆形）
-                    FilledIconButton(
+                    BouncyIconButton(
                         onClick = onPrevious,
                         enabled = hasPrevious,
                         shape = CircleShape,
@@ -947,18 +949,29 @@ private fun FloatingCompanionCapsule(
                         )
                     }
 
-                    // 核心高亮播放/暂停大圆纽 (Gemini 标志性大圆形按钮)
+                    // 核心高亮播放/暂停大圆纽 (Gemini 标志性大圆形按钮，带弹簧物理深潜与弹性回弹)
+                    val playInteractionSource = remember { MutableInteractionSource() }
+                    val isPlayPressed by playInteractionSource.collectIsPressedAsState()
                     val heroScale by animateFloatAsState(
-                        targetValue = if (isPlaying) 1.05f else 1.0f,
+                        targetValue = if (isPlayPressed) 0.86f else if (isPlaying) 1.05f else 1.0f,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessMediumLow
                         ),
                         label = "heroScale"
                     )
+                    val heroAlpha by animateFloatAsState(
+                        targetValue = if (isPlayPressed) 0.82f else 1.0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        label = "heroAlpha"
+                    )
 
                     Surface(
                         onClick = onTogglePlay,
+                        interactionSource = playInteractionSource,
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.primary,
                         shadowElevation = 8.dp,
@@ -966,6 +979,7 @@ private fun FloatingCompanionCapsule(
                             .padding(horizontal = 8.dp)
                             .size(52.dp)
                             .scale(heroScale)
+                            .graphicsLayer { alpha = heroAlpha }
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             AnimatedContent(
@@ -991,7 +1005,7 @@ private fun FloatingCompanionCapsule(
                     }
 
                     // 下一曲（圆形）
-                    FilledIconButton(
+                    BouncyIconButton(
                         onClick = onNext,
                         enabled = hasNext,
                         shape = CircleShape,
@@ -1054,7 +1068,7 @@ private fun FloatingCompanionCapsule(
                     }
 
                     // 校准微调芯片（圆形）
-                    FilledIconButton(
+                    BouncyIconButton(
                         onClick = onToggleCalibration,
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
@@ -1099,14 +1113,17 @@ private fun LyricLineItem(
         return
     }
 
+    val lineInteractionSource = remember { MutableInteractionSource() }
+    val isLinePressed by lineInteractionSource.collectIsPressedAsState()
+
     val alphaAnim by animateFloatAsState(
-        targetValue = if (isActive) 1.0f else if (isCompanionPlaying) 0.38f else 0.80f,
+        targetValue = if (isLinePressed) 0.65f else if (isActive) 1.0f else if (isCompanionPlaying) 0.38f else 0.80f,
         animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "lyricAlpha"
     )
 
     val scaleAnim by animateFloatAsState(
-        targetValue = if (isActive) 1.03f else 1.0f,
+        targetValue = if (isLinePressed) 0.97f else if (isActive) 1.03f else 1.0f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
         label = "lyricScale"
     )
@@ -1115,7 +1132,11 @@ private fun LyricLineItem(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = lineInteractionSource,
+                indication = null,
+                onClick = onClick
+            )
             .padding(horizontal = 4.dp, vertical = if (mode == LyricDisplayMode.BILINGUAL) 12.dp else 8.dp)
             .graphicsLayer {
                 alpha = alphaAnim

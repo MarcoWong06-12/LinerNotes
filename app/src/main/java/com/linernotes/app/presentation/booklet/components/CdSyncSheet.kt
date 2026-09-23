@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import com.linernotes.app.presentation.common.BouncyButton
+import com.linernotes.app.presentation.common.BouncyTonalButton
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -197,7 +199,7 @@ fun CdSyncSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(14.dp))
-                        FilledTonalButton(
+                        BouncyTonalButton(
                             onClick = onDisconnect,
                             shape = CircleShape,
                             colors = ButtonDefaults.filledTonalButtonColors(
@@ -224,7 +226,7 @@ fun CdSyncSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(14.dp))
-                        Button(
+                        BouncyButton(
                             onClick = { onConnect(null) },
                             enabled = connectionState != CdConnectionState.CONNECTING,
                             shape = CircleShape,
@@ -378,7 +380,7 @@ fun CdSyncSheet(
                                 }
 
                                 if (isCurrent) {
-                                    FilledTonalButton(
+                                    BouncyTonalButton(
                                         onClick = onDisconnect,
                                         shape = CircleShape,
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
@@ -387,7 +389,7 @@ fun CdSyncSheet(
                                         Text("断开", style = MaterialTheme.typography.labelSmall)
                                     }
                                 } else {
-                                    FilledTonalButton(
+                                    BouncyTonalButton(
                                         onClick = { onConnect(device) },
                                         enabled = connectionState != CdConnectionState.CONNECTING,
                                         shape = CircleShape,
