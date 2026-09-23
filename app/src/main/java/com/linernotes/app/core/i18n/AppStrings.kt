@@ -191,7 +191,7 @@ val ZhHansStrings = AppStrings(
     searchPlaceholder = "搜索唱片名、译名、艺术家...",
     closeSearch = "关闭搜索",
     searchCd = "搜索唱片",
-    settingsTitle = "偏好设置与 AI 引擎",
+    settingsTitle = "偏好设置",
     addAlbumTooltip = "入库新唱片",
     back = "返回",
 
@@ -287,7 +287,7 @@ val ZhHansStrings = AppStrings(
     trackNumberPlaceholder = "序号",
     trackTitlePlaceholder = "单曲英文原名",
 
-    settingsDialogTitle = "偏好设置与 AI 引擎",
+    settingsDialogTitle = "偏好设置",
     sectionLocalization = "🌐 语言与本地化",
     appLanguageLabel = "应用界面语言",
     targetLanguageLabel = "歌词翻译目标语言",
@@ -323,7 +323,7 @@ val ZhHantStrings = AppStrings(
     searchPlaceholder = "搜尋唱片名、譯名、藝人...",
     closeSearch = "關閉搜尋",
     searchCd = "搜尋唱片",
-    settingsTitle = "偏好設定與 AI 引擎",
+    settingsTitle = "偏好設定",
     addAlbumTooltip = "入庫新唱片",
     back = "返回",
 
@@ -419,7 +419,7 @@ val ZhHantStrings = AppStrings(
     trackNumberPlaceholder = "序號",
     trackTitlePlaceholder = "單曲英文原名",
 
-    settingsDialogTitle = "偏好設定與 AI 引擎",
+    settingsDialogTitle = "偏好設定",
     sectionLocalization = "🌐 語言與在地化",
     appLanguageLabel = "應用介面語言",
     targetLanguageLabel = "歌詞翻譯目標語言",
@@ -455,7 +455,7 @@ val EnStrings = AppStrings(
     searchPlaceholder = "Search albums, translations, artists...",
     closeSearch = "Close Search",
     searchCd = "Search CDs",
-    settingsTitle = "Preferences & AI Engine",
+    settingsTitle = "Preferences",
     addAlbumTooltip = "Add CD Album",
     back = "Back",
 
@@ -551,7 +551,7 @@ val EnStrings = AppStrings(
     trackNumberPlaceholder = "No.",
     trackTitlePlaceholder = "Track Title",
 
-    settingsDialogTitle = "Preferences & AI Engine",
+    settingsDialogTitle = "Preferences",
     sectionLocalization = "🌐 Language & Localization",
     appLanguageLabel = "App Interface Language",
     targetLanguageLabel = "Lyric Translation Target Language",
@@ -587,7 +587,7 @@ val JaStrings = AppStrings(
     searchPlaceholder = "アルバム名、訳名、アーティストを検索...",
     closeSearch = "検索を閉じる",
     searchCd = "CDを検索",
-    settingsTitle = "設定 & AIエンジン",
+    settingsTitle = "環境設定",
     addAlbumTooltip = "アルバムを追加",
     back = "戻る",
 
@@ -683,7 +683,7 @@ val JaStrings = AppStrings(
     trackNumberPlaceholder = "曲順",
     trackTitlePlaceholder = "曲名 (原語)",
 
-    settingsDialogTitle = "設定 & AIエンジン",
+    settingsDialogTitle = "環境設定",
     sectionLocalization = "🌐 言語とローカライゼーション",
     appLanguageLabel = "アプリの表示言語",
     targetLanguageLabel = "歌詞翻訳のターゲット言語",

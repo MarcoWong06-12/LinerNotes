@@ -416,7 +416,7 @@ fun LyricBookletScreen(
                                 text = { Text(strings.settingsTitle, style = MaterialTheme.typography.bodyMedium) },
                                 onClick = {
                                     viewModel.setTranslateMenuOpen(false)
-                                    viewModel.openAiConfig(true)
+                                    viewModel.openSettings(true)
                                 },
                                 leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                             )
@@ -634,13 +634,12 @@ fun LyricBookletScreen(
         )
     }
 
-    if (state.isAiConfigOpen) {
-        AiConfigDialog(
+    if (state.isSettingsOpen) {
+        SettingsDialog(
             aiPreferences = viewModel.aiPreferences,
-            onTestConnection = { k, b, m -> viewModel.testAiConnection(k, b, m) },
-            onDismiss = { viewModel.openAiConfig(false) },
+            onDismiss = { viewModel.openSettings(false) },
             onSaved = {
-                viewModel.openAiConfig(false)
+                viewModel.openSettings(false)
             }
         )
     }

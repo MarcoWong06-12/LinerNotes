@@ -3,7 +3,6 @@ package com.linernotes.app.presentation.shelf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.linernotes.app.core.preference.AiPreferences
-import com.linernotes.app.data.remote.AiTranslationService
 import com.linernotes.app.data.local.entity.AlbumEntity
 import com.linernotes.app.data.local.entity.TrackEntity
 import com.linernotes.app.domain.repository.AlbumRepository
@@ -18,14 +17,13 @@ import javax.inject.Inject
 @HiltViewModel
 class CdShelfViewModel @Inject constructor(
     private val repository: AlbumRepository,
-    val aiPreferences: AiPreferences,
-    private val aiTranslationService: AiTranslationService
+    val aiPreferences: AiPreferences
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
     private val _isSearchActive = MutableStateFlow(false)
     private val _isAddSheetOpen = MutableStateFlow(false)
-    private val _isAiConfigOpen = MutableStateFlow(false)
+    private val _isSettingsOpen = MutableStateFlow(false)
 
     val uiState: StateFlow<ShelfUiState> = combine(
         _searchQuery.flatMapLatest { query ->
@@ -35,14 +33,14 @@ class CdShelfViewModel @Inject constructor(
         _searchQuery,
         _isSearchActive,
         _isAddSheetOpen,
-        _isAiConfigOpen
-    ) { albums, query, isSearchActive, isAddSheetOpen, isAiConfigOpen ->
+        _isSettingsOpen
+    ) { albums, query, isSearchActive, isAddSheetOpen, isSettingsOpen ->
         ShelfUiState(
             albums = albums,
             searchQuery = query,
             isSearchActive = isSearchActive,
             isAddSheetOpen = isAddSheetOpen,
-            isAiConfigOpen = isAiConfigOpen,
+            isSettingsOpen = isSettingsOpen,
             isLoading = false
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ShelfUiState())
@@ -60,8 +58,8 @@ class CdShelfViewModel @Inject constructor(
         _isAddSheetOpen.value = open
     }
 
-    fun setAiConfigOpen(open: Boolean) {
-        _isAiConfigOpen.value = open
+    fun setSettingsOpen(open: Boolean) {
+        _isSettingsOpen.value = open
     }
 
     fun saveNewAlbum(album: AlbumEntity, tracks: List<TrackEntity>) {
@@ -75,9 +73,5 @@ class CdShelfViewModel @Inject constructor(
         viewModelScope.launch {
             repository.removeAlbumFromShelf(albumId)
         }
-    }
-
-    suspend fun testAiConnection(apiKey: String, baseUrl: String, modelName: String): Pair<Boolean, String> {
-        return aiTranslationService.testConnection(apiKey, baseUrl, modelName)
     }
 }

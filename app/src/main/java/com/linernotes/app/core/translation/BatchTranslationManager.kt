@@ -3,10 +3,10 @@ package com.linernotes.app.core.translation
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import com.linernotes.app.core.debug.AiDebugLogger
+import android.util.Log
 import com.linernotes.app.core.preference.AiPreferences
 import com.linernotes.app.data.local.entity.TrackEntity
-import com.linernotes.app.data.remote.AiTranslationService
+import com.linernotes.app.data.remote.TranslationService
 import com.linernotes.app.domain.repository.AlbumRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -32,7 +32,7 @@ import javax.inject.Singleton
 class BatchTranslationManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: AlbumRepository,
-    private val translationService: AiTranslationService,
+    private val translationService: TranslationService,
     private val aiPreferences: AiPreferences
 ) {
     private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -43,21 +43,21 @@ class BatchTranslationManager @Inject constructor(
 
     fun startBatchTranslation(albumId: String, albumTitle: String) {
         if (_state.value.isTranslating) {
-            AiDebugLogger.log(false, "批量翻译", "当前已有一个正在进行的翻译任务，请等待完成或取消")
+            Log.d("BatchTranslation", "当前已有一个正在进行的翻译任务，请等待完成或取消")
             return
         }
 
         batchJob?.cancel()
         batchJob = managerScope.launch {
             try {
-                AiDebugLogger.log(true, "批量翻译", "启动整张专辑批量翻译: 《$albumTitle》")
+                Log.d("BatchTranslation", "启动整张专辑批量翻译: 《$albumTitle》")
 
                 // 1. 获取专辑所有曲目并筛选有歌词的曲目
                 val albumWithTracks = repository.getAlbumBookletStream(albumId).first()
                 val candidateTracks = albumWithTracks?.tracks?.filter { !it.originalLyrics.isNullOrBlank() } ?: emptyList()
 
                 if (candidateTracks.isEmpty()) {
-                    AiDebugLogger.log(false, "批量翻译", "专辑中未找到包含歌词的曲目")
+                    Log.d("BatchTranslation", "专辑中未找到包含歌词的曲目")
                     _state.update {
                         it.copy(
                             isTranslating = false,
@@ -108,19 +108,19 @@ class BatchTranslationManager @Inject constructor(
                             translatedLyrics = result.translatedLyrics
                         )
                         successfulTracks.add(track)
-                        AiDebugLogger.log(true, "批量翻译存盘", "《${track.title}》翻译完成并已落库")
+                        Log.d("BatchTranslation", "《${track.title}》翻译完成并已落库")
                     } catch (e: Exception) {
                         failedTracks.add(track)
-                        AiDebugLogger.log(false, "批量翻译单曲受阻", "《${track.title}》第一轮暂未完成: ${e.message}，已加入末尾补译队列")
+                        Log.e("BatchTranslation", "《${track.title}》第一轮暂未完成: ${e.message}，已加入末尾补译队列")
                     }
 
-                    // 歌曲之间保持 400ms 微小缓冲，避免中转站 API 判定为恶意突发扫描
+                    // 歌曲之间保持 400ms 微小缓冲，避免 API 判定为恶意突发扫描
                     delay(400)
                 }
 
                 // 4. 第二轮失败补偿修复机制 (Second-Pass Recovery)
                 if (failedTracks.isNotEmpty() && isActive) {
-                    AiDebugLogger.log(true, "补偿补译", "首轮存在 ${failedTracks.size} 首未完成，2 秒后启动二次补偿修复...")
+                    Log.d("BatchTranslation", "首轮存在 ${failedTracks.size} 首未完成，2 秒后启动二次补偿修复...")
                     _state.update { it.copy(userMessage = "首轮有 ${failedTracks.size} 首歌曲受阻，正在自动执行二次补偿...") }
                     delay(2000)
 
@@ -140,10 +140,10 @@ class BatchTranslationManager @Inject constructor(
                                 translatedLyrics = result.translatedLyrics
                             )
                             successfulTracks.add(failedTrack)
-                            AiDebugLogger.log(true, "补偿补译成功", "《${failedTrack.title}》补偿翻译成功并已写入本地")
+                            Log.d("BatchTranslation", "《${failedTrack.title}》补偿翻译成功并已写入本地")
                         } catch (e: Exception) {
                             stillFailed.add(failedTrack)
-                            AiDebugLogger.log(false, "补偿补译失败", "《${failedTrack.title}》二次重试仍未成功: ${e.message}")
+                            Log.e("BatchTranslation", "《${failedTrack.title}》二次重试仍未成功: ${e.message}")
                         }
                         delay(600)
                     }
@@ -159,7 +159,7 @@ class BatchTranslationManager @Inject constructor(
                     "整张专辑翻译结束：已完成 $finalSuccess 首，${finalFailed} 首未完成（可在单曲页重试）"
                 }
 
-                AiDebugLogger.log(true, "批量翻译全盘结束", finishMsg)
+                Log.d("BatchTranslation", finishMsg)
                 _state.update {
                     it.copy(
                         isTranslating = false,
@@ -167,7 +167,7 @@ class BatchTranslationManager @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                AiDebugLogger.log(false, "批量翻译异常", "${e.message}")
+                Log.e("BatchTranslation", "批量翻译异常: ${e.message}")
                 _state.update {
                     it.copy(
                         isTranslating = false,
@@ -191,7 +191,7 @@ class BatchTranslationManager @Inject constructor(
                 )
             }
             stopForegroundService()
-            AiDebugLogger.log(false, "批量翻译", "用户取消了专辑批量翻译")
+            Log.d("BatchTranslation", "用户取消了专辑批量翻译")
         }
     }
 
@@ -208,7 +208,7 @@ class BatchTranslationManager @Inject constructor(
                 context.startService(intent)
             }
         } catch (e: Exception) {
-            AiDebugLogger.log(false, "前台服务启动异常", "${e.message}")
+            Log.e("BatchTranslation", "前台服务启动异常: ${e.message}")
         }
     }
 
@@ -219,7 +219,7 @@ class BatchTranslationManager @Inject constructor(
             }
             context.startService(intent)
         } catch (e: Exception) {
-            AiDebugLogger.log(false, "前台服务关闭异常", "${e.message}")
+            Log.e("BatchTranslation", "前台服务关闭异常: ${e.message}")
         }
     }
 }

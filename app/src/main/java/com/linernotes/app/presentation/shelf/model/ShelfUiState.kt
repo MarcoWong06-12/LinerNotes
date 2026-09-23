@@ -7,6 +7,6 @@ data class ShelfUiState(
     val searchQuery: String = "",
     val isSearchActive: Boolean = false,
     val isAddSheetOpen: Boolean = false,
-    val isAiConfigOpen: Boolean = false,
+    val isSettingsOpen: Boolean = false,
     val isLoading: Boolean = true
 )

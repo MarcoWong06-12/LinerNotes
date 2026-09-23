@@ -7,7 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.linernotes.app.core.lyric.LyricAligner
 import com.linernotes.app.core.preference.AiPreferences
 import com.linernotes.app.data.local.entity.TrackEntity
-import com.linernotes.app.data.remote.AiTranslationService
+import com.linernotes.app.data.remote.TranslationService
 import com.linernotes.app.domain.model.BilingualLyricLine
 import com.linernotes.app.domain.model.LyricDisplayMode
 import com.linernotes.app.domain.repository.AlbumRepository
@@ -29,7 +29,7 @@ import javax.inject.Inject
 class LyricBookletViewModel @Inject constructor(
     private val repository: AlbumRepository,
     val aiPreferences: AiPreferences,
-    private val aiTranslationService: AiTranslationService,
+    private val translationService: TranslationService,
     private val batchTranslationManager: BatchTranslationManager,
     val shanlingBluetoothManager: ShanlingBluetoothManager
 ) : ViewModel() {
@@ -313,8 +313,8 @@ class LyricBookletViewModel @Inject constructor(
         _uiState.update { it.copy(isEditingSheetOpen = isOpen) }
     }
 
-    fun openAiConfig(isOpen: Boolean) {
-        _uiState.update { it.copy(isAiConfigOpen = isOpen) }
+    fun openSettings(isOpen: Boolean) {
+        _uiState.update { it.copy(isSettingsOpen = isOpen) }
     }
 
     fun saveManualEdits(trackId: Long, newTitleZh: String?, newOriginal: String?, newTranslated: String?) {
@@ -358,41 +358,41 @@ class LyricBookletViewModel @Inject constructor(
                         translatedLyrics = result.translatedLyrics
                     )
 
-                    // 若官方库仅检索到原版（无官方译文），且启用了智能回退与 AI 引擎，则自动推敲补全翻译
-                    if (!result.isBilingual && aiPreferences.lyricsSource == AiPreferences.LyricsSourcePreference.AUTO_FIRST.code && aiPreferences.hasKey) {
-                        _uiState.update { it.copy(userMessage = "已匹配官方原版歌词，正在由 AI 自动推敲翻译...") }
-                        val aiResult = aiTranslationService.translateTrack(
+                    // 若官方库仅检索到原版（无官方译文），且启用了智能回退，则自动调用翻译服务补全翻译
+                    if (!result.isBilingual && aiPreferences.lyricsSource == AiPreferences.LyricsSourcePreference.AUTO_FIRST.code) {
+                        _uiState.update { it.copy(userMessage = "已匹配官方原版歌词，正在自动翻译...") }
+                        val transResult = translationService.translateTrack(
                             trackTitle = currentTrack.title,
                             originalLyrics = result.originalLyrics
                         )
                         repository.updateTrackTranslation(
                             trackId = currentTrack.id,
-                            translatedTitle = aiResult.translatedTitle ?: currentTrack.translatedTitle,
+                            translatedTitle = transResult.translatedTitle ?: currentTrack.translatedTitle,
                             originalLyrics = result.originalLyrics,
-                            translatedLyrics = aiResult.translatedLyrics
+                            translatedLyrics = transResult.translatedLyrics
                         )
-                        _uiState.update { it.copy(isTranslating = false, userMessage = "官方原版歌词已入库，AI 翻译已同步补全！") }
+                        _uiState.update { it.copy(isTranslating = false, userMessage = "官方原版歌词已入库，翻译已同步补全！") }
                     } else {
                         val msg = if (result.isBilingual) "官方双语歌词已匹配并同步入库！" else "已检索到官方原版歌词（暂无官方译文）"
                         _uiState.update { it.copy(isTranslating = false, userMessage = msg) }
                     }
                 } else {
-                    // 若官方库未搜到且启用了智能回退并且有 key，则尝试 AI 翻译
-                    if (aiPreferences.lyricsSource == AiPreferences.LyricsSourcePreference.AUTO_FIRST.code && aiPreferences.hasKey && !currentTrack.originalLyrics.isNullOrBlank()) {
-                        _uiState.update { it.copy(userMessage = "在线歌词库未检索到，正在自动回退由 AI 翻译...") }
-                        val aiResult = aiTranslationService.translateTrack(
+                    // 若官方库未搜到且启用了智能回退，则尝试翻译当前已有歌词
+                    if (aiPreferences.lyricsSource == AiPreferences.LyricsSourcePreference.AUTO_FIRST.code && !currentTrack.originalLyrics.isNullOrBlank()) {
+                        _uiState.update { it.copy(userMessage = "在线歌词库未检索到，正在自动回退机器翻译...") }
+                        val transResult = translationService.translateTrack(
                             trackTitle = currentTrack.title,
                             originalLyrics = currentTrack.originalLyrics
                         )
                         repository.updateTrackTranslation(
                             trackId = currentTrack.id,
-                            translatedTitle = aiResult.translatedTitle ?: currentTrack.translatedTitle,
+                            translatedTitle = transResult.translatedTitle ?: currentTrack.translatedTitle,
                             originalLyrics = currentTrack.originalLyrics,
-                            translatedLyrics = aiResult.translatedLyrics
+                            translatedLyrics = transResult.translatedLyrics
                         )
-                        _uiState.update { it.copy(isTranslating = false, userMessage = "AI 翻译完成并已保存！") }
+                        _uiState.update { it.copy(isTranslating = false, userMessage = "翻译完成并已保存！") }
                     } else {
-                        _uiState.update { it.copy(isTranslating = false, userMessage = "未检索到该歌曲歌词，可尝试切换歌词源或使用 AI 翻译") }
+                        _uiState.update { it.copy(isTranslating = false, userMessage = "未检索到该歌曲歌词，可尝试切换歌词源或手动添加") }
                     }
                 }
             } catch (e: Exception) {
@@ -442,10 +442,6 @@ class LyricBookletViewModel @Inject constructor(
 
     fun startBatchAlbumTranslation() {
         _uiState.update { it.copy(isTranslateMenuOpen = false) }
-        if (!aiPreferences.hasKey) {
-            _uiState.update { it.copy(isAiConfigOpen = true, userMessage = "请先配置 AI 引擎 API Key") }
-            return
-        }
         val album = _uiState.value.albumWithTracks?.album ?: return
         batchTranslationManager.startBatchTranslation(album.id, album.title)
     }
@@ -456,10 +452,6 @@ class LyricBookletViewModel @Inject constructor(
 
     fun retranslateCurrentTrack() {
         _uiState.update { it.copy(isTranslateMenuOpen = false) }
-        if (!aiPreferences.hasKey) {
-            _uiState.update { it.copy(isAiConfigOpen = true, userMessage = "请先配置 AI 引擎 API Key") }
-            return
-        }
         val currentTrack = getCurrentTrack() ?: return
         if (currentTrack.originalLyrics.isNullOrBlank()) {
             _uiState.update { it.copy(userMessage = "当前曲目无歌词，无法进行翻译") }
@@ -467,10 +459,9 @@ class LyricBookletViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            val msg = if (aiPreferences.hasKey) "AI 正在逐行推敲翻译歌词中..." else "正在进行基础翻译中..."
-            _uiState.update { it.copy(isTranslating = true, userMessage = msg) }
+            _uiState.update { it.copy(isTranslating = true, userMessage = "正在逐行翻译歌词中...") }
             try {
-                val result = aiTranslationService.translateTrack(
+                val result = translationService.translateTrack(
                     trackTitle = currentTrack.title,
                     originalLyrics = currentTrack.originalLyrics
                 )
@@ -595,9 +586,5 @@ class LyricBookletViewModel @Inject constructor(
     fun getCurrentTrack(): TrackEntity? {
         val state = _uiState.value
         return state.albumWithTracks?.tracks?.getOrNull(state.currentTrackIndex)
-    }
-
-    suspend fun testAiConnection(apiKey: String, baseUrl: String, modelName: String): Pair<Boolean, String> {
-        return aiTranslationService.testConnection(apiKey, baseUrl, modelName)
     }
 }

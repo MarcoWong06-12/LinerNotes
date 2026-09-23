@@ -32,9 +32,6 @@ object UnifiedLyricsService {
             AiPreferences.LyricsSourcePreference.LRCLIB_ONLY -> {
                 LrclibLyricsService.fetchLyrics(trackTitle, artistName)
             }
-            AiPreferences.LyricsSourcePreference.AI_ONLY -> {
-                null
-            }
             AiPreferences.LyricsSourcePreference.AUTO_FIRST -> {
                 fetchAutoAggregated(trackTitle, artistName)
             }

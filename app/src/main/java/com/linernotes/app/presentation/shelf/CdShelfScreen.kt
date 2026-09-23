@@ -18,8 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.linernotes.app.presentation.common.AiConfigDialog
 import com.linernotes.app.presentation.common.BouncyIconButton
+import com.linernotes.app.presentation.common.SettingsDialog
 import com.linernotes.app.presentation.shelf.components.AddCdBottomSheet
 import com.linernotes.app.presentation.shelf.components.CdCard
 import com.linernotes.app.presentation.shelf.components.EmptyShelfState
@@ -97,7 +97,7 @@ fun CdShelfScreen(
                     Spacer(modifier = Modifier.width(6.dp))
 
                     BouncyIconButton(
-                        onClick = { viewModel.setAiConfigOpen(true) },
+                        onClick = { viewModel.setSettingsOpen(true) },
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -172,13 +172,12 @@ fun CdShelfScreen(
         )
     }
 
-    if (state.isAiConfigOpen) {
-        AiConfigDialog(
+    if (state.isSettingsOpen) {
+        SettingsDialog(
             aiPreferences = viewModel.aiPreferences,
-            onTestConnection = { k, b, m -> viewModel.testAiConnection(k, b, m) },
-            onDismiss = { viewModel.setAiConfigOpen(false) },
+            onDismiss = { viewModel.setSettingsOpen(false) },
             onSaved = {
-                viewModel.setAiConfigOpen(false)
+                viewModel.setSettingsOpen(false)
             }
         )
     }
