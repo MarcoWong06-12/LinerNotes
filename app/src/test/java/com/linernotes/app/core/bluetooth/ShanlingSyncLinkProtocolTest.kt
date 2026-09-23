@@ -57,6 +57,51 @@ class ShanlingSyncLinkProtocolTest {
     }
 
     @Test
+    fun testPlayTimeNotifyDecodingWithTrackNumber() {
+        // Field 1 (playtime = 12s) -> tag 0x08, val 0x0C
+        // Field 2 (duration = 180s) -> tag 0x10, val 0xB4, 0x01
+        // Field 3 (trackNumber = 2) -> tag 0x18, val 0x02
+        val payload = byteArrayOf(
+            0x08.toByte(), 0x0C.toByte(),
+            0x10.toByte(), 0xB4.toByte(), 0x01.toByte(),
+            0x18.toByte(), 0x02.toByte()
+        )
+
+        val result = ShanlingSyncLinkProtocol.decodePlayTimeNotify(payload)
+        assertEquals(12, result.playtimeSeconds)
+        assertEquals(180, result.durationSeconds)
+        assertEquals(2, result.trackNumber)
+    }
+
+    @Test
+    fun testPlayStatusDecodingPaused() {
+        // Field 1 (playstatus = 6 for PAUSE) -> tag 0x08, val 0x06
+        // Field 2 (current_position = 2 for Track 2) -> tag 0x10, val 0x02
+        // Field 3 (total_songs = 10 tracks) -> tag 0x18, val 0x0A
+        val payload = byteArrayOf(
+            0x08.toByte(), 0x06.toByte(),
+            0x10.toByte(), 0x02.toByte(),
+            0x18.toByte(), 0x0A.toByte()
+        )
+
+        val result = ShanlingSyncLinkProtocol.decodePlayStatus(payload)
+        assertFalse(result.isPlaying)
+        assertEquals(2, result.trackNumber)
+        assertEquals(10, result.totalSongs)
+    }
+
+    @Test
+    fun testPlayStatusDecodingStopped() {
+        // Field 1 (playstatus = 4 for STOP) -> tag 0x08, val 0x04
+        val payload = byteArrayOf(
+            0x08.toByte(), 0x04.toByte()
+        )
+
+        val result = ShanlingSyncLinkProtocol.decodePlayStatus(payload)
+        assertFalse(result.isPlaying)
+    }
+
+    @Test
     fun testPlayControlEncoding() {
         val playReq = ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PLAY_SONG)
         assertEquals(2, playReq.size)

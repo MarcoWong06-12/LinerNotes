@@ -156,9 +156,9 @@ class LyricBookletViewModel @Inject constructor(
                 )
             }
             if (notifyCdPlayer && _uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
-                // Shanling SL_CD_PLAY_REQ takes 0-based queue index (0 for 1st song)
-                val queueIndex = (track.trackNumber - 1).coerceAtLeast(0)
-                shanlingBluetoothManager.playTrack(queueIndex)
+                // Audio CD Red Book track numbers are 1-based (1 for 1st song, 2 for 2nd song)
+                val cdTrackNumber = if (track.trackNumber > 0) track.trackNumber else (index + 1)
+                shanlingBluetoothManager.playTrack(cdTrackNumber)
             }
         }
     }
@@ -229,10 +229,10 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun pauseCompanion() {
+        pauseCompanionInternal()
         if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
             shanlingBluetoothManager.pause()
         }
-        pauseCompanionInternal()
     }
 
     private fun pauseCompanionInternal() {
@@ -289,17 +289,15 @@ class LyricBookletViewModel @Inject constructor(
     private fun resolveTrackIndex(tracks: List<TrackEntity>, cdTrackNo: Int): Int {
         if (tracks.isEmpty()) return -1
 
-        // 1. 精确匹配 trackNumber（例如实体 CD 标号 1..N）
+        // 1. 精确匹配 trackNumber（例如实体 CD 标号 1..N 匹配 TrackEntity.trackNumber）
         val exactMatch = tracks.indexOfFirst { it.trackNumber == cdTrackNo }
         if (exactMatch != -1) return exactMatch
 
-        // 2. 0-based 队列索引对齐（CD 上报 0 对应本地 trackNumber == 1）
-        val zeroBasedMatch = tracks.indexOfFirst { it.trackNumber == cdTrackNo + 1 }
-        if (zeroBasedMatch != -1) return zeroBasedMatch
-
-        // 3. 容错边界兜底
-        if (cdTrackNo in tracks.indices) return cdTrackNo
+        // 2. 1-based 序号映射（CD 1号轨 -> 本地索引 0，CD 2号轨 -> 本地索引 1）
         if (cdTrackNo - 1 in tracks.indices) return cdTrackNo - 1
+
+        // 3. 0-based 队列索引容错（若 CD 偶发上报 0-based 索引）
+        if (cdTrackNo in tracks.indices) return cdTrackNo
 
         return 0
     }
@@ -312,14 +310,14 @@ class LyricBookletViewModel @Inject constructor(
         _uiState.update { it.copy(isCdMatchAlbumOpen = isOpen) }
     }
 
-    fun playCdTrack(trackNumberOrIndex: Int) {
+    fun playCdTrack(trackIndex: Int) {
         val tracks = _uiState.value.albumWithTracks?.tracks ?: emptyList()
-        val targetIdx = resolveTrackIndex(tracks, trackNumberOrIndex)
-        if (targetIdx in tracks.indices) {
-            selectTrack(targetIdx, notifyCdPlayer = true)
+        if (trackIndex in tracks.indices) {
+            selectTrack(trackIndex, notifyCdPlayer = true)
         } else {
-            val cdQueueIdx = (trackNumberOrIndex - 1).coerceAtLeast(0)
-            shanlingBluetoothManager.playTrack(cdQueueIdx)
+            // 未匹配唱片曲目时，直接指令 CD 机播放对应的 1-based 物理音轨
+            val cdTrackNo = (trackIndex + 1).coerceAtLeast(1)
+            shanlingBluetoothManager.playTrack(cdTrackNo)
         }
         startCompanionInternal()
     }

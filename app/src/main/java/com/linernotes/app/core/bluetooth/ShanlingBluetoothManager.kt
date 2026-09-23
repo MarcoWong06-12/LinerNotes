@@ -187,9 +187,16 @@ class ShanlingBluetoothManager @Inject constructor(
     private fun startHeartbeat() {
         heartbeatJob?.cancel()
         heartbeatJob = scope.launch {
+            var loopCount = 0
             while (isActive && _cdState.value.connectionState == CdConnectionState.CONNECTED) {
-                delay(6000L)
-                sendFrame(ShanlingSyncLinkProtocol.SL_HEART_BEAT_REQ)
+                delay(1500L)
+                loopCount++
+                // Continuous query of play status (track position and play/pause state)
+                refreshPlayStatus()
+                // Heartbeat keep-alive every 6 seconds (loopCount % 4 == 0)
+                if (loopCount % 4 == 0) {
+                    sendFrame(ShanlingSyncLinkProtocol.SL_HEART_BEAT_REQ)
+                }
             }
         }
     }
@@ -230,7 +237,7 @@ class ShanlingBluetoothManager @Inject constructor(
                     it.copy(
                         currentPositionMs = data.playtimeSeconds * 1000L,
                         durationMs = if (data.durationSeconds > 0) data.durationSeconds * 1000L else it.durationMs,
-                        isPlaying = if (data.playtimeSeconds > 0) true else it.isPlaying
+                        currentTrackNumber = data.trackNumber?.takeIf { num -> num > 0 } ?: it.currentTrackNumber
                     )
                 }
             }
@@ -240,7 +247,7 @@ class ShanlingBluetoothManager @Inject constructor(
                 _cdState.update {
                     it.copy(
                         isPlaying = data.isPlaying,
-                        currentTrackNumber = data.trackNumber,
+                        currentTrackNumber = if (data.trackNumber > 0) data.trackNumber else it.currentTrackNumber,
                         totalTracks = if (data.totalSongs > 0) data.totalSongs else it.totalTracks
                     )
                 }
@@ -293,6 +300,10 @@ class ShanlingBluetoothManager @Inject constructor(
             ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_REQ,
             ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PLAY_SONG)
         )
+        scope.launch {
+            delay(300L)
+            refreshPlayStatus()
+        }
     }
 
     fun pause() {
@@ -301,6 +312,10 @@ class ShanlingBluetoothManager @Inject constructor(
             ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_REQ,
             ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PAUSE_SONG)
         )
+        scope.launch {
+            delay(300L)
+            refreshPlayStatus()
+        }
     }
 
     fun next() {
@@ -308,6 +323,10 @@ class ShanlingBluetoothManager @Inject constructor(
             ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_REQ,
             ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_NEXT_SONG)
         )
+        scope.launch {
+            delay(300L)
+            refreshPlayStatus()
+        }
     }
 
     fun previous() {
@@ -315,6 +334,10 @@ class ShanlingBluetoothManager @Inject constructor(
             ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_REQ,
             ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PREV_SONG)
         )
+        scope.launch {
+            delay(300L)
+            refreshPlayStatus()
+        }
     }
 
     fun seekTo(seconds: Int) {
@@ -322,14 +345,23 @@ class ShanlingBluetoothManager @Inject constructor(
             ShanlingSyncLinkProtocol.SL_PLAY_SEEK_REQ,
             ShanlingSyncLinkProtocol.encodePlaySeek(seconds)
         )
+        scope.launch {
+            delay(300L)
+            refreshPlayStatus()
+        }
     }
 
-    fun playTrack(trackNumberOrIndex: Int) {
-        _cdState.update { it.copy(isPlaying = true) }
+    fun playTrack(trackNumber: Int) {
+        val validTrack = trackNumber.coerceAtLeast(1)
+        _cdState.update { it.copy(currentTrackNumber = validTrack, isPlaying = true) }
         sendFrame(
             ShanlingSyncLinkProtocol.SL_CD_PLAY_REQ,
-            ShanlingSyncLinkProtocol.encodeCdPlayQueue(trackNumberOrIndex)
+            ShanlingSyncLinkProtocol.encodeCdPlayQueue(validTrack)
         )
+        scope.launch {
+            delay(300L)
+            refreshPlayStatus()
+        }
     }
 
     fun disconnect() {

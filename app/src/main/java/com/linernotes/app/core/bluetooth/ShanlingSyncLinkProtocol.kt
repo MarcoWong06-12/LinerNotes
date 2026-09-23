@@ -147,17 +147,23 @@ object ShanlingSyncLinkProtocol {
 
     // --- Lightweight Protobuf Codec ---
 
-    data class PlayTimeData(val playtimeSeconds: Int, val durationSeconds: Int)
+    data class PlayTimeData(
+        val playtimeSeconds: Int,
+        val durationSeconds: Int,
+        val trackNumber: Int? = null
+    )
     data class PlayStatusData(val isPlaying: Boolean, val trackNumber: Int, val totalSongs: Int)
 
     /**
      * Decodes PlayTimeNotify Protobuf payload:
      * Field 1 (playtime): varint (in seconds)
      * Field 2 (duration): varint (in seconds)
+     * Field 3 (track_number / pos): varint (optional)
      */
     fun decodePlayTimeNotify(bytes: ByteArray): PlayTimeData {
         var playtime = 0
         var duration = 0
+        var trackNumber: Int? = null
         var i = 0
         while (i < bytes.size) {
             val (tag, nextI) = readVarint(bytes, i)
@@ -171,6 +177,7 @@ object ShanlingSyncLinkProtocol {
                     i = afterVal
                     if (fieldNumber == 1) playtime = value.toInt()
                     if (fieldNumber == 2) duration = value.toInt()
+                    if (fieldNumber == 3) trackNumber = value.toInt()
                 }
                 1 -> i += 8 // 64-bit
                 2 -> { // Length-delimited
@@ -181,7 +188,7 @@ object ShanlingSyncLinkProtocol {
                 else -> break
             }
         }
-        return PlayTimeData(playtime, duration)
+        return PlayTimeData(playtime, duration, trackNumber)
     }
 
     /**
@@ -218,8 +225,13 @@ object ShanlingSyncLinkProtocol {
                 else -> break
             }
         }
+        val isPlaying = (playStatus == CONTROL_PLAY_SONG || playStatus == 1) &&
+                playStatus != CONTROL_PAUSE_SONG &&
+                playStatus != CONTROL_STOP_SONG &&
+                playStatus != 2 &&
+                playStatus != 0
         return PlayStatusData(
-            isPlaying = playStatus == CONTROL_PLAY_SONG,
+            isPlaying = isPlaying,
             trackNumber = currentPosition,
             totalSongs = totalSongs
         )
