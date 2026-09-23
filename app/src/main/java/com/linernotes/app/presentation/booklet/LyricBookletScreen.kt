@@ -22,6 +22,14 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Pause
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
@@ -49,8 +57,10 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.linernotes.app.core.bluetooth.CdConnectionState
 import com.linernotes.app.domain.model.BilingualLyricLine
 import com.linernotes.app.domain.model.LyricDisplayMode
+import com.linernotes.app.presentation.booklet.components.CdSyncSheet
 import com.linernotes.app.presentation.booklet.components.EditLyricSheet
 import com.linernotes.app.presentation.common.AiConfigDialog
 
@@ -71,6 +81,32 @@ fun LyricBookletScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.connectCdPlayer()
+        }
+    }
+
+    val requestCdConnect: (android.bluetooth.BluetoothDevice?) -> Unit = { targetDevice ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (hasPermission) {
+                viewModel.connectCdPlayer(targetDevice)
+            } else {
+                bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        } else {
+            viewModel.connectCdPlayer(targetDevice)
+        }
+    }
 
     val currentTrack = viewModel.getCurrentTrack()
     val totalTracks = state.albumWithTracks?.tracks?.size ?: 0
@@ -325,6 +361,36 @@ fun LyricBookletScreen(
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     FilledIconButton(
+                        onClick = { viewModel.openCdSheet(true) },
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = if (state.cdConnectionState == CdConnectionState.CONNECTED)
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            contentColor = if (state.cdConnectionState == CdConnectionState.CONNECTED)
+                                MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        if (state.cdConnectionState == CdConnectionState.CONNECTING) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = if (state.cdConnectionState == CdConnectionState.CONNECTED)
+                                    Icons.Default.BluetoothConnected
+                                else Icons.Default.Bluetooth,
+                                contentDescription = strings.cdSyncTitle,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    FilledIconButton(
                         onClick = { viewModel.openAiConfig(true) },
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
@@ -509,12 +575,15 @@ fun LyricBookletScreen(
                 hasPrevious = state.currentTrackIndex > 0,
                 hasNext = state.currentTrackIndex < totalTracks - 1,
                 showCalibration = state.showCalibrationBar,
+                cdConnectionState = state.cdConnectionState,
+                cdDeviceName = state.cdDeviceName,
                 onPrevious = { viewModel.previousTrack() },
                 onNext = { viewModel.nextTrack() },
                 onTogglePlay = { viewModel.toggleCompanionPlay() },
                 onSeek = { viewModel.seekCompanion(it) },
                 onAdjustOffset = { viewModel.adjustCompanionOffset(it) },
                 onToggleCalibration = { viewModel.toggleCalibrationBar() },
+                onOpenCdSheet = { viewModel.openCdSheet(true) },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
@@ -540,6 +609,20 @@ fun LyricBookletScreen(
             }
         )
     }
+
+    if (state.isCdSheetOpen) {
+        val pairedDevices = remember { viewModel.getPairedBluetoothDevices() }
+        CdSyncSheet(
+            connectionState = state.cdConnectionState,
+            connectedDeviceName = state.cdDeviceName,
+            pairedDevices = pairedDevices,
+            onConnect = { device ->
+                requestCdConnect(device)
+            },
+            onDisconnect = { viewModel.disconnectCdPlayer() },
+            onDismiss = { viewModel.openCdSheet(false) }
+        )
+    }
 }
 
 /**
@@ -557,12 +640,15 @@ private fun FloatingCompanionCapsule(
     hasPrevious: Boolean,
     hasNext: Boolean,
     showCalibration: Boolean,
+    cdConnectionState: CdConnectionState = CdConnectionState.DISCONNECTED,
+    cdDeviceName: String? = null,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onTogglePlay: () -> Unit,
     onSeek: (Long) -> Unit,
     onAdjustOffset: (Long) -> Unit,
     onToggleCalibration: () -> Unit,
+    onOpenCdSheet: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val strings = com.linernotes.app.core.i18n.LocalStrings.current
@@ -574,6 +660,68 @@ private fun FloatingCompanionCapsule(
             .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
+        // CD 蓝牙同步状态浮动胶囊 (Gemini Pill)
+        Surface(
+            shape = CircleShape,
+            color = when (cdConnectionState) {
+                CdConnectionState.CONNECTED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f)
+                CdConnectionState.CONNECTING -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f)
+                CdConnectionState.FAILED -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f)
+                CdConnectionState.DISCONNECTED -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+            },
+            border = BorderStroke(
+                1.dp,
+                if (cdConnectionState == CdConnectionState.CONNECTED) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                else Color.White.copy(alpha = 0.10f)
+            ),
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .padding(bottom = 8.dp)
+                .clickable { onOpenCdSheet() }
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
+            ) {
+                if (cdConnectionState == CdConnectionState.CONNECTING) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when (cdConnectionState) {
+                                    CdConnectionState.CONNECTED -> Color(0xFF4CAF50)
+                                    CdConnectionState.FAILED -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                }
+                            )
+                    )
+                }
+                Text(
+                    text = when (cdConnectionState) {
+                        CdConnectionState.CONNECTED -> "已同步 CD: ${cdDeviceName ?: "山灵 EC Mini"}"
+                        CdConnectionState.CONNECTING -> strings.cdSyncConnecting
+                        CdConnectionState.FAILED -> "CD 连接失败 · 点击重试"
+                        CdConnectionState.DISCONNECTED -> "未连接 CD 机 · 点击连接"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (cdConnectionState == CdConnectionState.CONNECTED) FontWeight.Bold else FontWeight.Medium,
+                    color = when (cdConnectionState) {
+                        CdConnectionState.CONNECTED -> MaterialTheme.colorScheme.onPrimaryContainer
+                        CdConnectionState.FAILED -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+        }
+
         // 微调对齐胶囊托盘
         AnimatedVisibility(
             visible = showCalibration,
@@ -784,13 +932,33 @@ private fun FloatingCompanionCapsule(
                             .weight(1f)
                             .padding(horizontal = 8.dp)
                     ) {
-                        Text(
-                            text = "$trackNumber. $trackTitle",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            if (cdConnectionState == CdConnectionState.CONNECTED) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                    modifier = Modifier.padding(end = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "CD",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "$trackNumber. $trackTitle",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                         if (!translatedTitle.isNullOrBlank()) {
                             Text(
                                 text = translatedTitle,

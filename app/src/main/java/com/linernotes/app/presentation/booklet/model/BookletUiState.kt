@@ -17,10 +17,13 @@ data class BookletUiState(
     val isTranslating: Boolean = false,
     val isTranslateMenuOpen: Boolean = false,
     val userMessage: String? = null,
-    // CD 伴侣时间轴播放状态
     val isCompanionPlaying: Boolean = false,
     val currentPositionMs: Long = 0L,
     val activeLineIndex: Int = -1,
     val trackDurationMs: Long = 0L,
-    val showCalibrationBar: Boolean = false
+    val showCalibrationBar: Boolean = false,
+    // 实体 CD 蓝牙同步状态
+    val cdConnectionState: com.linernotes.app.core.bluetooth.CdConnectionState = com.linernotes.app.core.bluetooth.CdConnectionState.DISCONNECTED,
+    val cdDeviceName: String? = null,
+    val isCdSheetOpen: Boolean = false
 )

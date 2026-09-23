@@ -1,5 +1,6 @@
 package com.linernotes.app.presentation.booklet
 
+import android.bluetooth.BluetoothDevice
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +15,8 @@ import com.linernotes.app.presentation.booklet.model.BookletUiState
 import com.linernotes.app.core.translation.BatchTranslationManager
 import com.linernotes.app.core.translation.BatchTranslationState
 import com.linernotes.app.core.util.ChineseConverter
+import com.linernotes.app.core.bluetooth.CdConnectionState
+import com.linernotes.app.core.bluetooth.ShanlingBluetoothManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,7 +30,8 @@ class LyricBookletViewModel @Inject constructor(
     private val repository: AlbumRepository,
     val aiPreferences: AiPreferences,
     private val aiTranslationService: AiTranslationService,
-    private val batchTranslationManager: BatchTranslationManager
+    private val batchTranslationManager: BatchTranslationManager,
+    val shanlingBluetoothManager: ShanlingBluetoothManager
 ) : ViewModel() {
 
     private var currentAlbumId: String = ""
@@ -42,6 +46,24 @@ class LyricBookletViewModel @Inject constructor(
             batchTranslationManager.state.collect { bState ->
                 if (!bState.userMessage.isNullOrBlank() && bState.albumId == currentAlbumId) {
                     _uiState.update { it.copy(userMessage = bState.userMessage) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            shanlingBluetoothManager.cdState.collect { cdState ->
+                _uiState.update {
+                    it.copy(
+                        cdConnectionState = cdState.connectionState,
+                        cdDeviceName = cdState.deviceName,
+                        userMessage = cdState.errorMessage ?: it.userMessage
+                    )
+                }
+                if (cdState.connectionState == CdConnectionState.CONNECTED) {
+                    onExternalCdStateReceived(
+                        trackNo = cdState.currentTrackNumber,
+                        posMs = cdState.currentPositionMs,
+                        isPlaying = cdState.isPlaying
+                    )
                 }
             }
         }
@@ -107,7 +129,7 @@ class LyricBookletViewModel @Inject constructor(
         return lastIdx
     }
 
-    fun selectTrack(index: Int) {
+    fun selectTrack(index: Int, notifyCdPlayer: Boolean = true) {
         val tracks = _uiState.value.albumWithTracks?.tracks ?: return
         if (index in tracks.indices) {
             val track = tracks[index]
@@ -122,20 +144,35 @@ class LyricBookletViewModel @Inject constructor(
                     activeLineIndex = -1
                 )
             }
+            if (notifyCdPlayer && _uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
+                shanlingBluetoothManager.playTrack(track.trackNumber)
+            }
         }
     }
 
     private var companionJob: kotlinx.coroutines.Job? = null
 
     fun toggleCompanionPlay() {
-        if (_uiState.value.isCompanionPlaying) {
-            pauseCompanion()
+        if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
+            if (_uiState.value.isCompanionPlaying) {
+                shanlingBluetoothManager.pause()
+            } else {
+                shanlingBluetoothManager.play()
+            }
         } else {
-            startCompanion()
+            if (_uiState.value.isCompanionPlaying) {
+                pauseCompanion()
+            } else {
+                startCompanion()
+            }
         }
     }
 
     fun startCompanion() {
+        startCompanionInternal()
+    }
+
+    private fun startCompanionInternal() {
         companionJob?.cancel()
         _uiState.update { it.copy(isCompanionPlaying = true) }
         companionJob = viewModelScope.launch {
@@ -151,7 +188,7 @@ class LyricBookletViewModel @Inject constructor(
                     val tracks = currentState.albumWithTracks?.tracks ?: emptyList()
                     val nextIndex = currentState.currentTrackIndex + 1
                     if (nextIndex in tracks.indices) {
-                        selectTrack(nextIndex)
+                        selectTrack(nextIndex, notifyCdPlayer = false)
                         continue
                     } else {
                         _uiState.update {
@@ -177,12 +214,19 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun pauseCompanion() {
+        if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
+            shanlingBluetoothManager.pause()
+        }
+        pauseCompanionInternal()
+    }
+
+    private fun pauseCompanionInternal() {
         companionJob?.cancel()
         companionJob = null
         _uiState.update { it.copy(isCompanionPlaying = false) }
     }
 
-    fun seekCompanion(targetMs: Long) {
+    fun seekCompanion(targetMs: Long, notifyCdPlayer: Boolean = true) {
         val duration = _uiState.value.trackDurationMs.coerceAtLeast(1000L)
         val clamped = targetMs.coerceIn(0L, duration)
         val activeIdx = findActiveLineIndex(_uiState.value.alignedLyrics, clamped)
@@ -191,6 +235,9 @@ class LyricBookletViewModel @Inject constructor(
                 currentPositionMs = clamped,
                 activeLineIndex = activeIdx
             )
+        }
+        if (notifyCdPlayer && _uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
+            shanlingBluetoothManager.seekTo((clamped / 1000).toInt())
         }
     }
 
@@ -212,27 +259,50 @@ class LyricBookletViewModel @Inject constructor(
         val tracks = _uiState.value.albumWithTracks?.tracks ?: return
         val targetIndex = tracks.indexOfFirst { it.trackNumber == trackNo }
         if (targetIndex != -1 && targetIndex != _uiState.value.currentTrackIndex) {
-            selectTrack(targetIndex)
+            selectTrack(targetIndex, notifyCdPlayer = false)
         }
-        seekCompanion(posMs)
+        seekCompanion(posMs, notifyCdPlayer = false)
         if (isPlaying && !_uiState.value.isCompanionPlaying) {
-            startCompanion()
+            startCompanionInternal()
         } else if (!isPlaying && _uiState.value.isCompanionPlaying) {
-            pauseCompanion()
+            pauseCompanionInternal()
         }
+    }
+
+    fun openCdSheet(isOpen: Boolean) {
+        _uiState.update { it.copy(isCdSheetOpen = isOpen) }
+    }
+
+    fun getPairedBluetoothDevices(): List<BluetoothDevice> {
+        return shanlingBluetoothManager.getAllPairedDevices()
+    }
+
+    fun connectCdPlayer(device: BluetoothDevice? = null) {
+        shanlingBluetoothManager.connectToDevice(device)
+    }
+
+    fun disconnectCdPlayer() {
+        shanlingBluetoothManager.disconnect()
     }
 
     override fun onCleared() {
         super.onCleared()
         companionJob?.cancel()
+        shanlingBluetoothManager.disconnect()
     }
 
     fun previousTrack() {
-        selectTrack(_uiState.value.currentTrackIndex - 1)
+        if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
+            shanlingBluetoothManager.previous()
+        }
+        selectTrack(_uiState.value.currentTrackIndex - 1, notifyCdPlayer = false)
     }
 
     fun nextTrack() {
-        selectTrack(_uiState.value.currentTrackIndex + 1)
+        if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
+            shanlingBluetoothManager.next()
+        }
+        selectTrack(_uiState.value.currentTrackIndex + 1, notifyCdPlayer = false)
     }
 
     fun updateAmbientColor(color: Color) {
