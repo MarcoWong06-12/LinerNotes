@@ -28,9 +28,12 @@ data class TranslationResult(
  * 免 API Key、免科学上网（国内移动/联通/电信 5G 直连），自动保留时间轴与换行，极速响应 (200~400ms)。
  */
 @Singleton
-class TranslationService @Inject constructor(
-    private val preferences: AiPreferences
+class TranslationService(
+    private val preferences: AiPreferences? = null
 ) {
+    @Inject
+    constructor(preferences: AiPreferences) : this(preferences as AiPreferences?)
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -53,7 +56,7 @@ class TranslationService @Inject constructor(
         originalLyrics: String,
         targetLanguageCode: String? = null
     ): TranslationResult = withContext(Dispatchers.IO) {
-        val targetCode = targetLanguageCode ?: preferences.targetLanguage
+        val targetCode = targetLanguageCode ?: preferences?.targetLanguage ?: TranslationTargetLanguage.ZH_CN.code
         val targetIso = TranslationTargetLanguage.fromCode(targetCode).fallbackIso
 
         // 1. 翻译歌词主体

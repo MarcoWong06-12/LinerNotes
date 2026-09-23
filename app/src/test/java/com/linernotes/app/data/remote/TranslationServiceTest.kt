@@ -1,19 +1,16 @@
 package com.linernotes.app.data.remote
 
-import com.linernotes.app.core.preference.AiPreferences
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.mockito.Mockito.mock
 
 class TranslationServiceTest {
 
     @Test
     fun testYoudaoTranslationLive() = runBlocking {
-        val mockPrefs = mock(AiPreferences::class.java)
-        val service = TranslationService(mockPrefs)
+        val service = TranslationService()
 
         val lrc = """[00:01.00]Hello world
 [00:04.00]The world is yours
