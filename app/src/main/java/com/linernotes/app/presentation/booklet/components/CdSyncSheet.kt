@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,6 +51,7 @@ fun CdSyncSheet(
     pairedDevices: List<BluetoothDevice>,
     onConnect: (BluetoothDevice?) -> Unit,
     onDisconnect: () -> Unit,
+    onOpenTracklist: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val strings = LocalStrings.current
@@ -199,6 +201,23 @@ fun CdSyncSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(14.dp))
+                        BouncyButton(
+                            onClick = {
+                                onDismiss()
+                                onOpenTracklist()
+                            },
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.QueueMusic, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(strings.cdTracklistAction)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
                         BouncyTonalButton(
                             onClick = onDisconnect,
                             shape = CircleShape,

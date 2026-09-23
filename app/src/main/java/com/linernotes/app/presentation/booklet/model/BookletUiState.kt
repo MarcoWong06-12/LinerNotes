@@ -25,5 +25,9 @@ data class BookletUiState(
     // 实体 CD 蓝牙同步状态
     val cdConnectionState: com.linernotes.app.core.bluetooth.CdConnectionState = com.linernotes.app.core.bluetooth.CdConnectionState.DISCONNECTED,
     val cdDeviceName: String? = null,
-    val isCdSheetOpen: Boolean = false
+    val cdTotalTracks: Int = 0,
+    val cdCurrentTrackNumber: Int = 1,
+    val isCdSheetOpen: Boolean = false,
+    val isCdTracklistOpen: Boolean = false,
+    val isCdMatchAlbumOpen: Boolean = false
 )

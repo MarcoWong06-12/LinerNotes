@@ -55,6 +55,8 @@ class LyricBookletViewModel @Inject constructor(
                     it.copy(
                         cdConnectionState = cdState.connectionState,
                         cdDeviceName = cdState.deviceName,
+                        cdTotalTracks = cdState.totalTracks,
+                        cdCurrentTrackNumber = cdState.currentTrackNumber,
                         userMessage = cdState.errorMessage ?: it.userMessage
                     )
                 }
@@ -68,6 +70,9 @@ class LyricBookletViewModel @Inject constructor(
             }
         }
     }
+
+    val allShelfAlbums: StateFlow<List<com.linernotes.app.data.local.entity.AlbumEntity>> = repository.getCollectionStream()
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setAlbumId(id: String) {
         if (currentAlbumId != id) {
@@ -145,7 +150,9 @@ class LyricBookletViewModel @Inject constructor(
                 )
             }
             if (notifyCdPlayer && _uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
-                shanlingBluetoothManager.playTrack(track.trackNumber)
+                // Shanling SL_CD_PLAY_REQ takes 0-based queue index (0 for 1st song)
+                val queueIndex = (track.trackNumber - 1).coerceAtLeast(0)
+                shanlingBluetoothManager.playTrack(queueIndex)
             }
         }
     }
@@ -153,23 +160,25 @@ class LyricBookletViewModel @Inject constructor(
     private var companionJob: kotlinx.coroutines.Job? = null
 
     fun toggleCompanionPlay() {
-        if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
-            if (_uiState.value.isCompanionPlaying) {
-                shanlingBluetoothManager.pause()
-            } else {
+        val willPlay = !_uiState.value.isCompanionPlaying
+        if (willPlay) {
+            startCompanionInternal()
+            if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
                 shanlingBluetoothManager.play()
             }
         } else {
-            if (_uiState.value.isCompanionPlaying) {
-                pauseCompanion()
-            } else {
-                startCompanion()
+            pauseCompanionInternal()
+            if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
+                shanlingBluetoothManager.pause()
             }
         }
     }
 
     fun startCompanion() {
         startCompanionInternal()
+        if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
+            shanlingBluetoothManager.play()
+        }
     }
 
     private fun startCompanionInternal() {
@@ -257,15 +266,78 @@ class LyricBookletViewModel @Inject constructor(
 
     fun onExternalCdStateReceived(trackNo: Int, posMs: Long, isPlaying: Boolean) {
         val tracks = _uiState.value.albumWithTracks?.tracks ?: return
-        val targetIndex = tracks.indexOfFirst { it.trackNumber == trackNo }
+        val targetIndex = resolveTrackIndex(tracks, trackNo)
         if (targetIndex != -1 && targetIndex != _uiState.value.currentTrackIndex) {
             selectTrack(targetIndex, notifyCdPlayer = false)
         }
-        seekCompanion(posMs, notifyCdPlayer = false)
+        if (posMs > 0L) {
+            seekCompanion(posMs, notifyCdPlayer = false)
+        }
         if (isPlaying && !_uiState.value.isCompanionPlaying) {
             startCompanionInternal()
         } else if (!isPlaying && _uiState.value.isCompanionPlaying) {
             pauseCompanionInternal()
+        }
+    }
+
+    private fun resolveTrackIndex(tracks: List<TrackEntity>, cdTrackNo: Int): Int {
+        if (tracks.isEmpty()) return -1
+
+        // 1. 精确匹配 trackNumber（例如实体 CD 标号 1..N）
+        val exactMatch = tracks.indexOfFirst { it.trackNumber == cdTrackNo }
+        if (exactMatch != -1) return exactMatch
+
+        // 2. 0-based 队列索引对齐（CD 上报 0 对应本地 trackNumber == 1）
+        val zeroBasedMatch = tracks.indexOfFirst { it.trackNumber == cdTrackNo + 1 }
+        if (zeroBasedMatch != -1) return zeroBasedMatch
+
+        // 3. 容错边界兜底
+        if (cdTrackNo in tracks.indices) return cdTrackNo
+        if (cdTrackNo - 1 in tracks.indices) return cdTrackNo - 1
+
+        return 0
+    }
+
+    fun openCdTracklist(isOpen: Boolean) {
+        _uiState.update { it.copy(isCdTracklistOpen = isOpen) }
+    }
+
+    fun openCdMatchAlbum(isOpen: Boolean) {
+        _uiState.update { it.copy(isCdMatchAlbumOpen = isOpen) }
+    }
+
+    fun playCdTrack(trackNumberOrIndex: Int) {
+        val tracks = _uiState.value.albumWithTracks?.tracks ?: emptyList()
+        val targetIdx = resolveTrackIndex(tracks, trackNumberOrIndex)
+        if (targetIdx in tracks.indices) {
+            selectTrack(targetIdx, notifyCdPlayer = true)
+        } else {
+            val cdQueueIdx = (trackNumberOrIndex - 1).coerceAtLeast(0)
+            shanlingBluetoothManager.playTrack(cdQueueIdx)
+        }
+        startCompanionInternal()
+    }
+
+    fun switchAlbum(albumId: String) {
+        if (currentAlbumId != albumId) {
+            currentAlbumId = albumId
+            loadBooklet(albumId)
+            _uiState.update { it.copy(isCdTracklistOpen = false, isCdMatchAlbumOpen = false) }
+        }
+    }
+
+    fun saveAndBindMatchedAlbum(album: com.linernotes.app.data.local.entity.AlbumEntity, tracks: List<TrackEntity>) {
+        viewModelScope.launch {
+            repository.saveAlbum(album, tracks)
+            switchAlbum(album.id)
+            _uiState.update {
+                it.copy(
+                    isCdMatchAlbumOpen = false,
+                    isCdTracklistOpen = false,
+                    userMessage = "已成功为当前 CD 匹配唱片《${album.title}》"
+                )
+            }
+            batchFetchOfficialLyricsAlbum()
         }
     }
 

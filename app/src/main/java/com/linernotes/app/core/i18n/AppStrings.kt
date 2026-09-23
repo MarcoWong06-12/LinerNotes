@@ -111,6 +111,10 @@ data class AppStrings(
     val cdSyncConnectAction: String,
     val cdSyncDisconnectAction: String,
     val cdSyncPermissionRequired: String,
+    val cdTracklistTitle: String,
+    val cdTracklistAction: String,
+    val matchCdAlbumAction: String,
+    val cdTrackFallback: String,
 
     // 校对与编辑内页
     val editSheetTitle: String,
@@ -246,6 +250,10 @@ val ZhHansStrings = AppStrings(
     cdSyncConnectAction = "连接 CD 机",
     cdSyncDisconnectAction = "断开连接",
     cdSyncPermissionRequired = "请授予蓝牙连接权限以同步 CD 机",
+    cdTracklistTitle = "CD 实时曲目列表",
+    cdTracklistAction = "CD 曲目列表",
+    matchCdAlbumAction = "识别与匹配此 CD",
+    cdTrackFallback = "CD 音轨",
 
     editSheetTitle = "校对曲目内页数据",
     editTrackTranslatedTitleLabel = "曲名译名",
@@ -378,6 +386,10 @@ val ZhHantStrings = AppStrings(
     cdSyncConnectAction = "連接 CD 機",
     cdSyncDisconnectAction = "斷開連接",
     cdSyncPermissionRequired = "請授予藍牙連接權限以同步 CD 機",
+    cdTracklistTitle = "CD 即時曲目清單",
+    cdTracklistAction = "CD 曲目清單",
+    matchCdAlbumAction = "識別與匹配此 CD",
+    cdTrackFallback = "CD 音軌",
 
     editSheetTitle = "校對曲目內頁資料",
     editTrackTranslatedTitleLabel = "曲名譯名",
@@ -510,6 +522,10 @@ val EnStrings = AppStrings(
     cdSyncConnectAction = "Connect CD",
     cdSyncDisconnectAction = "Disconnect",
     cdSyncPermissionRequired = "Bluetooth permission is required to sync CD player",
+    cdTracklistTitle = "CD Tracklist",
+    cdTracklistAction = "CD Tracklist",
+    matchCdAlbumAction = "Identify & Match CD",
+    cdTrackFallback = "Track",
 
     editSheetTitle = "Edit Track & Liner Notes",
     editTrackTranslatedTitleLabel = "Translated Title",
@@ -642,6 +658,10 @@ val JaStrings = AppStrings(
     cdSyncConnectAction = "CDプレーヤーに接続",
     cdSyncDisconnectAction = "切断",
     cdSyncPermissionRequired = "CDプレーヤーを同期するにはBluetooth権限が必要です",
+    cdTracklistTitle = "CD トラックリスト",
+    cdTracklistAction = "CD トラック一覧",
+    matchCdAlbumAction = "CD 情報を照合・取得",
+    cdTrackFallback = "トラック",
 
     editSheetTitle = "ブックレットデータを校正",
     editTrackTranslatedTitleLabel = "曲名の日本語訳",

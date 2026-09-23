@@ -229,7 +229,8 @@ class ShanlingBluetoothManager @Inject constructor(
                 _cdState.update {
                     it.copy(
                         currentPositionMs = data.playtimeSeconds * 1000L,
-                        durationMs = data.durationSeconds * 1000L
+                        durationMs = if (data.durationSeconds > 0) data.durationSeconds * 1000L else it.durationMs,
+                        isPlaying = if (data.playtimeSeconds > 0) true else it.isPlaying
                     )
                 }
             }
@@ -240,12 +241,17 @@ class ShanlingBluetoothManager @Inject constructor(
                     it.copy(
                         isPlaying = data.isPlaying,
                         currentTrackNumber = data.trackNumber,
-                        totalTracks = data.totalSongs
+                        totalTracks = if (data.totalSongs > 0) data.totalSongs else it.totalTracks
                     )
                 }
             }
+            ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_RESP,
+            ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_NOTIFY -> {
+                refreshPlayStatus()
+            }
             ShanlingSyncLinkProtocol.SL_LOGIN_RESP -> {
                 Log.i(tag, "Handshake successful with Shanling CD player")
+                refreshPlayStatus()
             }
         }
     }
@@ -275,9 +281,14 @@ class ShanlingBluetoothManager @Inject constructor(
         }
     }
 
+    fun refreshPlayStatus() {
+        sendFrame(ShanlingSyncLinkProtocol.SL_GET_PLAY_STATUS_REQ)
+    }
+
     // --- CD Remote Controls ---
 
     fun play() {
+        _cdState.update { it.copy(isPlaying = true) }
         sendFrame(
             ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_REQ,
             ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PLAY_SONG)
@@ -285,6 +296,7 @@ class ShanlingBluetoothManager @Inject constructor(
     }
 
     fun pause() {
+        _cdState.update { it.copy(isPlaying = false) }
         sendFrame(
             ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_REQ,
             ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PAUSE_SONG)
@@ -312,10 +324,11 @@ class ShanlingBluetoothManager @Inject constructor(
         )
     }
 
-    fun playTrack(trackNumber: Int) {
+    fun playTrack(trackNumberOrIndex: Int) {
+        _cdState.update { it.copy(isPlaying = true) }
         sendFrame(
             ShanlingSyncLinkProtocol.SL_CD_PLAY_REQ,
-            ShanlingSyncLinkProtocol.encodeCdPlayQueue(trackNumber)
+            ShanlingSyncLinkProtocol.encodeCdPlayQueue(trackNumberOrIndex)
         )
     }
 

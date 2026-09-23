@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -67,6 +68,7 @@ import com.linernotes.app.core.bluetooth.CdConnectionState
 import com.linernotes.app.domain.model.BilingualLyricLine
 import com.linernotes.app.domain.model.LyricDisplayMode
 import com.linernotes.app.presentation.booklet.components.CdSyncSheet
+import com.linernotes.app.presentation.booklet.components.CdTracklistSheet
 import com.linernotes.app.presentation.booklet.components.EditLyricSheet
 import com.linernotes.app.presentation.common.*
 
@@ -84,6 +86,7 @@ fun LyricBookletScreen(
     val batchState by viewModel.batchTranslationState.collectAsState()
     val isBatchTranslatingThisAlbum = batchState.isTranslating && batchState.albumId == state.albumWithTracks?.album?.id
     val isTranslatingOverall = state.isTranslating || isBatchTranslatingThisAlbum
+    val shelfAlbums by viewModel.allShelfAlbums.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -618,6 +621,7 @@ fun LyricBookletScreen(
                 onAdjustOffset = { viewModel.adjustCompanionOffset(it) },
                 onToggleCalibration = { viewModel.toggleCalibrationBar() },
                 onOpenCdSheet = { viewModel.openCdSheet(true) },
+                onOpenCdTracklist = { viewModel.openCdTracklist(true) },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
@@ -654,7 +658,34 @@ fun LyricBookletScreen(
                 requestCdConnect(device)
             },
             onDisconnect = { viewModel.disconnectCdPlayer() },
-            onDismiss = { viewModel.openCdSheet(false) }
+            onDismiss = { viewModel.openCdSheet(false) },
+            onOpenTracklist = {
+                viewModel.openCdSheet(false)
+                viewModel.openCdTracklist(true)
+            }
+        )
+    }
+
+    if (state.isCdTracklistOpen) {
+        CdTracklistSheet(
+            deviceName = state.cdDeviceName,
+            connectionState = state.cdConnectionState,
+            totalTracks = state.cdTotalTracks,
+            currentTrackIndex = state.currentTrackIndex,
+            cdPlaying = state.isCompanionPlaying,
+            tracks = state.albumWithTracks?.tracks ?: emptyList(),
+            album = state.albumWithTracks?.album,
+            shelfAlbums = shelfAlbums,
+            onSelectTrack = { trackIndex ->
+                viewModel.playCdTrack(trackIndex)
+            },
+            onSwitchAlbum = { targetAlbumId ->
+                viewModel.switchAlbum(targetAlbumId)
+            },
+            onSaveMatchedAlbum = { matchedAlbum, matchedTracks ->
+                viewModel.saveAndBindMatchedAlbum(matchedAlbum, matchedTracks)
+            },
+            onDismiss = { viewModel.openCdTracklist(false) }
         )
     }
 
@@ -733,6 +764,7 @@ private fun FloatingCompanionCapsule(
     onAdjustOffset: (Long) -> Unit,
     onToggleCalibration: () -> Unit,
     onOpenCdSheet: () -> Unit = {},
+    onOpenCdTracklist: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val strings = com.linernotes.app.core.i18n.LocalStrings.current
@@ -874,10 +906,13 @@ private fun FloatingCompanionCapsule(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
-                // 顶部平滑时间进度指示
-                val progress = if (durationMs > 0L) {
-                    (currentPosMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-                } else 0f
+                // 顶部平滑时间进度调节 (Draggable Slider & Timestamps)
+                var isDragging by remember { mutableStateOf(false) }
+                var dragPositionMs by remember { mutableStateOf(0L) }
+
+                val displayPosMs = if (isDragging) dragPositionMs else currentPosMs
+                val maxDuration = durationMs.coerceAtLeast(1L)
+                val sliderPos = (displayPosMs.toFloat() / maxDuration.toFloat()).coerceIn(0f, 1f)
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -886,43 +921,42 @@ private fun FloatingCompanionCapsule(
                         .padding(horizontal = 4.dp)
                 ) {
                     Text(
-                        text = formatTime(currentPosMs),
+                        text = formatTime(displayPosMs),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.width(38.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(
+                    Slider(
+                        value = sliderPos,
+                        onValueChange = { frac ->
+                            isDragging = true
+                            dragPositionMs = (frac * maxDuration).toLong()
+                        },
+                        onValueChangeFinished = {
+                            onSeek(dragPositionMs)
+                            isDragging = false
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
                         modifier = Modifier
                             .weight(1f)
-                            .height(5.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(progress)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.horizontalGradient(
-                                        listOf(
-                                            MaterialTheme.colorScheme.primary,
-                                            MaterialTheme.colorScheme.tertiary
-                                        )
-                                    )
-                                )
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
+                            .height(28.dp)
+                            .padding(horizontal = 4.dp)
+                    )
                     Text(
                         text = formatTime(durationMs),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.width(38.dp),
+                        textAlign = TextAlign.End
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // 控制按钮行
                 Row(
@@ -975,8 +1009,8 @@ private fun FloatingCompanionCapsule(
                         color = MaterialTheme.colorScheme.primary,
                         shadowElevation = 8.dp,
                         modifier = Modifier
-                            .padding(horizontal = 8.dp)
-                            .size(52.dp)
+                            .padding(horizontal = 4.dp)
+                            .size(50.dp)
                             .scale(heroScale)
                             .graphicsLayer { alpha = heroAlpha }
                     ) {
@@ -997,7 +1031,7 @@ private fun FloatingCompanionCapsule(
                                     imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = if (playing) strings.cdCompanionPause else strings.cdCompanionPlay,
                                     tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
                         }
@@ -1021,12 +1055,14 @@ private fun FloatingCompanionCapsule(
                         )
                     }
 
-                    // 曲名与音轨胶囊
+                    // 曲名与音轨胶囊（可点击快速展开曲目列表）
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .weight(1f)
-                            .padding(horizontal = 8.dp)
+                            .padding(horizontal = 6.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .bouncyClickable(pressedScale = 0.96f) { onOpenCdTracklist() }
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1036,7 +1072,7 @@ private fun FloatingCompanionCapsule(
                                 Surface(
                                     shape = CircleShape,
                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                    modifier = Modifier.padding(end = 6.dp)
+                                    modifier = Modifier.padding(end = 4.dp)
                                 ) {
                                     Text(
                                         text = "CD",
@@ -1048,7 +1084,7 @@ private fun FloatingCompanionCapsule(
                                 }
                             }
                             Text(
-                                text = "$trackNumber. $trackTitle",
+                                text = if (trackTitle.isNotBlank()) "$trackNumber. $trackTitle" else "Track $trackNumber",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -1064,6 +1100,23 @@ private fun FloatingCompanionCapsule(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
                         }
+                    }
+
+                    // CD 实时曲目清单快捷按钮 (QueueMusic)
+                    BouncyIconButton(
+                        onClick = onOpenCdTracklist,
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QueueMusic,
+                            contentDescription = strings.cdTracklistTitle,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
 
                     // 校准微调芯片（圆形）
