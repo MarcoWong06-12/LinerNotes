@@ -38,6 +38,10 @@ object LyricSanitizer {
         return CENSOR_CHECK_REGEX.containsMatchIn(text)
     }
 
+    private val PRIORITY_PROFANITIES = listOf(
+        "fuck", "fucking", "fucked", "shit", "bitch", "nigga", "niggas", "ass", "dick", "pussy", "cunt", "damn"
+    )
+
     /**
      * 单个词的本地字典反和谐匹配 (支持 B***h, f***ing, ****ing, s***, n**** 等)
      */
@@ -48,15 +52,19 @@ object LyricSanitizer {
         val pattern = Pattern.compile(regexStr)
 
         val candidates = PROFANITY_LIST.filter { pattern.matcher(it).matches() }
-        if (candidates.size == 1) {
-            val matched = candidates.first()
-            return when {
-                token.all { it.isUpperCase() || it == '*' } -> matched.uppercase()
-                token.firstOrNull()?.isUpperCase() == true -> matched.replaceFirstChar { it.uppercase() }
-                else -> matched
-            }
+        val matched = if (candidates.size == 1) {
+            candidates.first()
+        } else if (candidates.size > 1) {
+            candidates.firstOrNull { it in PRIORITY_PROFANITIES } ?: candidates.first()
+        } else {
+            return null
         }
-        return null
+
+        return when {
+            token.all { it.isUpperCase() || it == '*' } -> matched.uppercase()
+            token.firstOrNull()?.isUpperCase() == true -> matched.replaceFirstChar { it.uppercase() }
+            else -> matched
+        }
     }
 
     /**
