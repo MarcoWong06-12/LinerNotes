@@ -29,10 +29,13 @@ data class TranslationResult(
  */
 @Singleton
 class TranslationService(
-    private val preferences: AiPreferences? = null
+    private val targetLanguageProvider: () -> String
 ) {
     @Inject
-    constructor(preferences: AiPreferences) : this(preferences as AiPreferences?)
+    constructor(preferences: AiPreferences) : this({ preferences.targetLanguage })
+
+    // For testing and fallback
+    constructor() : this({ TranslationTargetLanguage.ZH_CN.code })
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)
@@ -56,7 +59,7 @@ class TranslationService(
         originalLyrics: String,
         targetLanguageCode: String? = null
     ): TranslationResult = withContext(Dispatchers.IO) {
-        val targetCode = targetLanguageCode ?: preferences?.targetLanguage ?: TranslationTargetLanguage.ZH_CN.code
+        val targetCode = targetLanguageCode ?: targetLanguageProvider()
         val targetIso = TranslationTargetLanguage.fromCode(targetCode).fallbackIso
 
         // 1. 翻译歌词主体
