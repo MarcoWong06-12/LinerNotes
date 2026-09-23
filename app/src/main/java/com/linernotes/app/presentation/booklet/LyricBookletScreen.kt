@@ -30,6 +30,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
@@ -38,13 +39,16 @@ import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -82,6 +86,7 @@ fun LyricBookletScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     val context = LocalContext.current
+    var isCoverViewerOpen by remember { mutableStateOf(false) }
 
     val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -122,8 +127,8 @@ fun LyricBookletScreen(
     LaunchedEffect(state.activeLineIndex) {
         if (state.activeLineIndex in state.alignedLyrics.indices) {
             listState.animateScrollToItem(
-                index = state.activeLineIndex + 1, // 0 号 item 为 BookletHeaderSection
-                scrollOffset = -260
+                index = state.activeLineIndex,
+                scrollOffset = -220
             )
         }
     }
@@ -146,16 +151,54 @@ fun LyricBookletScreen(
         topBar = {
             val strings = com.linernotes.app.core.i18n.LocalStrings.current
             TopAppBar(
-                title = {},
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 2.dp)
+                    ) {
+                        val coverUrl = state.albumWithTracks?.album?.coverUrl
+                        if (!coverUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(coverUrl)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { isCoverViewerOpen = true }
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f, fill = false)) {
+                            Text(
+                                text = currentTrack?.title ?: (state.albumWithTracks?.album?.title ?: ""),
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = state.albumWithTracks?.album?.artist ?: "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.68f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     FilledIconButton(
                         onClick = onNavigateBack,
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            contentColor = MaterialTheme.colorScheme.onSurface
+                            containerColor = Color.White.copy(alpha = 0.12f),
+                            contentColor = Color.White
                         ),
-                        modifier = Modifier.padding(start = 8.dp).size(40.dp)
+                        modifier = Modifier.padding(start = 8.dp).size(38.dp)
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -165,217 +208,23 @@ fun LyricBookletScreen(
                     }
                 },
                 actions = {
-                    // Gemini 风格胶囊分段模式切换器
-                    SingleChoiceSegmentedControl(
-                        currentMode = state.displayMode,
-                        onModeSelected = { viewModel.setDisplayMode(it) }
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box {
-                        FilledIconButton(
-                            onClick = { viewModel.onAiTranslateClicked() },
-                            enabled = !isTranslatingOverall,
-                            shape = CircleShape,
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            if (isTranslatingOverall) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = strings.aiTranslateAction,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-
-                        DropdownMenu(
-                            expanded = state.isTranslateMenuOpen,
-                            onDismissRequest = { viewModel.setTranslateMenuOpen(false) }
-                        ) {
-                            DropdownMenuItem(
-                                text = {
-                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
-                                        Text(
-                                            strings.fetchOfficialLyrics,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        Text(
-                                            strings.fetchOfficialLyricsDesc,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    viewModel.fetchOfficialLyricsCurrentTrack()
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.CloudDownload,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
-                                        Text(
-                                            strings.batchFetchOfficialAlbum,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        Text(
-                                            strings.batchFetchOfficialAlbumDesc,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    viewModel.batchFetchOfficialLyricsAlbum()
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Album,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                            )
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                            DropdownMenuItem(
-                                text = {
-                                    Text(strings.translateCurrentTrack, style = MaterialTheme.typography.bodyMedium)
-                                },
-                                onClick = {
-                                    viewModel.retranslateCurrentTrack()
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.FlashOn,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
-                                        Text(
-                                            strings.batchTranslateAlbum,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        Text(
-                                            strings.batchTranslateAlbumDesc,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    viewModel.startBatchAlbumTranslation()
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.AutoAwesome,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                            )
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                            DropdownMenuItem(
-                                text = {
-                                    Text(strings.convertCurrentTrackToTraditional, style = MaterialTheme.typography.bodyMedium)
-                                },
-                                onClick = {
-                                    viewModel.convertCurrentTrackTranslation(toTraditional = true)
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Translate,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(strings.convertCurrentTrackToSimplified, style = MaterialTheme.typography.bodyMedium)
-                                },
-                                onClick = {
-                                    viewModel.convertCurrentTrackTranslation(toTraditional = false)
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Translate,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(strings.convertAlbumToTraditional, style = MaterialTheme.typography.bodyMedium)
-                                },
-                                onClick = {
-                                    viewModel.convertAlbumTranslation(toTraditional = true)
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Album,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(strings.convertAlbumToSimplified, style = MaterialTheme.typography.bodyMedium)
-                                },
-                                onClick = {
-                                    viewModel.convertAlbumTranslation(toTraditional = false)
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Album,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
+                    // CD 蓝牙同步状态触钮
                     FilledIconButton(
                         onClick = { viewModel.openCdSheet(true) },
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = if (state.cdConnectionState == CdConnectionState.CONNECTED)
                                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            else Color.White.copy(alpha = 0.12f),
                             contentColor = if (state.cdConnectionState == CdConnectionState.CONNECTED)
                                 MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
+                            else Color.White.copy(alpha = 0.85f)
                         ),
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(38.dp)
                     ) {
                         if (state.cdConnectionState == CdConnectionState.CONNECTING) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -385,54 +234,247 @@ fun LyricBookletScreen(
                                     Icons.Default.BluetoothConnected
                                 else Icons.Default.Bluetooth,
                                 contentDescription = strings.cdSyncTitle,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    FilledIconButton(
-                        onClick = { viewModel.openAiConfig(true) },
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = strings.settingsTitle,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    FilledIconButton(
-                        onClick = { viewModel.openEditSheet(true) },
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        modifier = Modifier.padding(end = 8.dp).size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.EditNote,
-                            contentDescription = strings.editLyricsAction,
-                            modifier = Modifier.size(20.dp)
-                        )
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Apple Music 风格三点更多按钮（集成模式切换、翻译、校对、设置）
+                    Box {
+                        FilledIconButton(
+                            onClick = { viewModel.setTranslateMenuOpen(!state.isTranslateMenuOpen) },
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = Color.White.copy(alpha = 0.15f),
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier.padding(end = 8.dp).size(38.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreHoriz,
+                                contentDescription = "More",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = state.isTranslateMenuOpen,
+                            onDismissRequest = { viewModel.setTranslateMenuOpen(false) }
+                        ) {
+                            // 歌词显示模式切换
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            strings.modeBilingual,
+                                            fontWeight = if (state.displayMode == LyricDisplayMode.BILINGUAL) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        if (state.displayMode == LyricDisplayMode.BILINGUAL) {
+                                            Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setDisplayMode(LyricDisplayMode.BILINGUAL)
+                                    viewModel.setTranslateMenuOpen(false)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            strings.modeOriginal,
+                                            fontWeight = if (state.displayMode == LyricDisplayMode.ORIGINAL_ONLY) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        if (state.displayMode == LyricDisplayMode.ORIGINAL_ONLY) {
+                                            Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setDisplayMode(LyricDisplayMode.ORIGINAL_ONLY)
+                                    viewModel.setTranslateMenuOpen(false)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            strings.modeTranslated,
+                                            fontWeight = if (state.displayMode == LyricDisplayMode.TRANSLATED_ONLY) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        if (state.displayMode == LyricDisplayMode.TRANSLATED_ONLY) {
+                                            Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setDisplayMode(LyricDisplayMode.TRANSLATED_ONLY)
+                                    viewModel.setTranslateMenuOpen(false)
+                                }
+                            )
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text(strings.fetchOfficialLyrics, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(strings.fetchOfficialLyricsDesc, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.fetchOfficialLyricsCurrentTrack()
+                                },
+                                leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text(strings.batchFetchOfficialAlbum, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(strings.batchFetchOfficialAlbumDesc, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.batchFetchOfficialLyricsAlbum()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Album, contentDescription = null, tint = MaterialTheme.colorScheme.secondary) }
+                            )
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                            DropdownMenuItem(
+                                text = { Text(strings.translateCurrentTrack, style = MaterialTheme.typography.bodyMedium) },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.retranslateCurrentTrack()
+                                },
+                                leadingIcon = { Icon(Icons.Default.FlashOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text(strings.batchTranslateAlbum, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(strings.batchTranslateAlbumDesc, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.startBatchAlbumTranslation()
+                                },
+                                leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.secondary) }
+                            )
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                            DropdownMenuItem(
+                                text = { Text(strings.convertCurrentTrackToTraditional, style = MaterialTheme.typography.bodyMedium) },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.convertCurrentTrackTranslation(toTraditional = true)
+                                },
+                                leadingIcon = { Icon(Icons.Default.Translate, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(strings.convertCurrentTrackToSimplified, style = MaterialTheme.typography.bodyMedium) },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.convertCurrentTrackTranslation(toTraditional = false)
+                                },
+                                leadingIcon = { Icon(Icons.Default.Translate, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            )
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                            DropdownMenuItem(
+                                text = { Text(strings.editLyricsAction, style = MaterialTheme.typography.bodyMedium) },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.openEditSheet(true)
+                                },
+                                leadingIcon = { Icon(Icons.Default.EditNote, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(strings.settingsTitle, style = MaterialTheme.typography.bodyMedium) },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.openAiConfig(true)
+                                },
+                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = basePaperColor
+        containerColor = Color(0xFF0F0F12)
     ) { paddingValues ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(backgroundGradient)
-                .padding(paddingValues)
+            modifier = Modifier.fillMaxSize()
         ) {
+            val coverUrl = state.albumWithTracks?.album?.coverUrl
+
+            // 沉浸式唱片封面高斯模糊底图 (Apple Music 风格动态流光背景)
+            if (!coverUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(coverUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = 0.38f
+                            scaleX = 1.4f
+                            scaleY = 1.4f
+                        }
+                        .then(
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                Modifier.blur(80.dp)
+                            } else Modifier
+                        )
+                )
+            }
+
+            // 纵深暗阶遮罩 (Apple Music 暗黑沉浸氛围)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color(0xFF1E1E22).copy(alpha = 0.70f),
+                                Color(0xFF141417).copy(alpha = 0.88f),
+                                Color(0xFF0F0F12)
+                            )
+                        )
+                    )
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
             val strings = com.linernotes.app.core.i18n.LocalStrings.current
 
             Column(modifier = Modifier.fillMaxSize()) {
@@ -521,28 +563,15 @@ fun LyricBookletScreen(
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 148.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 180.dp),
+                            horizontalAlignment = Alignment.Start
                         ) {
-                            item {
-                                BookletHeaderSection(
-                                    coverUrl = state.albumWithTracks?.album?.coverUrl ?: "",
-                                    albumTitle = state.albumWithTracks?.album?.title ?: "",
-                                    translatedTitle = state.albumWithTracks?.album?.translatedTitle,
-                                    artist = state.albumWithTracks?.album?.artist ?: "",
-                                    releaseYear = state.albumWithTracks?.album?.releaseYear ?: "",
-                                    currentTrackNum = currentTrack?.trackNumber ?: 1,
-                                    totalTracks = totalTracks
-                                )
-                                Spacer(modifier = Modifier.height(28.dp))
-                            }
-
                             if (state.alignedLyrics.isEmpty()) {
                                 item {
                                     Text(
                                         text = strings.noLyrics,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                        color = Color.White.copy(alpha = 0.5f),
                                         modifier = Modifier.padding(top = 64.dp)
                                     )
                                 }
@@ -556,6 +585,9 @@ fun LyricBookletScreen(
                                         isCompanionPlaying = state.isCompanionPlaying,
                                         onClick = { viewModel.onLyricLineClicked(line) }
                                     )
+                                }
+                                item {
+                                    Spacer(modifier = Modifier.height(32.dp))
                                 }
                             }
                         }
@@ -588,6 +620,7 @@ fun LyricBookletScreen(
             )
         }
     }
+}
 
     if (state.isEditingSheetOpen && currentTrack != null) {
         EditLyricSheet(
@@ -622,6 +655,56 @@ fun LyricBookletScreen(
             onDisconnect = { viewModel.disconnectCdPlayer() },
             onDismiss = { viewModel.openCdSheet(false) }
         )
+    }
+
+    if (isCoverViewerOpen && !state.albumWithTracks?.album?.coverUrl.isNullOrBlank()) {
+        val cover = state.albumWithTracks?.album?.coverUrl!!
+        Dialog(onDismissRequest = { isCoverViewerOpen = false }) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xFF1B1B20),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .shadow(elevation = 24.dp, shape = RoundedCornerShape(24.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(cover)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = state.albumWithTracks?.album?.title ?: "",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = state.albumWithTracks?.album?.artist ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.70f),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -999,80 +1082,6 @@ private fun formatTime(ms: Long): String {
     return String.format(java.util.Locale.US, "%02d:%02d", min, sec)
 }
 
-@Composable
-private fun BookletHeaderSection(
-    coverUrl: String,
-    albumTitle: String,
-    translatedTitle: String?,
-    artist: String,
-    releaseYear: String,
-    currentTrackNum: Int,
-    totalTracks: Int
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(coverUrl)
-                .crossfade(true)
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(112.dp)
-                .shadow(elevation = 16.dp, shape = RoundedCornerShape(12.dp))
-                .clip(RoundedCornerShape(12.dp))
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-            shape = CircleShape
-        ) {
-            Text(
-                text = "TRACK ${currentTrackNum.toString().padStart(2, '0')} / ${totalTracks.toString().padStart(2, '0')}",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    letterSpacing = 1.8.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = albumTitle,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        if (!translatedTitle.isNullOrBlank()) {
-            Text(
-                text = translatedTitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-        }
-
-        Spacer(modifier = Modifier.height(2.dp))
-
-        Text(
-            text = "$artist • $releaseYear",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            textAlign = TextAlign.Center
-        )
-    }
-}
 
 /**
  * 具有毫秒级时间轴聚焦动效的歌词行 (Tap-to-seek, smooth animated scale/alpha)
@@ -1086,62 +1095,63 @@ private fun LyricLineItem(
     onClick: () -> Unit
 ) {
     if (line.isStanzaBreak) {
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(28.dp))
         return
     }
 
     val alphaAnim by animateFloatAsState(
-        targetValue = if (isActive) 1.0f else if (isCompanionPlaying) 0.38f else 0.85f,
+        targetValue = if (isActive) 1.0f else if (isCompanionPlaying) 0.38f else 0.80f,
         animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "lyricAlpha"
     )
 
     val scaleAnim by animateFloatAsState(
-        targetValue = if (isActive) 1.05f else 1.0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        targetValue = if (isActive) 1.03f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
         label = "lyricScale"
     )
-
-    val activeTextColor = if (isActive) Color.White else MaterialTheme.colorScheme.onSurface
-    val activeTransColor = if (isActive) Color(0xFFD0BCFF) else MaterialTheme.colorScheme.onSurfaceVariant
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = if (mode == LyricDisplayMode.BILINGUAL) 6.dp else 4.dp)
+            .padding(horizontal = 4.dp, vertical = if (mode == LyricDisplayMode.BILINGUAL) 12.dp else 8.dp)
             .graphicsLayer {
                 alpha = alphaAnim
                 scaleX = scaleAnim
                 scaleY = scaleAnim
+                transformOrigin = TransformOrigin(0f, 0.5f)
             },
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.Start
     ) {
         when (mode) {
             LyricDisplayMode.BILINGUAL -> {
                 if (line.original.isNotBlank()) {
                     Text(
                         text = line.original,
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                            lineHeight = 26.sp,
-                            letterSpacing = 0.2.sp
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 36.sp,
+                            letterSpacing = (-0.3).sp
                         ),
-                        color = activeTextColor,
-                        textAlign = TextAlign.Center
+                        color = if (isActive) Color.White else Color.White.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
+                        textAlign = TextAlign.Start
                     )
                 }
                 if (line.translation.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(5.dp))
                     Text(
                         text = line.translation,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            lineHeight = 22.sp,
-                            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 24.sp,
+                            letterSpacing = 0.2.sp
                         ),
-                        color = activeTransColor.copy(alpha = if (isActive) 1f else 0.75f),
-                        textAlign = TextAlign.Center
+                        color = if (isActive) Color(0xFFEDE8E3).copy(alpha = 0.88f) else Color.White.copy(alpha = if (isCompanionPlaying) 0.28f else 0.45f),
+                        textAlign = TextAlign.Start
                     )
                 }
             }
@@ -1150,13 +1160,14 @@ private fun LyricLineItem(
                 if (line.original.isNotBlank()) {
                     Text(
                         text = line.original,
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                            lineHeight = 30.sp,
-                            letterSpacing = 0.4.sp
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 38.sp,
+                            letterSpacing = (-0.3).sp
                         ),
-                        color = activeTextColor,
-                        textAlign = TextAlign.Center
+                        color = if (isActive) Color.White else Color.White.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
+                        textAlign = TextAlign.Start
                     )
                 }
             }
@@ -1165,12 +1176,13 @@ private fun LyricLineItem(
                 if (line.translation.isNotBlank()) {
                     Text(
                         text = line.translation,
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                            lineHeight = 30.sp
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 32.sp
                         ),
-                        color = activeTextColor,
-                        textAlign = TextAlign.Center
+                        color = if (isActive) Color.White else Color.White.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
+                        textAlign = TextAlign.Start
                     )
                 }
             }
@@ -1178,50 +1190,4 @@ private fun LyricLineItem(
     }
 }
 
-/**
- * Gemini 风格胶囊分段模式切换器 (Pill Segmented Control)
- */
-@Composable
-private fun SingleChoiceSegmentedControl(
-    currentMode: LyricDisplayMode,
-    onModeSelected: (LyricDisplayMode) -> Unit
-) {
-    val strings = com.linernotes.app.core.i18n.LocalStrings.current
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-        modifier = Modifier.height(36.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(3.dp)
-        ) {
-            SegmentItem(strings.modeBilingual, currentMode == LyricDisplayMode.BILINGUAL) {
-                onModeSelected(LyricDisplayMode.BILINGUAL)
-            }
-            SegmentItem(strings.modeOriginal, currentMode == LyricDisplayMode.ORIGINAL_ONLY) {
-                onModeSelected(LyricDisplayMode.ORIGINAL_ONLY)
-            }
-            SegmentItem(strings.modeTranslated, currentMode == LyricDisplayMode.TRANSLATED_ONLY) {
-                onModeSelected(LyricDisplayMode.TRANSLATED_ONLY)
-            }
-        }
-    }
-}
 
-@Composable
-private fun SegmentItem(text: String, isSelected: Boolean, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-        )
-    }
-}
