@@ -47,6 +47,10 @@ object LyricSanitizer {
      */
     fun matchFromDictionary(token: String): String? {
         if (!token.contains('*')) return null
+        val letters = token.filter { it.isLetter() }
+        // 纯星号（如 *****）必须交由参考歌词对齐，词典不武断猜测
+        if (letters.isEmpty()) return null
+
         val clean = token.lowercase()
         val regexStr = "^" + clean.replace("*", ".") + "$"
         val pattern = Pattern.compile(regexStr)
@@ -61,8 +65,8 @@ object LyricSanitizer {
         }
 
         return when {
-            token.all { it.isUpperCase() || it == '*' } -> matched.uppercase()
-            token.firstOrNull()?.isUpperCase() == true -> matched.replaceFirstChar { it.uppercase() }
+            letters.all { it.isUpperCase() } -> matched.uppercase()
+            letters.first().isUpperCase() -> matched.replaceFirstChar { it.uppercase() }
             else -> matched
         }
     }
