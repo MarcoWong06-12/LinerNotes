@@ -87,6 +87,7 @@ object LyricAligner {
         val origLines = rawOrigLines.map { cleanLine(it) }
         val transLines = rawTransLines.map { cleanLine(it) }
         val origTimes = rawOrigLines.map { extractTimestampMs(it) }
+        val transTimes = rawTransLines.map { extractTimestampMs(it) }
 
         if (transLines.isEmpty() || transLines.all { it.isBlank() }) {
             // 没有翻译时，纯净展示原文
@@ -101,9 +102,68 @@ object LyricAligner {
             }
         }
 
-        val isExactSizeMatch = origLines.size == transLines.size
+        val hasOrigTimestamps = origTimes.any { it != null }
+        val hasTransTimestamps = transTimes.any { it != null }
 
         val result = ArrayList<BilingualLyricLine>()
+
+        if (hasOrigTimestamps && hasTransTimestamps) {
+            // 双通道高精度时间轴对齐系统：
+            // 解决前奏制作人、作词口白等导致的歌词与译文错位问题（杜绝"牛头不对马嘴"）
+            val matchedTrans = MutableList(origLines.size) { "" }
+            val usedTransIndices = BooleanArray(transLines.size) { false }
+
+            // Pass 1: 绝对时间戳精准对齐 (diff == 0ms)
+            for (i in origLines.indices) {
+                val oTime = origTimes[i] ?: continue
+                for (j in transLines.indices) {
+                    if (!usedTransIndices[j] && transTimes[j] == oTime) {
+                        matchedTrans[i] = transLines[j]
+                        usedTransIndices[j] = true
+                        break
+                    }
+                }
+            }
+
+            // Pass 2: 邻近微时间差吸附 (diff <= 500ms)
+            for (i in origLines.indices) {
+                if (matchedTrans[i].isNotBlank()) continue
+                val oTime = origTimes[i] ?: continue
+                var bestDiff = 500L
+                var bestJ = -1
+                for (j in transLines.indices) {
+                    if (!usedTransIndices[j] && transTimes[j] != null) {
+                        val diff = kotlin.math.abs(oTime - transTimes[j]!!)
+                        if (diff <= bestDiff) {
+                            bestDiff = diff
+                            bestJ = j
+                        }
+                    }
+                }
+                if (bestJ != -1) {
+                    matchedTrans[i] = transLines[bestJ]
+                    usedTransIndices[bestJ] = true
+                }
+            }
+
+            for (i in origLines.indices) {
+                val orig = origLines[i]
+                val time = origTimes[i]
+                val trans = matchedTrans[i]
+                result.add(
+                    BilingualLyricLine(
+                        lineNumber = i + 1,
+                        original = orig,
+                        translation = trans,
+                        isStanzaBreak = orig.isBlank() && trans.isBlank(),
+                        startTimeMs = time
+                    )
+                )
+            }
+            return result
+        }
+
+        val isExactSizeMatch = origLines.size == transLines.size
 
         if (isExactSizeMatch) {
             // 行数完全对齐时（如时间戳精准对齐生成的原歌词与译文），按行 1:1 绝对映射，杜绝错位
@@ -225,8 +285,10 @@ object LyricAligner {
                 }
             }
 
-            // 查找时间戳偏差在 180ms 内的对应译文行
-            val matchedTrans = transTimed.find { Math.abs(it.ms - current.ms) <= 180 }
+            // 查找时间戳最匹配且偏差在 500ms 内的对应译文行
+            val matchedTrans = transTimed
+                .filter { Math.abs(it.ms - current.ms) <= 500 }
+                .minByOrNull { Math.abs(it.ms - current.ms) }
             val transText = matchedTrans?.text?.trim() ?: ""
 
             val tag = formatTimestamp(current.ms)

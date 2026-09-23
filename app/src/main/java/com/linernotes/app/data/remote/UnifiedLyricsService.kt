@@ -5,6 +5,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withTimeoutOrNull
 
+import com.linernotes.app.core.lyric.LyricSanitizer
+
 object UnifiedLyricsService {
 
     private val TIMESTAMP_REGEX = Regex("""\[\d{2}:\d{2}(?:\.\d{1,3})?\]""")
@@ -18,13 +20,16 @@ object UnifiedLyricsService {
 
         return when (pref) {
             AiPreferences.LyricsSourcePreference.NETEASE_ONLY -> {
-                NetEaseLyricsService.fetchLyrics(trackTitle, artistName)
+                val res = NetEaseLyricsService.fetchLyrics(trackTitle, artistName)
+                res?.let { sanitizeResult(it, null) }
             }
             AiPreferences.LyricsSourcePreference.QQ_ONLY -> {
-                QQMusicLyricsService.fetchLyrics(trackTitle, artistName)
+                val res = QQMusicLyricsService.fetchLyrics(trackTitle, artistName)
+                res?.let { sanitizeResult(it, null) }
             }
             AiPreferences.LyricsSourcePreference.KUGOU_ONLY -> {
-                KugouLyricsService.fetchLyrics(trackTitle, artistName)
+                val res = KugouLyricsService.fetchLyrics(trackTitle, artistName)
+                res?.let { sanitizeResult(it, null) }
             }
             AiPreferences.LyricsSourcePreference.MUSIXMATCH_ONLY -> {
                 MusixmatchLyricsService.fetchLyrics(trackTitle, artistName)
@@ -71,12 +76,14 @@ object UnifiedLyricsService {
 
         val neteaseRes = neteaseDeferred.await()
         if (neteaseRes != null && neteaseRes.isBilingual && neteaseRes.originalLyrics.isNotBlank()) {
-            return@supervisorScope neteaseRes
+            val lrclibRes = lrclibDeferred.await()
+            return@supervisorScope sanitizeResult(neteaseRes, lrclibRes)
         }
 
         val qqRes = qqDeferred.await()
         if (qqRes != null && qqRes.isBilingual && qqRes.originalLyrics.isNotBlank()) {
-            return@supervisorScope qqRes
+            val lrclibRes = lrclibDeferred.await()
+            return@supervisorScope sanitizeResult(qqRes, lrclibRes)
         }
 
         val kugouRes = kugouDeferred.await()
@@ -97,12 +104,25 @@ object UnifiedLyricsService {
         // 1. 双语官方精翻 (权重 +1000)
         // 2. 含有时间戳对齐 (权重 +500)
         // 3. 歌词行数丰满度
-        candidates.maxByOrNull { res ->
+        val best = candidates.maxByOrNull { res ->
             var score = 0
             if (res.isBilingual) score += 1000
             if (res.originalLyrics.contains(TIMESTAMP_REGEX)) score += 500
             score += (res.originalLyrics.lines().size).coerceAtMost(100)
             score
         }
+
+        if (best != null) {
+            sanitizeResult(best, lrclibRes)
+        } else null
+    }
+
+    private fun sanitizeResult(result: OnlineLyricsResult, refResult: OnlineLyricsResult?): OnlineLyricsResult {
+        if (!LyricSanitizer.hasCensorship(result.originalLyrics) && !LyricSanitizer.hasCensorship(result.title)) {
+            return result
+        }
+        val cleanLyrics = LyricSanitizer.decensorLyrics(result.originalLyrics, refResult?.originalLyrics)
+        val cleanTitle = LyricSanitizer.decensorTitle(result.title, refResult?.title)
+        return result.copy(title = cleanTitle, originalLyrics = cleanLyrics)
     }
 }

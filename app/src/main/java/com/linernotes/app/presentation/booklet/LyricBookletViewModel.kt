@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.linernotes.app.core.lyric.LyricAligner
+import com.linernotes.app.core.lyric.LyricSanitizer
 import com.linernotes.app.core.preference.AiPreferences
 import com.linernotes.app.data.local.entity.TrackEntity
 import com.linernotes.app.data.remote.TranslationService
@@ -94,7 +95,16 @@ class LyricBookletViewModel @Inject constructor(
         viewModelScope.launch {
             repository.getAlbumBookletStream(id).collect { albumWithTracks ->
                 if (albumWithTracks != null) {
-                    val tracks = albumWithTracks.tracks.sortedBy { it.trackNumber }
+                    val rawTracks = albumWithTracks.tracks.sortedBy { it.trackNumber }
+                    val tracks = rawTracks.map { t ->
+                        val cleanTitle = if (LyricSanitizer.hasCensorship(t.title)) LyricSanitizer.decensorTitle(t.title) else t.title
+                        val cleanLyrics = if (LyricSanitizer.hasCensorship(t.originalLyrics)) LyricSanitizer.decensorLyrics(t.originalLyrics ?: "") else t.originalLyrics
+                        if (cleanTitle != t.title || cleanLyrics != t.originalLyrics) {
+                            t.copy(title = cleanTitle, originalLyrics = cleanLyrics)
+                        } else {
+                            t
+                        }
+                    }
                     val safeIndex = _uiState.value.currentTrackIndex.coerceIn(0, (tracks.size - 1).coerceAtLeast(0))
                     val currentTrack = tracks.getOrNull(safeIndex)
 
@@ -151,7 +161,8 @@ class LyricBookletViewModel @Inject constructor(
                 userSelectedTrackIndex = index
             }
             val track = tracks[index]
-            val aligned = LyricAligner.align(track.originalLyrics, track.translatedLyrics)
+            val cleanLyrics = if (LyricSanitizer.hasCensorship(track.originalLyrics)) LyricSanitizer.decensorLyrics(track.originalLyrics ?: "") else track.originalLyrics
+            val aligned = LyricAligner.align(cleanLyrics, track.translatedLyrics)
             val duration = computeTrackDuration(track, aligned)
             _uiState.update {
                 it.copy(
@@ -159,7 +170,8 @@ class LyricBookletViewModel @Inject constructor(
                     alignedLyrics = aligned,
                     currentPositionMs = 0L,
                     trackDurationMs = duration,
-                    activeLineIndex = -1
+                    activeLineIndex = -1,
+                    isCdTracklistOpen = false
                 )
             }
             if (notifyCdPlayer && _uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
@@ -355,9 +367,10 @@ class LyricBookletViewModel @Inject constructor(
             // 未匹配唱片曲目时，直接指令 CD 机播放对应的 0-based 物理音轨索引
             userTrackSelectionTimestamp = System.currentTimeMillis()
             userSelectedTrackIndex = trackIndex
-            _uiState.update { it.copy(currentTrackIndex = trackIndex) }
+            _uiState.update { it.copy(currentTrackIndex = trackIndex, isCdTracklistOpen = false) }
             shanlingBluetoothManager.playTrack(trackIndex)
         }
+        _uiState.update { it.copy(isCdTracklistOpen = false) }
         startCompanionInternal()
     }
 

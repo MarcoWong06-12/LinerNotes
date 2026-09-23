@@ -139,6 +139,11 @@ fun LyricBookletScreen(
         }
     }
 
+    // 切换曲目时立即复位歌词列表视口至顶部
+    LaunchedEffect(state.currentTrackIndex) {
+        listState.scrollToItem(0)
+    }
+
     val basePaperColor = Color(0xFF121215)
     val backgroundGradient = remember(state.ambientCoverColor) {
         Brush.verticalGradient(
@@ -679,6 +684,7 @@ fun LyricBookletScreen(
             shelfAlbums = shelfAlbums,
             onSelectTrack = { trackIndex ->
                 viewModel.playCdTrack(trackIndex)
+                viewModel.openCdTracklist(false)
             },
             onTogglePlay = {
                 viewModel.toggleCompanionPlay()

@@ -1,0 +1,164 @@
+package com.linernotes.app.core.lyric
+
+import java.util.regex.Pattern
+
+/**
+ * 歌词与曲目标题反审查/反和谐还原引擎 (Lyric Sanitizer / Decensoring Engine)
+ *
+ * 针对国内流媒体平台审查机制中对脏话和敏感词的掩码替换（如 B***h, *****, ****ing, n****s），
+ * 在完全保留高品质双语翻译与时间戳的同时，毫秒级还原原版英文词汇（如 Bitch, fucking, niggas）。
+ */
+object LyricSanitizer {
+
+    private val PROFANITY_LIST = listOf(
+        "fuck", "fucking", "fucked", "fucker", "fuckers", "fucks",
+        "motherfucker", "motherfuckers", "motherfucking",
+        "bitch", "bitches", "bitching", "bitchy",
+        "shit", "shits", "shitty", "bullshit", "horseshit", "dipshit",
+        "nigga", "niggas", "niggaz", "nigger", "niggers",
+        "ass", "asses", "asshole", "assholes", "badass", "jackass", "dumbass",
+        "dick", "dicks", "dickhead",
+        "cock", "cocks", "cocksucker",
+        "pussy", "pussies",
+        "cunt", "cunts",
+        "bastard", "bastards",
+        "slut", "sluts", "whore", "whores",
+        "damn", "damned", "goddamn"
+    )
+
+    private val CENSOR_CHECK_REGEX = Regex("""[a-zA-Z]*\*+[a-zA-Z]*|\*{2,}""")
+    private val WORD_TOKEN_REGEX = Regex("""[\w'’*]+""")
+    private val TIMESTAMP_REGEX = Regex("""^\[\d{2}:\d{2}(?:\.\d{1,3})?\]""")
+
+    /**
+     * 判断文本中是否包含审查掩码星号
+     */
+    fun hasCensorship(text: String?): Boolean {
+        if (text.isNullOrBlank() || !text.contains('*')) return false
+        return CENSOR_CHECK_REGEX.containsMatchIn(text)
+    }
+
+    /**
+     * 单个词的本地字典反和谐匹配 (支持 B***h, f***ing, ****ing, s***, n**** 等)
+     */
+    fun matchFromDictionary(token: String): String? {
+        if (!token.contains('*')) return null
+        val clean = token.lowercase()
+        val regexStr = "^" + clean.replace("*", ".") + "$"
+        val pattern = Pattern.compile(regexStr)
+
+        val candidates = PROFANITY_LIST.filter { pattern.matcher(it).matches() }
+        if (candidates.size == 1) {
+            val matched = candidates.first()
+            return when {
+                token.all { it.isUpperCase() || it == '*' } -> matched.uppercase()
+                token.firstOrNull()?.isUpperCase() == true -> matched.replaceFirstChar { it.uppercase() }
+                else -> matched
+            }
+        }
+        return null
+    }
+
+    /**
+     * 单行歌词或标题反和谐
+     * @param censoredLine 包含掩码的行 (如 "Life's a B***h" 或 "when you're gonna go Life's a ***** and then you die;")
+     * @param uncensoredRefLine 可选的无审查参考行 (如来自 LRCLIB)
+     */
+    fun decensorLine(censoredLine: String, uncensoredRefLine: String? = null): String {
+        if (!hasCensorship(censoredLine)) return censoredLine
+
+        // 阶段 1：使用本地词典对可推断词（如 B***h, ****ing, s***, n****）进行精准替换
+        val stage1 = censoredLine.replace(CENSOR_CHECK_REGEX) { matchResult ->
+            val tok = matchResult.value
+            matchFromDictionary(tok) ?: tok
+        }
+
+        if (!stage1.contains('*')) return stage1
+        if (uncensoredRefLine.isNullOrBlank()) return stage1
+
+        // 阶段 2：针对纯星号（如 *****）结合无审查参考行进行词级别对应替换
+        val cleanRefLine = uncensoredRefLine.replace(TIMESTAMP_REGEX, "").trim()
+        val refWords = WORD_TOKEN_REGEX.findAll(cleanRefLine).map { it.value }.toList()
+        if (refWords.isEmpty()) return stage1
+
+        val tokens = stage1.split(Regex("(?<=[\\w'’*])(?=[^\\w'’*])|(?<=[^\\w'’*])(?=[\\w'’*])"))
+        val result = StringBuilder()
+        var wordIdx = 0
+
+        for (t in tokens) {
+            if (WORD_TOKEN_REGEX.matches(t)) {
+                if (t.contains('*')) {
+                    var replacement: String? = null
+                    if (wordIdx < refWords.size) {
+                        replacement = refWords[wordIdx]
+                    } else {
+                        // 容错搜索长度相近的词
+                        replacement = refWords.firstOrNull { Math.abs(it.length - t.length) <= 1 }
+                    }
+                    result.append(replacement ?: t)
+                } else {
+                    result.append(t)
+                }
+                wordIdx++
+            } else {
+                result.append(t)
+            }
+        }
+
+        return result.toString()
+    }
+
+    /**
+     * 歌曲标题反和谐 (如 "Life's a B***h" -> "Life's a Bitch")
+     */
+    fun decensorTitle(title: String, refTitle: String? = null): String {
+        return decensorLine(title, refTitle)
+    }
+
+    /**
+     * 整首歌曲歌词反和谐
+     * @param censoredLyrics 包含审查掩码的歌词文本 (支持 LRC 时间轴格式)
+     * @param uncensoredRefLyrics 可选的无审查全球参考歌词 (如 LRCLIB 返回的英文纯净歌词)
+     */
+    fun decensorLyrics(censoredLyrics: String, uncensoredRefLyrics: String? = null): String {
+        if (!hasCensorship(censoredLyrics)) return censoredLyrics
+
+        val cLines = censoredLyrics.lines()
+        if (uncensoredRefLyrics.isNullOrBlank()) {
+            return cLines.joinToString("\n") { decensorLine(it, null) }
+        }
+
+        val rLines = uncensoredRefLyrics.lines()
+
+        // 构建参考行提取器（若有时间戳则按时间戳匹配，否则按顺序匹配）
+        val refMapByTimestamp = mutableMapOf<String, String>()
+        val pureRefLines = mutableListOf<String>()
+
+        for (rl in rLines) {
+            val tsMatch = TIMESTAMP_REGEX.find(rl.trim())
+            if (tsMatch != null) {
+                refMapByTimestamp[tsMatch.value] = rl
+            }
+            val cleaned = rl.replace(TIMESTAMP_REGEX, "").trim()
+            if (cleaned.isNotBlank()) {
+                pureRefLines.add(cleaned)
+            }
+        }
+
+        var pureRefIdx = 0
+        val sanitizedLines = cLines.map { cl ->
+            val tsMatch = TIMESTAMP_REGEX.find(cl.trim())
+            val refLine = if (tsMatch != null && refMapByTimestamp.containsKey(tsMatch.value)) {
+                refMapByTimestamp[tsMatch.value]
+            } else if (cl.replace(TIMESTAMP_REGEX, "").trim().isNotBlank() && pureRefIdx < pureRefLines.size) {
+                pureRefLines[pureRefIdx++]
+            } else {
+                null
+            }
+
+            decensorLine(cl, refLine)
+        }
+
+        return sanitizedLines.joinToString("\n")
+    }
+}

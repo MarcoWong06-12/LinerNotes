@@ -62,9 +62,9 @@ class TranslationService(
         val targetCode = targetLanguageCode ?: targetLanguageProvider()
         val targetIso = TranslationTargetLanguage.fromCode(targetCode).fallbackIso
 
-        // 1. 翻译歌词主体
+        // 1. 翻译歌词主体 (无损保护时间轴与严格 1:1 换行)
         val translatedLyrics = if (originalLyrics.isNotBlank()) {
-            translateText(originalLyrics, targetIso) ?: originalLyrics
+            translateLyricsWithTimestamps(originalLyrics, targetIso)
         } else ""
 
         // 2. 翻译歌曲标题
@@ -79,6 +79,80 @@ class TranslationService(
             translatedTitle = translatedTitle,
             translatedLyrics = translatedLyrics
         )
+    }
+
+    private val TIMESTAMP_REGEX = Regex("""^\[\d{2}:\d{2}(?:\.\d{1,3})?\]""")
+
+    /**
+     * 针对带有 LRC 时间轴的多行歌词进行剥离时间戳、纯文本分块翻译并原样复位时间戳，
+     * 杜绝有道等翻译引擎将中括号时间标签当作乱码吞行或串联，实现 100% 逐行毫秒级无损对齐。
+     */
+    suspend fun translateLyricsWithTimestamps(lyrics: String, targetIso: String): String = withContext(Dispatchers.IO) {
+        if (lyrics.isBlank()) return@withContext ""
+
+        val rawLines = lyrics.lines()
+        val timestamps = rawLines.map { line ->
+            TIMESTAMP_REGEX.find(line.trim())?.value
+        }
+        val cleanLines = rawLines.map { line ->
+            line.replace(TIMESTAMP_REGEX, "").trim()
+        }
+
+        // 收集非空需要翻译的行及其行索引
+        val nonBlankEntries = cleanLines.mapIndexedNotNull { index, text ->
+            if (text.isNotBlank()) index to text else null
+        }
+
+        if (nonBlankEntries.isEmpty()) {
+            return@withContext lyrics
+        }
+
+        val textsToTranslate = nonBlankEntries.map { it.second }
+        // 15 行智能分块并发翻译
+        val chunks = textsToTranslate.chunked(CHUNK_LINE_COUNT)
+        val translatedTexts = try {
+            val translatedChunks = supervisorScope {
+                chunks.map { chunk ->
+                    async {
+                        val chunkText = chunk.joinToString("\n")
+                        val youdaoResult = translateChunkViaYoudao(chunkText)
+                        if (youdaoResult != null && youdaoResult.isNotEmpty()) {
+                            youdaoResult
+                        } else {
+                            val googleFallback = translateViaGoogle(chunkText, targetIso, "https://translate.googleapis.com/translate_a/single")
+                            if (!googleFallback.isNullOrBlank()) {
+                                googleFallback.lines()
+                            } else {
+                                translateViaMyMemory(chunkText, targetIso)?.lines() ?: chunk
+                            }
+                        }
+                    }
+                }.awaitAll()
+            }
+            translatedChunks.flatten()
+        } catch (e: Exception) {
+            textsToTranslate
+        }
+
+        // 将翻译结果精确拼回原位置并还原时间戳标签
+        val resultLines = rawLines.toMutableList()
+        for (i in resultLines.indices) {
+            val tag = timestamps[i]
+            resultLines[i] = if (tag != null) "$tag" else ""
+        }
+
+        for (k in nonBlankEntries.indices) {
+            val origIndex = nonBlankEntries[k].first
+            val transText = if (k < translatedTexts.size) translatedTexts[k].trim() else ""
+            val tag = timestamps[origIndex]
+            resultLines[origIndex] = if (tag != null) {
+                if (transText.isNotBlank()) "$tag $transText" else tag
+            } else {
+                transText
+            }
+        }
+
+        resultLines.joinToString("\n")
     }
 
     /**
