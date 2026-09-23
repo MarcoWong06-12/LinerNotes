@@ -53,13 +53,13 @@ object ShanlingSyncLinkProtocol {
     const val SL_HEART_BEAT_RESP = 1793
     const val SL_CD_PLAY_REQ = 1796
 
-    // Control Types
-    const val CONTROL_PLAY_SONG = 1
-    const val CONTROL_NEXT_SONG = 2
-    const val CONTROL_PREV_SONG = 3
-    const val CONTROL_STOP_SONG = 4
-    const val CONTROL_MUTE_SONG = 5
-    const val CONTROL_PAUSE_SONG = 6
+    // Control Types (Protobuf enum ControlType in com.shanling.eddictplayer.Synclink)
+    const val CONTROL_PLAY_SONG = 0
+    const val CONTROL_NEXT_SONG = 1
+    const val CONTROL_PREV_SONG = 2
+    const val CONTROL_STOP_SONG = 3
+    const val CONTROL_MUTE_SONG = 4
+    const val CONTROL_PAUSE_SONG = 5
 
     data class Frame(
         val messageId: Int,
@@ -193,12 +193,12 @@ object ShanlingSyncLinkProtocol {
 
     /**
      * Decodes PlayStatusResp / PlayStatusNotify Protobuf payload:
-     * Field 1 (playstatus): ControlType (1=PLAY, 6=PAUSE, 4=STOP)
-     * Field 2 (current_position): track number (index on CD)
+     * Field 1 (playstatus): ControlType (0=PLAY_SONG, 5=PAUSE_SONG, 3=STOP_SONG)
+     * Field 2 (current_position): track number (1-based physical CD track index)
      * Field 3 (total_songs): total number of tracks on CD
      */
     fun decodePlayStatus(bytes: ByteArray): PlayStatusData {
-        var playStatus = 0
+        var playStatus = -1
         var currentPosition = 1
         var totalSongs = 0
         var i = 0
@@ -225,11 +225,7 @@ object ShanlingSyncLinkProtocol {
                 else -> break
             }
         }
-        val isPlaying = (playStatus == CONTROL_PLAY_SONG || playStatus == 1) &&
-                playStatus != CONTROL_PAUSE_SONG &&
-                playStatus != CONTROL_STOP_SONG &&
-                playStatus != 2 &&
-                playStatus != 0
+        val isPlaying = playStatus == CONTROL_PLAY_SONG
         return PlayStatusData(
             isPlaying = isPlaying,
             trackNumber = currentPosition,

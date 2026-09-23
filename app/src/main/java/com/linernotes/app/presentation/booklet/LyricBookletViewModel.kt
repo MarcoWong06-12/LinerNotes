@@ -37,6 +37,9 @@ class LyricBookletViewModel @Inject constructor(
 ) : ViewModel() {
 
     private var currentAlbumId: String = ""
+    private var userTrackSelectionTimestamp = 0L
+    private var userSelectedTrackIndex = -1
+    private var userSeekTimestamp = 0L
 
     private val _uiState = MutableStateFlow(BookletUiState())
     val uiState: StateFlow<BookletUiState> = _uiState.asStateFlow()
@@ -62,7 +65,7 @@ class LyricBookletViewModel @Inject constructor(
                         userMessage = cdState.errorMessage ?: it.userMessage
                     )
                 }
-                if (cdState.connectionState == CdConnectionState.CONNECTED) {
+                if (cdState.connectionState == CdConnectionState.CONNECTED && cdState.currentTrackNumber > 0) {
                     onExternalCdStateReceived(
                         trackNo = cdState.currentTrackNumber,
                         posMs = cdState.currentPositionMs,
@@ -143,6 +146,10 @@ class LyricBookletViewModel @Inject constructor(
     fun selectTrack(index: Int, notifyCdPlayer: Boolean = true) {
         val tracks = _uiState.value.albumWithTracks?.tracks ?: return
         if (index in tracks.indices) {
+            if (notifyCdPlayer) {
+                userTrackSelectionTimestamp = System.currentTimeMillis()
+                userSelectedTrackIndex = index
+            }
             val track = tracks[index]
             val aligned = LyricAligner.align(track.originalLyrics, track.translatedLyrics)
             val duration = computeTrackDuration(track, aligned)
@@ -156,9 +163,9 @@ class LyricBookletViewModel @Inject constructor(
                 )
             }
             if (notifyCdPlayer && _uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
-                // Audio CD Red Book track numbers are 1-based (1 for 1st song, 2 for 2nd song)
-                val cdTrackNumber = if (track.trackNumber > 0) track.trackNumber else (index + 1)
-                shanlingBluetoothManager.playTrack(cdTrackNumber)
+                // CdPlayQueueReq.index is 0-based (0 for 1st song, 1 for 2nd song...)
+                val cdQueueIndex = if (track.trackNumber > 0) track.trackNumber - 1 else index
+                shanlingBluetoothManager.playTrack(cdQueueIndex)
             }
         }
     }
@@ -242,6 +249,9 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun seekCompanion(targetMs: Long, notifyCdPlayer: Boolean = true) {
+        if (notifyCdPlayer) {
+            userSeekTimestamp = System.currentTimeMillis()
+        }
         val duration = _uiState.value.trackDurationMs.coerceAtLeast(1000L)
         val clamped = targetMs.coerceIn(0L, duration)
         val activeIdx = findActiveLineIndex(_uiState.value.alignedLyrics, clamped)
@@ -271,12 +281,26 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun onExternalCdStateReceived(trackNo: Int, posMs: Long, isPlaying: Boolean) {
+        if (trackNo <= 0) return
         val tracks = _uiState.value.albumWithTracks?.tracks ?: return
         val targetIndex = resolveTrackIndex(tracks, trackNo)
+
+        val now = System.currentTimeMillis()
+        val isWithinLockout = (now - userTrackSelectionTimestamp) < 3000L
+
+        if (isWithinLockout) {
+            if (targetIndex == userSelectedTrackIndex) {
+                userTrackSelectionTimestamp = 0L
+            } else {
+                // CD 机光头物理寻道中，忽略旧音轨帧上报，防止 UI 闪跳回退
+                return
+            }
+        }
+
         if (targetIndex != -1 && targetIndex != _uiState.value.currentTrackIndex) {
             selectTrack(targetIndex, notifyCdPlayer = false)
         }
-        if (posMs > 0L) {
+        if (now - userSeekTimestamp >= 1500L && posMs > 0L) {
             seekCompanion(posMs, notifyCdPlayer = false)
         }
         if (isPlaying && !_uiState.value.isCompanionPlaying) {
@@ -315,9 +339,10 @@ class LyricBookletViewModel @Inject constructor(
         if (trackIndex in tracks.indices) {
             selectTrack(trackIndex, notifyCdPlayer = true)
         } else {
-            // 未匹配唱片曲目时，直接指令 CD 机播放对应的 1-based 物理音轨
-            val cdTrackNo = (trackIndex + 1).coerceAtLeast(1)
-            shanlingBluetoothManager.playTrack(cdTrackNo)
+            // 未匹配唱片曲目时，直接指令 CD 机播放对应的 0-based 物理音轨索引
+            userTrackSelectionTimestamp = System.currentTimeMillis()
+            userSelectedTrackIndex = trackIndex
+            shanlingBluetoothManager.playTrack(trackIndex)
         }
         startCompanionInternal()
     }
@@ -368,17 +393,28 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun previousTrack() {
-        if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
-            shanlingBluetoothManager.previous()
+        val target = _uiState.value.currentTrackIndex - 1
+        if (target >= 0) {
+            userTrackSelectionTimestamp = System.currentTimeMillis()
+            userSelectedTrackIndex = target
+            if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
+                shanlingBluetoothManager.previous()
+            }
+            selectTrack(target, notifyCdPlayer = false)
         }
-        selectTrack(_uiState.value.currentTrackIndex - 1, notifyCdPlayer = false)
     }
 
     fun nextTrack() {
-        if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
-            shanlingBluetoothManager.next()
+        val tracks = _uiState.value.albumWithTracks?.tracks ?: emptyList()
+        val target = _uiState.value.currentTrackIndex + 1
+        if (target < tracks.size) {
+            userTrackSelectionTimestamp = System.currentTimeMillis()
+            userSelectedTrackIndex = target
+            if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
+                shanlingBluetoothManager.next()
+            }
+            selectTrack(target, notifyCdPlayer = false)
         }
-        selectTrack(_uiState.value.currentTrackIndex + 1, notifyCdPlayer = false)
     }
 
     fun updateAmbientColor(color: Color) {

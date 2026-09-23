@@ -41,11 +41,11 @@ class ShanlingSyncLinkProtocolTest {
 
     @Test
     fun testPlayStatusDecoding() {
-        // Field 1 (playstatus = 1 for PLAY) -> tag 0x08, val 0x01
+        // Field 1 (playstatus = 0 for PLAY) -> tag 0x08, val 0x00
         // Field 2 (current_position = 3 for Track 3) -> tag 0x10, val 0x03
         // Field 3 (total_songs = 12 tracks) -> tag 0x18, val 0x0C
         val payload = byteArrayOf(
-            0x08.toByte(), 0x01.toByte(),
+            0x08.toByte(), 0x00.toByte(),
             0x10.toByte(), 0x03.toByte(),
             0x18.toByte(), 0x0C.toByte()
         )
@@ -75,11 +75,11 @@ class ShanlingSyncLinkProtocolTest {
 
     @Test
     fun testPlayStatusDecodingPaused() {
-        // Field 1 (playstatus = 6 for PAUSE) -> tag 0x08, val 0x06
+        // Field 1 (playstatus = 5 for PAUSE) -> tag 0x08, val 0x05
         // Field 2 (current_position = 2 for Track 2) -> tag 0x10, val 0x02
         // Field 3 (total_songs = 10 tracks) -> tag 0x18, val 0x0A
         val payload = byteArrayOf(
-            0x08.toByte(), 0x06.toByte(),
+            0x08.toByte(), 0x05.toByte(),
             0x10.toByte(), 0x02.toByte(),
             0x18.toByte(), 0x0A.toByte()
         )
@@ -92,9 +92,9 @@ class ShanlingSyncLinkProtocolTest {
 
     @Test
     fun testPlayStatusDecodingStopped() {
-        // Field 1 (playstatus = 4 for STOP) -> tag 0x08, val 0x04
+        // Field 1 (playstatus = 3 for STOP) -> tag 0x08, val 0x03
         val payload = byteArrayOf(
-            0x08.toByte(), 0x04.toByte()
+            0x08.toByte(), 0x03.toByte()
         )
 
         val result = ShanlingSyncLinkProtocol.decodePlayStatus(payload)
@@ -106,12 +106,22 @@ class ShanlingSyncLinkProtocolTest {
         val playReq = ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PLAY_SONG)
         assertEquals(2, playReq.size)
         assertEquals(0x08.toByte(), playReq[0])
-        assertEquals(0x01.toByte(), playReq[1])
+        assertEquals(0x00.toByte(), playReq[1])
 
         val pauseReq = ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PAUSE_SONG)
         assertEquals(2, pauseReq.size)
         assertEquals(0x08.toByte(), pauseReq[0])
-        assertEquals(0x06.toByte(), pauseReq[1])
+        assertEquals(0x05.toByte(), pauseReq[1])
+
+        val nextReq = ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_NEXT_SONG)
+        assertEquals(2, nextReq.size)
+        assertEquals(0x08.toByte(), nextReq[0])
+        assertEquals(0x01.toByte(), nextReq[1])
+
+        val prevReq = ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PREV_SONG)
+        assertEquals(2, prevReq.size)
+        assertEquals(0x08.toByte(), prevReq[0])
+        assertEquals(0x02.toByte(), prevReq[1])
     }
 
     @Test

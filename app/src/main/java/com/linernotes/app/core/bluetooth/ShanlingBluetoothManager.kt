@@ -35,7 +35,7 @@ data class ShanlingCdState(
     val connectionState: CdConnectionState = CdConnectionState.DISCONNECTED,
     val deviceName: String? = null,
     val isPlaying: Boolean = false,
-    val currentTrackNumber: Int = 1,
+    val currentTrackNumber: Int = 0,
     val totalTracks: Int = 0,
     val currentPositionMs: Long = 0L,
     val durationMs: Long = 0L,
@@ -351,12 +351,12 @@ class ShanlingBluetoothManager @Inject constructor(
         }
     }
 
-    fun playTrack(trackNumber: Int) {
-        val validTrack = trackNumber.coerceAtLeast(1)
-        _cdState.update { it.copy(currentTrackNumber = validTrack, isPlaying = true) }
+    fun playTrack(queueIndex: Int) {
+        val validIndex = queueIndex.coerceAtLeast(0)
+        _cdState.update { it.copy(currentTrackNumber = validIndex + 1, isPlaying = true) }
         sendFrame(
             ShanlingSyncLinkProtocol.SL_CD_PLAY_REQ,
-            ShanlingSyncLinkProtocol.encodeCdPlayQueue(validTrack)
+            ShanlingSyncLinkProtocol.encodeCdPlayQueue(validIndex)
         )
         scope.launch {
             delay(300L)
