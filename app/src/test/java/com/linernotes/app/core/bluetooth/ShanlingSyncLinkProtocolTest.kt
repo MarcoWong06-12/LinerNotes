@@ -58,6 +58,22 @@ class ShanlingSyncLinkProtocolTest {
     }
 
     @Test
+    fun testPlayStatusDecodingOmittedField1Default() {
+        // In Proto3, field 1 (playstatus = 0) is omitted over the wire!
+        // Only Field 2 (current_position = 2) and Field 3 (total_songs = 10) are sent.
+        val payload = byteArrayOf(
+            0x10.toByte(), 0x02.toByte(),
+            0x18.toByte(), 0x0A.toByte()
+        )
+
+        val result = ShanlingSyncLinkProtocol.decodePlayStatus(payload)
+        assertTrue("When field 1 is omitted in Proto3, it must default to playing (playstatus=0)", result.isPlaying)
+        assertEquals(2, result.queueIndex)
+        assertEquals(3, result.trackNumber)
+        assertEquals(10, result.totalSongs)
+    }
+
+    @Test
     fun testPlayStatusDecodingPaused() {
         // Field 1 (playstatus = 5 for PAUSE) -> tag 0x08, val 0x05
         // Field 2 (current_position = 1 for Track 2) -> tag 0x10, val 0x01

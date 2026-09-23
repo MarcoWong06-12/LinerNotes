@@ -680,6 +680,9 @@ fun LyricBookletScreen(
             onSelectTrack = { trackIndex ->
                 viewModel.playCdTrack(trackIndex)
             },
+            onTogglePlay = {
+                viewModel.toggleCompanionPlay()
+            },
             onSwitchAlbum = { targetAlbumId ->
                 viewModel.switchAlbum(targetAlbumId)
             },

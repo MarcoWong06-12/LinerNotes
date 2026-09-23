@@ -290,14 +290,16 @@ class LyricBookletViewModel @Inject constructor(
         }
 
         val now = System.currentTimeMillis()
-        val isWithinLockout = (now - userTrackSelectionTimestamp) < 3000L
+        val isWithinLockout = (now - userTrackSelectionTimestamp) < 3500L
 
         if (isWithinLockout) {
-            if (targetIndex == userSelectedTrackIndex) {
-                userTrackSelectionTimestamp = 0L
-            } else {
-                // CD 机光头物理寻道中，忽略旧音轨帧上报，防止 UI 闪跳回退
+            if (targetIndex != userSelectedTrackIndex) {
+                // CD 机光头物理寻道中（通常需 1.5~2.5 秒），严格忽略旧音轨帧上报，防止 UI 闪跳回退
                 return
+            }
+            // 收到新音轨确认后，仅在距用户操作满 1.5 秒后才解除保护罩，确保物理硬件稳态
+            if (now - userTrackSelectionTimestamp > 1500L) {
+                userTrackSelectionTimestamp = 0L
             }
         }
 

@@ -197,7 +197,9 @@ object ShanlingSyncLinkProtocol {
      * Field 3 (total_songs): total number of tracks on CD
      */
     fun decodePlayStatus(bytes: ByteArray): PlayStatusData {
-        var playStatus = -1
+        // In Proto3, default enum value 0 (CONTROL_PLAY_SONG) is omitted over the wire!
+        // Default to CONTROL_PLAY_SONG so that omitted field 1 is correctly treated as playing.
+        var playStatus = CONTROL_PLAY_SONG
         var currentPosition = 0
         var totalSongs = 0
         var i = 0
@@ -224,7 +226,7 @@ object ShanlingSyncLinkProtocol {
                 else -> break
             }
         }
-        val isPlaying = playStatus == CONTROL_PLAY_SONG
+        val isPlaying = playStatus != CONTROL_PAUSE_SONG && playStatus != CONTROL_STOP_SONG
         return PlayStatusData(
             isPlaying = isPlaying,
             queueIndex = currentPosition,

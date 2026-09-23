@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.atomic.AtomicInteger
@@ -273,18 +275,22 @@ class ShanlingBluetoothManager @Inject constructor(
         }
     }
 
+    private val sendMutex = Mutex()
+
     fun sendFrame(commandId: Int, payload: ByteArray = ByteArray(0)) {
         scope.launch {
-            try {
-                val frame = ShanlingSyncLinkProtocol.buildFrame(
-                    messageId = nextSeq(),
-                    commandId = commandId,
-                    payload = payload
-                )
-                outStream?.write(frame)
-                outStream?.flush()
-            } catch (e: Exception) {
-                Log.w(tag, "Failed sending command $commandId: ${e.message}")
+            sendMutex.withLock {
+                try {
+                    val frame = ShanlingSyncLinkProtocol.buildFrame(
+                        messageId = nextSeq(),
+                        commandId = commandId,
+                        payload = payload
+                    )
+                    outStream?.write(frame)
+                    outStream?.flush()
+                } catch (e: Exception) {
+                    Log.w(tag, "Failed sending command $commandId: ${e.message}")
+                }
             }
         }
     }
@@ -365,10 +371,11 @@ class ShanlingBluetoothManager @Inject constructor(
             ShanlingSyncLinkProtocol.SL_CD_PLAY_REQ,
             ShanlingSyncLinkProtocol.encodeCdPlayQueue(validIndex)
         )
-        scope.launch {
-            delay(300L)
-            refreshPlayStatus()
-        }
+        // Note: Do NOT trigger an immediate 300ms refreshPlayStatus() here!
+        // Physical CD drive laser takes 1.5~2.5s to mechanically seek.
+        // Polling at 300ms causes stale old track reports that bounce the UI back.
+        // The CD player will report SL_GET_PLAY_STATUS_NOTIFY / SL_CUR_PLAY_TIME_NOTIFY once settled,
+        // and the 1500ms heartbeat loop will poll naturally.
     }
 
     fun disconnect() {

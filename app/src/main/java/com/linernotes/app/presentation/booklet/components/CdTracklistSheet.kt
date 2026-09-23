@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -56,6 +57,7 @@ fun CdTracklistSheet(
     album: AlbumEntity?,
     shelfAlbums: List<AlbumEntity>,
     onSelectTrack: (trackIndex: Int) -> Unit,
+    onTogglePlay: () -> Unit,
     onSwitchAlbum: (albumId: String) -> Unit,
     onSaveMatchedAlbum: (AlbumEntity, List<TrackEntity>) -> Unit,
     onDismiss: () -> Unit
@@ -270,7 +272,11 @@ fun CdTracklistSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .bouncyClickable {
-                                onSelectTrack(index)
+                                if (isCurrent) {
+                                    onTogglePlay()
+                                } else {
+                                    onSelectTrack(index)
+                                }
                             }
                     ) {
                         Row(
@@ -325,11 +331,11 @@ fun CdTracklistSheet(
                                 )
                             }
 
-                            // 状态图标
+                            // 状态图标：正在播放显示双竖线 Pause，暂停显示三角 PlayArrow
                             if (isCurrent) {
                                 Icon(
-                                    imageVector = if (cdPlaying) Icons.Default.GraphicEq else Icons.Default.PlayArrow,
-                                    contentDescription = null,
+                                    imageVector = if (cdPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (cdPlaying) strings.cdCompanionPause else strings.cdCompanionPlay,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
                                 )
