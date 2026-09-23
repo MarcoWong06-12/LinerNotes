@@ -94,31 +94,28 @@ object LyricSanitizer {
         val tsPrefix = tsMatch?.value
         val stage1Text = if (tsPrefix != null) stage1.replace(TIMESTAMP_REGEX, "").trim() else stage1
 
-        val tokens = stage1Text.split(Regex("(?<=[\\w'’*])(?=[^\\w'’*])|(?<=[^\\w'’*])(?=[\\w'’*])"))
-        val result = StringBuilder()
-        var wordIdx = 0
-
-        for (t in tokens) {
-            if (WORD_TOKEN_REGEX.matches(t)) {
-                if (t.contains('*')) {
-                    var replacement: String? = null
-                    if (wordIdx < refWords.size) {
-                        replacement = refWords[wordIdx]
-                    } else {
-                        // 容错搜索长度相近的词
-                        replacement = refWords.firstOrNull { Math.abs(it.length - t.length) <= 1 }
-                    }
-                    result.append(replacement ?: t)
+        val sb = StringBuilder()
+        var lastEnd = 0
+        for ((wordIdx, wordMatch) in WORD_TOKEN_REGEX.findAll(stage1Text).withIndex()) {
+            sb.append(stage1Text.substring(lastEnd, wordMatch.range.first))
+            val word = wordMatch.value
+            if (word.contains('*')) {
+                val rep = if (wordIdx < refWords.size) {
+                    refWords[wordIdx]
                 } else {
-                    result.append(t)
+                    refWords.firstOrNull { Math.abs(it.length - word.length) <= 1 } ?: word
                 }
-                wordIdx++
+                sb.append(rep)
             } else {
-                result.append(t)
+                sb.append(word)
             }
+            lastEnd = wordMatch.range.last + 1
+        }
+        if (lastEnd < stage1Text.length) {
+            sb.append(stage1Text.substring(lastEnd))
         }
 
-        val textResult = result.toString()
+        val textResult = sb.toString()
         return if (tsPrefix != null) "$tsPrefix $textResult" else textResult
     }
 
