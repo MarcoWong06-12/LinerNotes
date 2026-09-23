@@ -119,7 +119,8 @@ fun LyricBookletScreen(
     }
 
     val currentTrack = viewModel.getCurrentTrack()
-    val totalTracks = state.albumWithTracks?.tracks?.size ?: 0
+    val bookletTracksCount = state.albumWithTracks?.tracks?.size ?: 0
+    val totalTracks = if (bookletTracksCount > 0) bookletTracksCount else state.cdTotalTracks
 
     LaunchedEffect(state.userMessage) {
         state.userMessage?.let {
@@ -604,7 +605,7 @@ fun LyricBookletScreen(
             FloatingCompanionCapsule(
                 trackNumber = currentTrack?.trackNumber ?: (state.currentTrackIndex + 1),
                 totalTracks = totalTracks,
-                trackTitle = currentTrack?.title ?: "",
+                trackTitle = currentTrack?.title?.takeIf { it.isNotBlank() } ?: if (state.cdConnectionState == CdConnectionState.CONNECTED && totalTracks > 0) "${strings.cdTrackFallback} ${String.format(java.util.Locale.getDefault(), "%02d", state.currentTrackIndex + 1)}" else "",
                 translatedTitle = currentTrack?.translatedTitle,
                 currentPosMs = state.currentPositionMs,
                 durationMs = state.trackDurationMs,

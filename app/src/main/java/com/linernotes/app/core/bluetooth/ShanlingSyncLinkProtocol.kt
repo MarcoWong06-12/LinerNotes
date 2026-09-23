@@ -147,23 +147,23 @@ object ShanlingSyncLinkProtocol {
 
     // --- Lightweight Protobuf Codec ---
 
-    data class PlayTimeData(
-        val playtimeSeconds: Int,
-        val durationSeconds: Int,
-        val trackNumber: Int? = null
-    )
-    data class PlayStatusData(val isPlaying: Boolean, val trackNumber: Int, val totalSongs: Int)
+    data class PlayTimeData(val playtimeSeconds: Int, val durationSeconds: Int)
+    data class PlayStatusData(
+        val isPlaying: Boolean,
+        val queueIndex: Int,
+        val totalSongs: Int
+    ) {
+        val trackNumber: Int get() = queueIndex + 1
+    }
 
     /**
      * Decodes PlayTimeNotify Protobuf payload:
      * Field 1 (playtime): varint (in seconds)
      * Field 2 (duration): varint (in seconds)
-     * Field 3 (track_number / pos): varint (optional)
      */
     fun decodePlayTimeNotify(bytes: ByteArray): PlayTimeData {
         var playtime = 0
         var duration = 0
-        var trackNumber: Int? = null
         var i = 0
         while (i < bytes.size) {
             val (tag, nextI) = readVarint(bytes, i)
@@ -177,7 +177,6 @@ object ShanlingSyncLinkProtocol {
                     i = afterVal
                     if (fieldNumber == 1) playtime = value.toInt()
                     if (fieldNumber == 2) duration = value.toInt()
-                    if (fieldNumber == 3) trackNumber = value.toInt()
                 }
                 1 -> i += 8 // 64-bit
                 2 -> { // Length-delimited
@@ -188,18 +187,18 @@ object ShanlingSyncLinkProtocol {
                 else -> break
             }
         }
-        return PlayTimeData(playtime, duration, trackNumber)
+        return PlayTimeData(playtime, duration)
     }
 
     /**
      * Decodes PlayStatusResp / PlayStatusNotify Protobuf payload:
      * Field 1 (playstatus): ControlType (0=PLAY_SONG, 5=PAUSE_SONG, 3=STOP_SONG)
-     * Field 2 (current_position): track number (1-based physical CD track index)
+     * Field 2 (current_position): 0-based queue index (0 for 1st song, 1 for 2nd song...)
      * Field 3 (total_songs): total number of tracks on CD
      */
     fun decodePlayStatus(bytes: ByteArray): PlayStatusData {
         var playStatus = -1
-        var currentPosition = 1
+        var currentPosition = 0
         var totalSongs = 0
         var i = 0
         while (i < bytes.size) {
@@ -228,7 +227,7 @@ object ShanlingSyncLinkProtocol {
         val isPlaying = playStatus == CONTROL_PLAY_SONG
         return PlayStatusData(
             isPlaying = isPlaying,
-            trackNumber = currentPosition,
+            queueIndex = currentPosition,
             totalSongs = totalSongs
         )
     }

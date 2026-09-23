@@ -42,50 +42,35 @@ class ShanlingSyncLinkProtocolTest {
     @Test
     fun testPlayStatusDecoding() {
         // Field 1 (playstatus = 0 for PLAY) -> tag 0x08, val 0x00
-        // Field 2 (current_position = 3 for Track 3) -> tag 0x10, val 0x03
+        // Field 2 (current_position = 0 for Track 1) -> tag 0x10, val 0x00
         // Field 3 (total_songs = 12 tracks) -> tag 0x18, val 0x0C
         val payload = byteArrayOf(
             0x08.toByte(), 0x00.toByte(),
-            0x10.toByte(), 0x03.toByte(),
+            0x10.toByte(), 0x00.toByte(),
             0x18.toByte(), 0x0C.toByte()
         )
 
         val result = ShanlingSyncLinkProtocol.decodePlayStatus(payload)
         assertTrue(result.isPlaying)
-        assertEquals(3, result.trackNumber)
+        assertEquals(0, result.queueIndex)
+        assertEquals(1, result.trackNumber)
         assertEquals(12, result.totalSongs)
-    }
-
-    @Test
-    fun testPlayTimeNotifyDecodingWithTrackNumber() {
-        // Field 1 (playtime = 12s) -> tag 0x08, val 0x0C
-        // Field 2 (duration = 180s) -> tag 0x10, val 0xB4, 0x01
-        // Field 3 (trackNumber = 2) -> tag 0x18, val 0x02
-        val payload = byteArrayOf(
-            0x08.toByte(), 0x0C.toByte(),
-            0x10.toByte(), 0xB4.toByte(), 0x01.toByte(),
-            0x18.toByte(), 0x02.toByte()
-        )
-
-        val result = ShanlingSyncLinkProtocol.decodePlayTimeNotify(payload)
-        assertEquals(12, result.playtimeSeconds)
-        assertEquals(180, result.durationSeconds)
-        assertEquals(2, result.trackNumber)
     }
 
     @Test
     fun testPlayStatusDecodingPaused() {
         // Field 1 (playstatus = 5 for PAUSE) -> tag 0x08, val 0x05
-        // Field 2 (current_position = 2 for Track 2) -> tag 0x10, val 0x02
+        // Field 2 (current_position = 1 for Track 2) -> tag 0x10, val 0x01
         // Field 3 (total_songs = 10 tracks) -> tag 0x18, val 0x0A
         val payload = byteArrayOf(
             0x08.toByte(), 0x05.toByte(),
-            0x10.toByte(), 0x02.toByte(),
+            0x10.toByte(), 0x01.toByte(),
             0x18.toByte(), 0x0A.toByte()
         )
 
         val result = ShanlingSyncLinkProtocol.decodePlayStatus(payload)
         assertFalse(result.isPlaying)
+        assertEquals(1, result.queueIndex)
         assertEquals(2, result.trackNumber)
         assertEquals(10, result.totalSongs)
     }

@@ -35,6 +35,7 @@ data class ShanlingCdState(
     val connectionState: CdConnectionState = CdConnectionState.DISCONNECTED,
     val deviceName: String? = null,
     val isPlaying: Boolean = false,
+    val currentQueueIndex: Int = -1,
     val currentTrackNumber: Int = 0,
     val totalTracks: Int = 0,
     val currentPositionMs: Long = 0L,
@@ -236,8 +237,7 @@ class ShanlingBluetoothManager @Inject constructor(
                 _cdState.update {
                     it.copy(
                         currentPositionMs = data.playtimeSeconds * 1000L,
-                        durationMs = if (data.durationSeconds > 0) data.durationSeconds * 1000L else it.durationMs,
-                        currentTrackNumber = data.trackNumber?.takeIf { num -> num > 0 } ?: it.currentTrackNumber
+                        durationMs = if (data.durationSeconds > 0) data.durationSeconds * 1000L else it.durationMs
                     )
                 }
             }
@@ -247,7 +247,8 @@ class ShanlingBluetoothManager @Inject constructor(
                 _cdState.update {
                     it.copy(
                         isPlaying = data.isPlaying,
-                        currentTrackNumber = if (data.trackNumber > 0) data.trackNumber else it.currentTrackNumber,
+                        currentQueueIndex = data.queueIndex,
+                        currentTrackNumber = data.trackNumber,
                         totalTracks = if (data.totalSongs > 0) data.totalSongs else it.totalTracks
                     )
                 }
@@ -353,7 +354,13 @@ class ShanlingBluetoothManager @Inject constructor(
 
     fun playTrack(queueIndex: Int) {
         val validIndex = queueIndex.coerceAtLeast(0)
-        _cdState.update { it.copy(currentTrackNumber = validIndex + 1, isPlaying = true) }
+        _cdState.update {
+            it.copy(
+                currentQueueIndex = validIndex,
+                currentTrackNumber = validIndex + 1,
+                isPlaying = true
+            )
+        }
         sendFrame(
             ShanlingSyncLinkProtocol.SL_CD_PLAY_REQ,
             ShanlingSyncLinkProtocol.encodeCdPlayQueue(validIndex)
@@ -379,7 +386,9 @@ class ShanlingBluetoothManager @Inject constructor(
         _cdState.update {
             it.copy(
                 connectionState = CdConnectionState.DISCONNECTED,
-                isPlaying = false
+                isPlaying = false,
+                currentQueueIndex = -1,
+                currentTrackNumber = 0
             )
         }
     }

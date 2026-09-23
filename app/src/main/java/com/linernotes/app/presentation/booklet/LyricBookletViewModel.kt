@@ -65,9 +65,9 @@ class LyricBookletViewModel @Inject constructor(
                         userMessage = cdState.errorMessage ?: it.userMessage
                     )
                 }
-                if (cdState.connectionState == CdConnectionState.CONNECTED && cdState.currentTrackNumber > 0) {
+                if (cdState.connectionState == CdConnectionState.CONNECTED && cdState.currentQueueIndex >= 0) {
                     onExternalCdStateReceived(
-                        trackNo = cdState.currentTrackNumber,
+                        queueIndex = cdState.currentQueueIndex,
                         posMs = cdState.currentPositionMs,
                         isPlaying = cdState.isPlaying
                     )
@@ -280,10 +280,14 @@ class LyricBookletViewModel @Inject constructor(
         _uiState.update { it.copy(showCalibrationBar = !it.showCalibrationBar) }
     }
 
-    fun onExternalCdStateReceived(trackNo: Int, posMs: Long, isPlaying: Boolean) {
-        if (trackNo <= 0) return
-        val tracks = _uiState.value.albumWithTracks?.tracks ?: return
-        val targetIndex = resolveTrackIndex(tracks, trackNo)
+    fun onExternalCdStateReceived(queueIndex: Int, posMs: Long, isPlaying: Boolean) {
+        if (queueIndex < 0) return
+        val tracks = _uiState.value.albumWithTracks?.tracks
+        val targetIndex = if (tracks.isNullOrEmpty()) {
+            queueIndex
+        } else {
+            resolveTrackIndex(tracks, queueIndex)
+        }
 
         val now = System.currentTimeMillis()
         val isWithinLockout = (now - userTrackSelectionTimestamp) < 3000L
@@ -298,7 +302,11 @@ class LyricBookletViewModel @Inject constructor(
         }
 
         if (targetIndex != -1 && targetIndex != _uiState.value.currentTrackIndex) {
-            selectTrack(targetIndex, notifyCdPlayer = false)
+            if (!tracks.isNullOrEmpty() && targetIndex in tracks.indices) {
+                selectTrack(targetIndex, notifyCdPlayer = false)
+            } else {
+                _uiState.update { it.copy(currentTrackIndex = targetIndex) }
+            }
         }
         if (now - userSeekTimestamp >= 1500L && posMs > 0L) {
             seekCompanion(posMs, notifyCdPlayer = false)
@@ -310,18 +318,21 @@ class LyricBookletViewModel @Inject constructor(
         }
     }
 
-    private fun resolveTrackIndex(tracks: List<TrackEntity>, cdTrackNo: Int): Int {
+    private fun resolveTrackIndex(tracks: List<TrackEntity>, cdQueueIndex: Int): Int {
         if (tracks.isEmpty()) return -1
+        val physicalCdTrackNo = cdQueueIndex + 1
 
-        // 1. 精确匹配 trackNumber（例如实体 CD 标号 1..N 匹配 TrackEntity.trackNumber）
-        val exactMatch = tracks.indexOfFirst { it.trackNumber == cdTrackNo }
-        if (exactMatch != -1) return exactMatch
+        // 1. 0-based 物理队列位置与已排好序的曲目直接对应（首选标准 Red Book 1:1 映射）
+        if (cdQueueIndex in tracks.indices && tracks[cdQueueIndex].trackNumber == physicalCdTrackNo) {
+            return cdQueueIndex
+        }
 
-        // 2. 1-based 序号映射（CD 1号轨 -> 本地索引 0，CD 2号轨 -> 本地索引 1）
-        if (cdTrackNo - 1 in tracks.indices) return cdTrackNo - 1
+        // 2. 匹配 TrackEntity.trackNumber 与 1-based 物理音轨号（兼容曲目乱序或不连续情况）
+        val exactTrackNumberMatch = tracks.indexOfFirst { it.trackNumber == physicalCdTrackNo }
+        if (exactTrackNumberMatch != -1) return exactTrackNumberMatch
 
-        // 3. 0-based 队列索引容错（若 CD 偶发上报 0-based 索引）
-        if (cdTrackNo in tracks.indices) return cdTrackNo
+        // 3. 容错回退：按 0-based 列表位置直接定位
+        if (cdQueueIndex in tracks.indices) return cdQueueIndex
 
         return 0
     }
@@ -342,6 +353,7 @@ class LyricBookletViewModel @Inject constructor(
             // 未匹配唱片曲目时，直接指令 CD 机播放对应的 0-based 物理音轨索引
             userTrackSelectionTimestamp = System.currentTimeMillis()
             userSelectedTrackIndex = trackIndex
+            _uiState.update { it.copy(currentTrackIndex = trackIndex) }
             shanlingBluetoothManager.playTrack(trackIndex)
         }
         startCompanionInternal()
@@ -400,20 +412,30 @@ class LyricBookletViewModel @Inject constructor(
             if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
                 shanlingBluetoothManager.previous()
             }
-            selectTrack(target, notifyCdPlayer = false)
+            val tracks = _uiState.value.albumWithTracks?.tracks
+            if (!tracks.isNullOrEmpty() && target in tracks.indices) {
+                selectTrack(target, notifyCdPlayer = false)
+            } else {
+                _uiState.update { it.copy(currentTrackIndex = target) }
+            }
         }
     }
 
     fun nextTrack() {
-        val tracks = _uiState.value.albumWithTracks?.tracks ?: emptyList()
+        val tracks = _uiState.value.albumWithTracks?.tracks
+        val totalCount = if (!tracks.isNullOrEmpty()) tracks.size else _uiState.value.cdTotalTracks
         val target = _uiState.value.currentTrackIndex + 1
-        if (target < tracks.size) {
+        if (totalCount > 0 && target < totalCount) {
             userTrackSelectionTimestamp = System.currentTimeMillis()
             userSelectedTrackIndex = target
             if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
                 shanlingBluetoothManager.next()
             }
-            selectTrack(target, notifyCdPlayer = false)
+            if (!tracks.isNullOrEmpty() && target in tracks.indices) {
+                selectTrack(target, notifyCdPlayer = false)
+            } else {
+                _uiState.update { it.copy(currentTrackIndex = target) }
+            }
         }
     }
 
