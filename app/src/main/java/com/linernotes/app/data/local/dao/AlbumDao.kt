@@ -32,6 +32,9 @@ interface AlbumDao {
     @Query("SELECT * FROM albums WHERE id = :albumId LIMIT 1")
     fun getAlbumWithTracksFlow(albumId: String): Flow<AlbumWithTracks?>
 
+    @Query("SELECT * FROM albums WHERE id = :albumId LIMIT 1")
+    suspend fun getAlbumOnce(albumId: String): AlbumEntity?
+
     @Transaction
     @Query("SELECT * FROM albums WHERE id = :albumId LIMIT 1")
     suspend fun getAlbumWithTracksOnce(albumId: String): AlbumWithTracks?

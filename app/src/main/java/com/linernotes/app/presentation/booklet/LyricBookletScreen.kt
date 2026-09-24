@@ -28,12 +28,17 @@ import androidx.core.content.ContextCompat
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.content.Intent
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.DiscFull
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Translate
@@ -65,11 +70,10 @@ import coil.request.ImageRequest
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import com.linernotes.app.core.bluetooth.CdConnectionState
+import com.linernotes.app.core.lyric.FuriganaEngine
 import com.linernotes.app.domain.model.BilingualLyricLine
 import com.linernotes.app.domain.model.LyricDisplayMode
-import com.linernotes.app.presentation.booklet.components.CdSyncSheet
-import com.linernotes.app.presentation.booklet.components.CdTracklistSheet
-import com.linernotes.app.presentation.booklet.components.EditLyricSheet
+import com.linernotes.app.presentation.booklet.components.*
 import com.linernotes.app.presentation.common.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,6 +91,7 @@ fun LyricBookletScreen(
     val isBatchTranslatingThisAlbum = batchState.isTranslating && batchState.albumId == state.albumWithTracks?.album?.id
     val isTranslatingOverall = state.isTranslating || isBatchTranslatingThisAlbum
     val shelfAlbums by viewModel.allShelfAlbums.collectAsState()
+    val bookletPages by viewModel.bookletPages.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -413,6 +418,108 @@ fun LyricBookletScreen(
 
                             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
+                            // 2.1 日语假名与罗马音注音切换
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text("日文发音标注 (Furigana)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            when (state.furiganaMode) {
+                                                FuriganaMode.OFF -> "当前: 关闭 · 点击开启假名"
+                                                FuriganaMode.HIRAGANA -> "当前: 振假名 (Hiragana) · 点击切换罗马音"
+                                                FuriganaMode.ROMAJI -> "当前: 罗马音 (Romaji) · 点击关闭"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.cycleFuriganaMode()
+                                    viewModel.setTranslateMenuOpen(false)
+                                },
+                                leadingIcon = { Icon(Icons.Default.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            )
+
+                            // 1.1 拟物 CD 光盘转盘模式切换
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                            Text("拟物 CD 光盘转盘", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                            Text("全息反射与物理 RPM 转速动效", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        if (state.isDiscViewExpanded) {
+                                            Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.toggleDiscViewExpanded()
+                                    viewModel.setTranslateMenuOpen(false)
+                                },
+                                leadingIcon = { Icon(Icons.Default.DiscFull, contentDescription = null, tint = MaterialTheme.colorScheme.secondary) }
+                            )
+
+                            // 1.2 官方原版内页画册与演职员表 (Digital Booklet & Credits)
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text("实体画册 & 演职员表", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text("翻阅 CD 扫描切页与官方 Credits", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.openBookletSheet(true)
+                                },
+                                leadingIcon = { Icon(Icons.Default.Book, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            )
+
+                            // 2.2 AI 唱片策展人 (AI Liner Notes & Song Meaning)
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text("AI 唱片策展人 · 深度导赏", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text("时代思潮、歌词隐喻与器乐赏析", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.openAiLinerNotes(true)
+                                },
+                                leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.secondary) }
+                            )
+
+                            // 2.4 导出标准 LRC 歌词
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text("导出校准 LRC 歌词", style = MaterialTheme.typography.bodyMedium)
+                                        Text("含时间轴偏移与双语对照", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    val lrcText = viewModel.getExportableLrc()
+                                    val track = viewModel.getCurrentTrack()
+                                    val fileName = "${track?.title ?: "lyrics"}.lrc"
+                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_SUBJECT, fileName)
+                                        putExtra(Intent.EXTRA_TEXT, lrcText)
+                                    }
+                                    context.startActivity(Intent.createChooser(sendIntent, "导出 LRC 歌词"))
+                                },
+                                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            )
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
                             DropdownMenuItem(
                                 text = { Text(strings.editLyricsAction, style = MaterialTheme.typography.bodyMedium) },
                                 onClick = {
@@ -551,6 +658,42 @@ fun LyricBookletScreen(
                     }
                 }
 
+                // 1.1 拟物 CD 旋转光盘视窗 (可折叠展开)
+                AnimatedVisibility(
+                    visible = state.isDiscViewExpanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    val discRpm = (500f - (state.currentTrackIndex.toFloat() / maxOf(totalTracks, 1)) * 300f).toInt()
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp)
+                    ) {
+                        RotatingCdDisc(
+                            coverUrl = coverUrl,
+                            isPlaying = state.isCompanionPlaying,
+                            currentTrackIndex = state.currentTrackIndex,
+                            totalTracks = totalTracks,
+                            discSize = 220.dp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                        ) {
+                            Text(
+                                text = if (state.isCompanionPlaying) "物理 CD 伺服转速: ~$discRpm RPM · 全息激光反射" else "CD 伺服待机中",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -594,6 +737,7 @@ fun LyricBookletScreen(
                                         mode = state.displayMode,
                                         isActive = isActive,
                                         isCompanionPlaying = state.isCompanionPlaying,
+                                        furiganaMode = state.furiganaMode,
                                         onClick = { viewModel.onLyricLineClicked(line) }
                                     )
                                 }
@@ -618,6 +762,7 @@ fun LyricBookletScreen(
                 hasPrevious = state.currentTrackIndex > 0,
                 hasNext = state.currentTrackIndex < totalTracks - 1,
                 showCalibration = state.showCalibrationBar,
+                currentOffsetMs = state.lyricOffsetMs,
                 cdConnectionState = state.cdConnectionState,
                 cdDeviceName = state.cdDeviceName,
                 onPrevious = { viewModel.previousTrack() },
@@ -625,6 +770,7 @@ fun LyricBookletScreen(
                 onTogglePlay = { viewModel.toggleCompanionPlay() },
                 onSeek = { viewModel.seekCompanion(it) },
                 onAdjustOffset = { viewModel.adjustCompanionOffset(it) },
+                onResetOffset = { viewModel.resetCompanionOffset() },
                 onToggleCalibration = { viewModel.toggleCalibrationBar() },
                 onOpenCdSheet = { viewModel.openCdSheet(true) },
                 onOpenCdTracklist = { viewModel.openCdTracklist(true) },
@@ -701,6 +847,7 @@ fun LyricBookletScreen(
 
     if (isCoverViewerOpen && !state.albumWithTracks?.album?.coverUrl.isNullOrBlank()) {
         val cover = state.albumWithTracks?.album?.coverUrl!!
+        val discRpm = (500f - (state.currentTrackIndex.toFloat() / maxOf(totalTracks, 1)) * 300f).toInt()
         Dialog(onDismissRequest = { isCoverViewerOpen = false }) {
             Surface(
                 shape = RoundedCornerShape(24.dp),
@@ -714,17 +861,12 @@ fun LyricBookletScreen(
                     modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(cover)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(16.dp))
+                    RotatingCdDisc(
+                        coverUrl = cover,
+                        isPlaying = state.isCompanionPlaying,
+                        currentTrackIndex = state.currentTrackIndex,
+                        totalTracks = totalTracks,
+                        discSize = 250.dp
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
@@ -744,9 +886,45 @@ fun LyricBookletScreen(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                    ) {
+                        Text(
+                            text = if (state.isCompanionPlaying) "物理 CD 伺服转速: ~$discRpm RPM · 全息激光反射" else "CD 伺服待机中 · 点击底栏起播",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
         }
+    }
+
+    if (state.isBookletSheetOpen) {
+        DigitalBookletSheet(
+            album = state.albumWithTracks?.album,
+            tracks = state.albumWithTracks?.tracks ?: emptyList(),
+            pages = bookletPages,
+            onAddPages = { uris -> viewModel.addBookletPages(uris) },
+            onDeletePage = { pageId -> viewModel.deleteBookletPage(pageId) },
+            onDismiss = { viewModel.openBookletSheet(false) }
+        )
+    }
+
+    if (state.isAiLinerNotesOpen) {
+        AiLinerNotesSheet(
+            album = state.albumWithTracks?.album,
+            currentTrack = currentTrack,
+            isGenerating = state.isTranslating,
+            onGenerateOrRefresh = {
+                viewModel.retranslateCurrentTrack()
+            },
+            onDismiss = { viewModel.openAiLinerNotes(false) }
+        )
     }
 }
 
@@ -765,6 +943,7 @@ private fun FloatingCompanionCapsule(
     hasPrevious: Boolean,
     hasNext: Boolean,
     showCalibration: Boolean,
+    currentOffsetMs: Long = 0L,
     cdConnectionState: CdConnectionState = CdConnectionState.DISCONNECTED,
     cdDeviceName: String? = null,
     onPrevious: () -> Unit,
@@ -772,6 +951,7 @@ private fun FloatingCompanionCapsule(
     onTogglePlay: () -> Unit,
     onSeek: (Long) -> Unit,
     onAdjustOffset: (Long) -> Unit,
+    onResetOffset: () -> Unit = {},
     onToggleCalibration: () -> Unit,
     onOpenCdSheet: () -> Unit = {},
     onOpenCdTracklist: () -> Unit = {},
@@ -848,7 +1028,7 @@ private fun FloatingCompanionCapsule(
             }
         }
 
-        // 微调对齐胶囊托盘
+        // 微调对齐胶囊托盘 (毫秒级高精度校准)
         AnimatedVisibility(
             visible = showCalibration,
             enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
@@ -857,41 +1037,73 @@ private fun FloatingCompanionCapsule(
                     slideOutVertically(targetOffsetY = { it / 2 })
         ) {
             Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
                 tonalElevation = 6.dp,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
                 modifier = Modifier
                     .padding(bottom = 10.dp)
-                    .shadow(8.dp, CircleShape)
+                    .shadow(10.dp, RoundedCornerShape(20.dp))
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
-                    BouncyTonalButton(
-                        onClick = { onAdjustOffset(-1000L) },
-                        shape = CircleShape,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                        modifier = Modifier.height(30.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(strings.calibrateSlower, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            text = "时间轴微调: ${if (currentOffsetMs >= 0) "+$currentOffsetMs" else "$currentOffsetMs"} ms",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (currentOffsetMs != 0L) {
+                            Text(
+                                text = "· 重置 (0ms)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.bouncyClickable { onResetOffset() }
+                            )
+                        }
                     }
-
-                    Text(
-                        text = strings.calibrationTip,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    BouncyTonalButton(
-                        onClick = { onAdjustOffset(1000L) },
-                        shape = CircleShape,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                        modifier = Modifier.height(30.dp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(strings.calibrateFaster, style = MaterialTheme.typography.labelSmall)
+                        BouncyTonalButton(
+                            onClick = { onAdjustOffset(-500L) },
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("-500ms", style = MaterialTheme.typography.labelSmall)
+                        }
+                        BouncyTonalButton(
+                            onClick = { onAdjustOffset(-100L) },
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("-100ms", style = MaterialTheme.typography.labelSmall)
+                        }
+                        BouncyTonalButton(
+                            onClick = { onAdjustOffset(100L) },
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("+100ms", style = MaterialTheme.typography.labelSmall)
+                        }
+                        BouncyTonalButton(
+                            onClick = { onAdjustOffset(500L) },
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("+500ms", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }
@@ -1168,6 +1380,7 @@ private fun LyricLineItem(
     mode: LyricDisplayMode,
     isActive: Boolean,
     isCompanionPlaying: Boolean,
+    furiganaMode: FuriganaMode = FuriganaMode.OFF,
     onClick: () -> Unit
 ) {
     if (line.isStanzaBreak) {
@@ -1211,7 +1424,7 @@ private fun LyricLineItem(
         when (mode) {
             LyricDisplayMode.BILINGUAL -> {
                 if (line.original.isNotBlank()) {
-                    Text(
+                    OriginalLyricText(
                         text = line.original,
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontSize = 28.sp,
@@ -1220,7 +1433,8 @@ private fun LyricLineItem(
                             letterSpacing = (-0.3).sp
                         ),
                         color = if (isActive) Color.White else Color.White.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
-                        textAlign = TextAlign.Start
+                        furiganaMode = furiganaMode,
+                        isActive = isActive
                     )
                 }
                 if (line.translation.isNotBlank()) {
@@ -1241,7 +1455,7 @@ private fun LyricLineItem(
 
             LyricDisplayMode.ORIGINAL_ONLY -> {
                 if (line.original.isNotBlank()) {
-                    Text(
+                    OriginalLyricText(
                         text = line.original,
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontSize = 30.sp,
@@ -1250,7 +1464,8 @@ private fun LyricLineItem(
                             letterSpacing = (-0.3).sp
                         ),
                         color = if (isActive) Color.White else Color.White.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
-                        textAlign = TextAlign.Start
+                        furiganaMode = furiganaMode,
+                        isActive = isActive
                     )
                 }
             }
@@ -1270,6 +1485,35 @@ private fun LyricLineItem(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun OriginalLyricText(
+    text: String,
+    style: androidx.compose.ui.text.TextStyle,
+    color: Color,
+    furiganaMode: FuriganaMode,
+    isActive: Boolean
+) {
+    if (furiganaMode != FuriganaMode.OFF && FuriganaEngine.isJapanese(text)) {
+        val segments = remember(text) { FuriganaEngine.segmentText(text) }
+        FuriganaText(
+            segments = segments,
+            mode = furiganaMode,
+            baseTextStyle = style,
+            rubyTextStyle = style.copy(fontSize = (style.fontSize.value * 0.48f).sp, fontWeight = FontWeight.Normal),
+            isActive = isActive,
+            activeColor = color,
+            inactiveColor = color
+        )
+    } else {
+        Text(
+            text = text,
+            style = style,
+            color = color,
+            textAlign = TextAlign.Start
+        )
     }
 }
 

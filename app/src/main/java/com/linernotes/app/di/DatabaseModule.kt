@@ -30,4 +30,16 @@ object DatabaseModule {
     fun provideAlbumDao(database: LinerNotesDatabase): AlbumDao {
         return database.albumDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideBookletDao(database: LinerNotesDatabase): com.linernotes.app.data.local.dao.BookletDao {
+        return database.bookletDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideLyricOffsetDao(database: LinerNotesDatabase): com.linernotes.app.data.local.dao.LyricOffsetDao {
+        return database.lyricOffsetDao()
+    }
 }

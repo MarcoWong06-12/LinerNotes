@@ -21,5 +21,8 @@ data class AlbumEntity(
     val coverUrl: String,
     val barcode: String? = null,
     val purchaseDate: Long? = null,
-    val notes: String? = null
+    val notes: String? = null,
+    val mediaType: String = "CD",       // CD, VINYL, CASSETTE, SACD, XRCD
+    val label: String? = null,          // Record label
+    val audioQuality: String? = null    // STANDARD, SACD, XRCD, MQA, HDCD
 )

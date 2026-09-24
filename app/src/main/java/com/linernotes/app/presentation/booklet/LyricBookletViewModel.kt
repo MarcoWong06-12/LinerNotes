@@ -18,6 +18,12 @@ import com.linernotes.app.core.translation.BatchTranslationState
 import com.linernotes.app.core.util.ChineseConverter
 import com.linernotes.app.core.bluetooth.CdConnectionState
 import com.linernotes.app.core.bluetooth.ShanlingBluetoothManager
+import com.linernotes.app.core.lyric.LrcExporter
+import com.linernotes.app.data.local.dao.BookletDao
+import com.linernotes.app.data.local.dao.LyricOffsetDao
+import com.linernotes.app.data.local.entity.BookletPageEntity
+import com.linernotes.app.data.local.entity.LyricOffsetEntity
+import com.linernotes.app.presentation.booklet.components.FuriganaMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,15 +32,22 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class LyricBookletViewModel @Inject constructor(
     private val repository: AlbumRepository,
     val aiPreferences: AiPreferences,
     private val translationService: TranslationService,
     private val batchTranslationManager: BatchTranslationManager,
-    val shanlingBluetoothManager: ShanlingBluetoothManager
+    val shanlingBluetoothManager: ShanlingBluetoothManager,
+    private val lyricOffsetDao: LyricOffsetDao,
+    private val bookletDao: BookletDao
 ) : ViewModel() {
 
     private var currentAlbumId: String = ""
@@ -48,6 +61,51 @@ class LyricBookletViewModel @Inject constructor(
     val uiState: StateFlow<BookletUiState> = _uiState.asStateFlow()
 
     val batchTranslationState: StateFlow<BatchTranslationState> = batchTranslationManager.state
+
+    val bookletPages: StateFlow<List<BookletPageEntity>> = _uiState
+        .map { it.albumWithTracks?.album?.id }
+        .distinctUntilChanged()
+        .flatMapLatest { albumId ->
+            if (albumId != null) bookletDao.getBookletPagesFlow(albumId)
+            else kotlinx.coroutines.flow.flowOf(emptyList())
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = emptyList()
+        )
+
+    fun openBookletSheet(isOpen: Boolean) {
+        _uiState.update { it.copy(isBookletSheetOpen = isOpen) }
+    }
+
+    fun openAiLinerNotes(isOpen: Boolean) {
+        _uiState.update { it.copy(isAiLinerNotesOpen = isOpen) }
+    }
+
+    fun addBookletPages(uris: List<android.net.Uri>) {
+        val albumId = currentAlbumId.takeIf { it.isNotBlank() } ?: return
+        viewModelScope.launch {
+            val currentCount = bookletDao.getPageCount(albumId)
+            val newEntities = uris.mapIndexed { index, uri ->
+                BookletPageEntity(
+                    albumId = albumId,
+                    pageNumber = currentCount + index + 1,
+                    imagePath = uri.toString(),
+                    pageType = "CONTENT"
+                )
+            }
+            bookletDao.insertPages(newEntities)
+            _uiState.update { it.copy(userMessage = "已成功添加 ${uris.size} 页内页画册") }
+        }
+    }
+
+    fun deleteBookletPage(pageId: Long) {
+        viewModelScope.launch {
+            bookletDao.deletePage(pageId)
+            _uiState.update { it.copy(userMessage = "已移除内页") }
+        }
+    }
 
     init {
         viewModelScope.launch {
@@ -114,14 +172,23 @@ class LyricBookletViewModel @Inject constructor(
                         currentTrack?.originalLyrics,
                         currentTrack?.translatedLyrics
                     )
-                    val duration = computeTrackDuration(currentTrack, aligned)
+                    val savedOffset = currentTrack?.let { lyricOffsetDao.getOffset(it.id)?.offsetMs } ?: 0L
+                    val alignedWithOffset = if (savedOffset != 0L) {
+                        aligned.map { line ->
+                            if (line.startTimeMs != null) {
+                                line.copy(startTimeMs = (line.startTimeMs + savedOffset).coerceAtLeast(0L))
+                            } else line
+                        }
+                    } else aligned
+                    val duration = computeTrackDuration(currentTrack, alignedWithOffset)
 
                     _uiState.update { state ->
                         state.copy(
                             isLoading = false,
                             albumWithTracks = albumWithTracks.copy(tracks = tracks),
                             currentTrackIndex = safeIndex,
-                            alignedLyrics = aligned,
+                            alignedLyrics = alignedWithOffset,
+                            lyricOffsetMs = savedOffset,
                             trackDurationMs = duration
                         )
                     }
@@ -174,11 +241,30 @@ class LyricBookletViewModel @Inject constructor(
                 it.copy(
                     currentTrackIndex = index,
                     alignedLyrics = aligned,
+                    lyricOffsetMs = 0L,
                     currentPositionMs = 0L,
                     trackDurationMs = duration,
                     activeLineIndex = -1,
                     isCdTracklistOpen = false
                 )
+            }
+            viewModelScope.launch {
+                val offset = lyricOffsetDao.getOffset(track.id)?.offsetMs ?: 0L
+                if (offset != 0L && _uiState.value.currentTrackIndex == index) {
+                    val withOffset = aligned.map { line ->
+                        if (line.startTimeMs != null) {
+                            line.copy(startTimeMs = (line.startTimeMs + offset).coerceAtLeast(0L))
+                        } else line
+                    }
+                    val durationWithOffset = computeTrackDuration(track, withOffset)
+                    _uiState.update {
+                        it.copy(
+                            alignedLyrics = withOffset,
+                            lyricOffsetMs = offset,
+                            trackDurationMs = durationWithOffset
+                        )
+                    }
+                }
             }
             if (notifyCdPlayer && _uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
                 // CdPlayQueueReq.index is 0-based (0 for 1st song, 1 for 2nd song...)
@@ -294,7 +380,94 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun adjustCompanionOffset(deltaMs: Long) {
-        seekCompanion(_uiState.value.currentPositionMs + deltaMs)
+        val currentTrack = getCurrentTrack()
+        val newOffset = _uiState.value.lyricOffsetMs + deltaMs
+        val currentAligned = _uiState.value.alignedLyrics
+        val reAligned = currentAligned.map { line ->
+            if (line.startTimeMs != null) {
+                line.copy(startTimeMs = (line.startTimeMs + deltaMs).coerceAtLeast(0L))
+            } else line
+        }
+        val activeIdx = findActiveLineIndex(reAligned, _uiState.value.currentPositionMs)
+        _uiState.update {
+            it.copy(
+                lyricOffsetMs = newOffset,
+                alignedLyrics = reAligned,
+                activeLineIndex = activeIdx,
+                userMessage = "时间轴已校准: ${if (newOffset >= 0) "+$newOffset" else "$newOffset"} ms"
+            )
+        }
+        if (currentTrack != null) {
+            viewModelScope.launch {
+                lyricOffsetDao.saveOffset(LyricOffsetEntity(trackId = currentTrack.id, offsetMs = newOffset))
+            }
+        }
+    }
+
+    fun resetCompanionOffset() {
+        val currentTrack = getCurrentTrack()
+        val currentOffset = _uiState.value.lyricOffsetMs
+        if (currentOffset == 0L) return
+        val deltaMs = -currentOffset
+        val currentAligned = _uiState.value.alignedLyrics
+        val reAligned = currentAligned.map { line ->
+            if (line.startTimeMs != null) {
+                line.copy(startTimeMs = (line.startTimeMs + deltaMs).coerceAtLeast(0L))
+            } else line
+        }
+        val activeIdx = findActiveLineIndex(reAligned, _uiState.value.currentPositionMs)
+        _uiState.update {
+            it.copy(
+                lyricOffsetMs = 0L,
+                alignedLyrics = reAligned,
+                activeLineIndex = activeIdx,
+                userMessage = "时间轴校准已重置为 0ms"
+            )
+        }
+        if (currentTrack != null) {
+            viewModelScope.launch {
+                lyricOffsetDao.deleteOffset(currentTrack.id)
+            }
+        }
+    }
+
+    fun setFuriganaMode(mode: FuriganaMode) {
+        _uiState.update { it.copy(furiganaMode = mode) }
+    }
+
+    fun cycleFuriganaMode() {
+        val nextMode = when (_uiState.value.furiganaMode) {
+            FuriganaMode.OFF -> FuriganaMode.HIRAGANA
+            FuriganaMode.HIRAGANA -> FuriganaMode.ROMAJI
+            FuriganaMode.ROMAJI -> FuriganaMode.OFF
+        }
+        _uiState.update {
+            it.copy(
+                furiganaMode = nextMode,
+                userMessage = when (nextMode) {
+                    FuriganaMode.OFF -> "已关闭日语注音"
+                    FuriganaMode.HIRAGANA -> "已开启日文假名注音 (Furigana)"
+                    FuriganaMode.ROMAJI -> "已开启日文罗马音 (Romaji)"
+                }
+            )
+        }
+    }
+
+    fun toggleDiscViewExpanded() {
+        _uiState.update { it.copy(isDiscViewExpanded = !it.isDiscViewExpanded) }
+    }
+
+    fun getExportableLrc(): String {
+        val state = _uiState.value
+        val track = getCurrentTrack()
+        val album = state.albumWithTracks?.album
+        return LrcExporter.generateLrc(
+            lines = state.alignedLyrics,
+            offsetMs = 0L, // Already applied in alignedLyrics
+            title = track?.title,
+            artist = album?.artist,
+            album = album?.title
+        )
     }
 
     fun onLyricLineClicked(line: BilingualLyricLine) {

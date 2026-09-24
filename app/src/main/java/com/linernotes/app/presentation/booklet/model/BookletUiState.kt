@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import com.linernotes.app.data.local.relation.AlbumWithTracks
 import com.linernotes.app.domain.model.BilingualLyricLine
 import com.linernotes.app.domain.model.LyricDisplayMode
+import com.linernotes.app.presentation.booklet.components.FuriganaMode
 
 data class BookletUiState(
     val isLoading: Boolean = true,
@@ -22,6 +23,12 @@ data class BookletUiState(
     val activeLineIndex: Int = -1,
     val trackDurationMs: Long = 0L,
     val showCalibrationBar: Boolean = false,
+    // 日语假名注音模式
+    val furiganaMode: FuriganaMode = FuriganaMode.OFF,
+    // 歌词时间轴微调偏移 (正数=歌词提前，负数=歌词延后)
+    val lyricOffsetMs: Long = 0L,
+    // CD 光盘展示区域是否展开
+    val isDiscViewExpanded: Boolean = false,
     // 实体 CD 蓝牙同步状态
     val cdConnectionState: com.linernotes.app.core.bluetooth.CdConnectionState = com.linernotes.app.core.bluetooth.CdConnectionState.DISCONNECTED,
     val cdDeviceName: String? = null,
@@ -29,5 +36,7 @@ data class BookletUiState(
     val cdCurrentTrackNumber: Int = 1,
     val isCdSheetOpen: Boolean = false,
     val isCdTracklistOpen: Boolean = false,
-    val isCdMatchAlbumOpen: Boolean = false
+    val isCdMatchAlbumOpen: Boolean = false,
+    val isBookletSheetOpen: Boolean = false,
+    val isAiLinerNotesOpen: Boolean = false
 )
