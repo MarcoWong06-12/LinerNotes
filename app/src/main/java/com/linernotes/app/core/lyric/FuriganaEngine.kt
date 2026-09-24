@@ -58,7 +58,11 @@ object FuriganaEngine {
         "影" to "かげ",
         "形" to "かたち",
         "翼" to "つばさ",
-        "空" to "そら"
+        "空" to "そら",
+        "中" to "なか",
+        "人" to "ひと",
+        "生" to "せい",
+        "日" to "ひ"
     )
 
     private val romajiMap = mapOf(
@@ -166,8 +170,25 @@ object FuriganaEngine {
         fun commitRuns() {
             if (currentKanjiRun.isNotEmpty()) {
                 val kanjiText = currentKanjiRun.toString()
-                val reading = commonKanjiReadings[kanjiText]
-                segments.add(FuriganaSegment(kanjiText, reading, true))
+                var start = 0
+                while (start < kanjiText.length) {
+                    var matched = false
+                    for (len in minOf(4, kanjiText.length - start) downTo 1) {
+                        val sub = kanjiText.substring(start, start + len)
+                        val reading = commonKanjiReadings[sub]
+                        if (reading != null) {
+                            segments.add(FuriganaSegment(sub, reading, true))
+                            start += len
+                            matched = true
+                            break
+                        }
+                    }
+                    if (!matched) {
+                        val singleChar = kanjiText[start].toString()
+                        segments.add(FuriganaSegment(singleChar, null, true))
+                        start += 1
+                    }
+                }
                 currentKanjiRun.clear()
             }
             if (currentNonKanjiRun.isNotEmpty()) {

@@ -28,7 +28,7 @@ class FuriganaEngineTest {
     fun testHiraganaToRomaji() {
         assertEquals("sakura", FuriganaEngine.hiraganaToRomaji("さくら"))
         assertEquals("sekai", FuriganaEngine.hiraganaToRomaji("せかい"))
-        assertEquals("tokyo", FuriganaEngine.hiraganaToRomaji("とうきょう").replace("う", "u"))
+        assertEquals("toukyou", FuriganaEngine.hiraganaToRomaji("とうきょう"))
         assertEquals("chotto", FuriganaEngine.hiraganaToRomaji("ちょっと"))
     }
 
@@ -64,6 +64,10 @@ class FuriganaEngineTest {
         val sekai = segments.find { it.text == "世界" }
         assertNotNull(sekai)
         assertEquals("せかい", sekai?.reading)
+
+        val naka = segments.find { it.text == "中" }
+        assertNotNull(naka)
+        assertEquals("なか", naka?.reading)
 
         val ai = segments.find { it.text == "愛" }
         assertNotNull(ai)
