@@ -66,6 +66,9 @@ class ShanlingBluetoothManager @Inject constructor(
     private val scope = CoroutineScope(Dispatchers.IO + Job())
     private var connectJob: Job? = null
     private var heartbeatJob: Job? = null
+    private var trackSwitchJob: Job? = null
+    @Volatile
+    private var isTrackSwitching: Boolean = false
     private var seqCounter = AtomicInteger(1)
 
     private fun nextSeq(): Int = seqCounter.getAndIncrement() and 0xFFFFFF
@@ -195,7 +198,9 @@ class ShanlingBluetoothManager @Inject constructor(
                 delay(1500L)
                 loopCount++
                 // Continuous query of play status (track position and play/pause state)
-                refreshPlayStatus()
+                if (!isTrackSwitching) {
+                    refreshPlayStatus()
+                }
                 // Heartbeat keep-alive every 6 seconds (loopCount % 4 == 0)
                 if (loopCount % 4 == 0) {
                     sendFrame(ShanlingSyncLinkProtocol.SL_HEART_BEAT_REQ)
@@ -358,29 +363,91 @@ class ShanlingBluetoothManager @Inject constructor(
         }
     }
 
-    fun playTrack(queueIndex: Int) {
-        val validIndex = queueIndex.coerceAtLeast(0)
-        _cdState.update {
-            it.copy(
-                currentQueueIndex = validIndex,
-                currentTrackNumber = validIndex + 1,
-                isPlaying = true
-            )
+    fun playTrack(targetQueueIndex: Int, fromQueueIndex: Int? = null) {
+        val validTarget = targetQueueIndex.coerceAtLeast(0)
+
+        // Cancel previous track-switching sequence if in progress
+        trackSwitchJob?.cancel()
+        trackSwitchJob = scope.launch {
+            isTrackSwitching = true
+            try {
+                // 1. Determine current hardware queue index BEFORE updating _cdState
+                val current = if (_cdState.value.currentQueueIndex >= 0) {
+                    _cdState.value.currentQueueIndex
+                } else if (fromQueueIndex != null && fromQueueIndex >= 0) {
+                    fromQueueIndex
+                } else {
+                    -1
+                }
+
+                _cdState.update {
+                    it.copy(
+                        currentQueueIndex = validTarget,
+                        currentTrackNumber = validTarget + 1,
+                        isPlaying = true,
+                        currentPositionMs = 0L
+                    )
+                }
+
+                // 2. Direct CD seek command (supported by Android DAP / high-end Shanling CD models)
+                sendFrame(
+                    ShanlingSyncLinkProtocol.SL_CD_PLAY_REQ,
+                    ShanlingSyncLinkProtocol.encodeCdPlayQueue(validTarget)
+                )
+
+                // 3. Hardware transport pulse stepping for mechanical CD mechanisms (Shanling EC Mini)
+                if (current >= 0 && current != validTarget) {
+                    val delta = validTarget - current
+                    if (delta > 0) {
+                        for (i in 0 until delta) {
+                            sendFrame(
+                                ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_REQ,
+                                ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_NEXT_SONG)
+                            )
+                            delay(200L)
+                        }
+                    } else {
+                        // Standard Red Book CD behavior: if current track has played for > 1.5s,
+                        // the first PREV resets current track to 00:00, requiring abs(delta) + 1 pulses.
+                        val currentPosMs = _cdState.value.currentPositionMs
+                        val needExtraPulse = currentPosMs > 1500L
+                        val pulses = kotlin.math.abs(delta) + (if (needExtraPulse) 1 else 0)
+                        for (i in 0 until pulses) {
+                            sendFrame(
+                                ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_REQ,
+                                ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PREV_SONG)
+                            )
+                            delay(200L)
+                        }
+                    }
+                    // Guarantee playback starts
+                    sendFrame(
+                        ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_REQ,
+                        ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PLAY_SONG)
+                    )
+                } else {
+                    // Same track or unknown current track: ensure playback starts
+                    sendFrame(
+                        ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_REQ,
+                        ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PLAY_SONG)
+                    )
+                }
+
+                // Mechanical optical pickup seek delay before polling status
+                delay(800L)
+            } finally {
+                isTrackSwitching = false
+            }
+            refreshPlayStatus()
         }
-        sendFrame(
-            ShanlingSyncLinkProtocol.SL_CD_PLAY_REQ,
-            ShanlingSyncLinkProtocol.encodeCdPlayQueue(validIndex)
-        )
-        // Note: Do NOT trigger an immediate 300ms refreshPlayStatus() here!
-        // Physical CD drive laser takes 1.5~2.5s to mechanically seek.
-        // Polling at 300ms causes stale old track reports that bounce the UI back.
-        // The CD player will report SL_GET_PLAY_STATUS_NOTIFY / SL_CUR_PLAY_TIME_NOTIFY once settled,
-        // and the 1500ms heartbeat loop will poll naturally.
     }
 
     fun disconnect() {
         heartbeatJob?.cancel()
         heartbeatJob = null
+        trackSwitchJob?.cancel()
+        trackSwitchJob = null
+        isTrackSwitching = false
         try {
             inStream?.close()
             outStream?.close()

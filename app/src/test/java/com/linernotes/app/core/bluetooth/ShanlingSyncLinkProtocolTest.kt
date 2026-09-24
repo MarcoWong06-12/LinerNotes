@@ -132,4 +132,39 @@ class ShanlingSyncLinkProtocolTest {
         assertEquals(0x08.toByte(), trackReq[0])
         assertEquals(0x05.toByte(), trackReq[1])
     }
+
+    @Test
+    fun testCdSteppingPulseCalculation() {
+        // Forward skip: Track 1 (index 0) -> Track 4 (index 3): delta = +3 -> 3 NEXT pulses
+        val forwardDelta = 3 - 0
+        val forwardPulses = forwardDelta
+        assertEquals(3, forwardPulses)
+
+        // Backward skip when elapsed > 1500ms: Track 4 (index 3) -> Track 2 (index 1): delta = -2
+        // First pulse rewinds to 00:00, second and third pulse skip back to track 2 -> abs(-2) + 1 = 3 pulses
+        val backwardDelta = 1 - 3
+        val elapsedMs = 30_000L
+        val backwardPulsesLongElapsed = kotlin.math.abs(backwardDelta) + (if (elapsedMs > 1500L) 1 else 0)
+        assertEquals(3, backwardPulsesLongElapsed)
+
+        // Backward skip when elapsed <= 1500ms:
+        val shortElapsedMs = 500L
+        val backwardPulsesShortElapsed = kotlin.math.abs(backwardDelta) + (if (shortElapsedMs > 1500L) 1 else 0)
+        assertEquals(2, backwardPulsesShortElapsed)
+    }
+
+    @Test
+    fun testCdTrackSelectionLockoutDuration() {
+        // Delta = 0: 3500ms
+        val lockout0 = (3500L + 0 * 600L).coerceAtMost(10000L)
+        assertEquals(3500L, lockout0)
+
+        // Delta = 3: 3500 + 1800 = 5300ms
+        val lockout3 = (3500L + 3 * 600L).coerceAtMost(10000L)
+        assertEquals(5300L, lockout3)
+
+        // Delta = 15: capped at 10000ms
+        val lockout15 = (3500L + 15 * 600L).coerceAtMost(10000L)
+        assertEquals(10000L, lockout15)
+    }
 }

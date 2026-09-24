@@ -272,11 +272,7 @@ fun CdTracklistSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .bouncyClickable {
-                                if (isCurrent) {
-                                    onTogglePlay()
-                                } else {
-                                    onSelectTrack(index)
-                                }
+                                onSelectTrack(index)
                             }
                     ) {
                         Row(
@@ -331,14 +327,19 @@ fun CdTracklistSheet(
                                 )
                             }
 
-                            // 状态图标：正在播放显示双竖线 Pause，暂停显示三角 PlayArrow
+                            // 状态图标：正在播放显示双竖线 Pause，暂停显示三角 PlayArrow。支持独立点击控制播放/暂停
                             if (isCurrent) {
-                                Icon(
-                                    imageVector = if (cdPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (cdPlaying) strings.cdCompanionPause else strings.cdCompanionPlay,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                IconButton(
+                                    onClick = onTogglePlay,
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (cdPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = if (cdPlaying) strings.cdCompanionPause else strings.cdCompanionPlay,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }

@@ -39,6 +39,7 @@ class LyricBookletViewModel @Inject constructor(
 
     private var currentAlbumId: String = ""
     private var userTrackSelectionTimestamp = 0L
+    private var userTrackSelectionLockoutMs = 3500L
     private var userSelectedTrackIndex = -1
     private var userSeekTimestamp = 0L
 
@@ -156,7 +157,10 @@ class LyricBookletViewModel @Inject constructor(
     fun selectTrack(index: Int, notifyCdPlayer: Boolean = true) {
         val tracks = _uiState.value.albumWithTracks?.tracks ?: return
         if (index in tracks.indices) {
+            val previousTrackIndex = _uiState.value.currentTrackIndex
+            val delta = kotlin.math.abs(index - previousTrackIndex)
             if (notifyCdPlayer) {
+                userTrackSelectionLockoutMs = (3500L + delta * 600L).coerceAtMost(10000L)
                 userTrackSelectionTimestamp = System.currentTimeMillis()
                 userSelectedTrackIndex = index
             }
@@ -177,7 +181,13 @@ class LyricBookletViewModel @Inject constructor(
             if (notifyCdPlayer && _uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
                 // CdPlayQueueReq.index is 0-based (0 for 1st song, 1 for 2nd song...)
                 val cdQueueIndex = if (track.trackNumber > 0) track.trackNumber - 1 else index
-                shanlingBluetoothManager.playTrack(cdQueueIndex)
+                val prevCdQueueIndex = if (previousTrackIndex in tracks.indices) {
+                    val prevTrack = tracks[previousTrackIndex]
+                    if (prevTrack.trackNumber > 0) prevTrack.trackNumber - 1 else previousTrackIndex
+                } else {
+                    previousTrackIndex
+                }
+                shanlingBluetoothManager.playTrack(cdQueueIndex, prevCdQueueIndex)
             }
         }
     }
@@ -302,7 +312,7 @@ class LyricBookletViewModel @Inject constructor(
         }
 
         val now = System.currentTimeMillis()
-        val isWithinLockout = (now - userTrackSelectionTimestamp) < 3500L
+        val isWithinLockout = (now - userTrackSelectionTimestamp) < userTrackSelectionLockoutMs
 
         if (isWithinLockout) {
             if (targetIndex != userSelectedTrackIndex) {
@@ -365,10 +375,13 @@ class LyricBookletViewModel @Inject constructor(
             selectTrack(trackIndex, notifyCdPlayer = true)
         } else {
             // 未匹配唱片曲目时，直接指令 CD 机播放对应的 0-based 物理音轨索引
+            val previousTrackIndex = _uiState.value.currentTrackIndex
+            val delta = kotlin.math.abs(trackIndex - previousTrackIndex)
+            userTrackSelectionLockoutMs = (3500L + delta * 600L).coerceAtMost(10000L)
             userTrackSelectionTimestamp = System.currentTimeMillis()
             userSelectedTrackIndex = trackIndex
             _uiState.update { it.copy(currentTrackIndex = trackIndex, isCdTracklistOpen = false) }
-            shanlingBluetoothManager.playTrack(trackIndex)
+            shanlingBluetoothManager.playTrack(trackIndex, previousTrackIndex)
         }
         _uiState.update { it.copy(isCdTracklistOpen = false) }
         startCompanionInternal()
@@ -422,17 +435,7 @@ class LyricBookletViewModel @Inject constructor(
     fun previousTrack() {
         val target = _uiState.value.currentTrackIndex - 1
         if (target >= 0) {
-            userTrackSelectionTimestamp = System.currentTimeMillis()
-            userSelectedTrackIndex = target
-            if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
-                shanlingBluetoothManager.previous()
-            }
-            val tracks = _uiState.value.albumWithTracks?.tracks
-            if (!tracks.isNullOrEmpty() && target in tracks.indices) {
-                selectTrack(target, notifyCdPlayer = false)
-            } else {
-                _uiState.update { it.copy(currentTrackIndex = target) }
-            }
+            playCdTrack(target)
         }
     }
 
@@ -441,16 +444,7 @@ class LyricBookletViewModel @Inject constructor(
         val totalCount = if (!tracks.isNullOrEmpty()) tracks.size else _uiState.value.cdTotalTracks
         val target = _uiState.value.currentTrackIndex + 1
         if (totalCount > 0 && target < totalCount) {
-            userTrackSelectionTimestamp = System.currentTimeMillis()
-            userSelectedTrackIndex = target
-            if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
-                shanlingBluetoothManager.next()
-            }
-            if (!tracks.isNullOrEmpty() && target in tracks.indices) {
-                selectTrack(target, notifyCdPlayer = false)
-            } else {
-                _uiState.update { it.copy(currentTrackIndex = target) }
-            }
+            playCdTrack(target)
         }
     }
 
