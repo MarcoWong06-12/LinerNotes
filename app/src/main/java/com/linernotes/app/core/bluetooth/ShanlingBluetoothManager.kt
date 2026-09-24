@@ -420,7 +420,8 @@ class ShanlingBluetoothManager @Inject constructor(
                             delay(200L)
                         }
                     }
-                    // Guarantee playback starts
+                    // Allow optical pickup to finish physical seek before issuing play
+                    delay(600L)
                     sendFrame(
                         ShanlingSyncLinkProtocol.SL_PLAY_CONTROL_REQ,
                         ShanlingSyncLinkProtocol.encodePlayControl(ShanlingSyncLinkProtocol.CONTROL_PLAY_SONG)
@@ -434,7 +435,7 @@ class ShanlingBluetoothManager @Inject constructor(
                 }
 
                 // Mechanical optical pickup seek delay before polling status
-                delay(800L)
+                delay(600L)
             } finally {
                 isTrackSwitching = false
             }

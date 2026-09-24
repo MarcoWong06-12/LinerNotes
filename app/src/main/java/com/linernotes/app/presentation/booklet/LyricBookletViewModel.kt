@@ -42,6 +42,7 @@ class LyricBookletViewModel @Inject constructor(
     private var userTrackSelectionLockoutMs = 3500L
     private var userSelectedTrackIndex = -1
     private var userSeekTimestamp = 0L
+    private var userWantsPlay = true
 
     private val _uiState = MutableStateFlow(BookletUiState())
     val uiState: StateFlow<BookletUiState> = _uiState.asStateFlow()
@@ -160,6 +161,7 @@ class LyricBookletViewModel @Inject constructor(
             val previousTrackIndex = _uiState.value.currentTrackIndex
             val delta = kotlin.math.abs(index - previousTrackIndex)
             if (notifyCdPlayer) {
+                userWantsPlay = true
                 userTrackSelectionLockoutMs = (3500L + delta * 600L).coerceAtMost(10000L)
                 userTrackSelectionTimestamp = System.currentTimeMillis()
                 userSelectedTrackIndex = index
@@ -196,6 +198,7 @@ class LyricBookletViewModel @Inject constructor(
 
     fun toggleCompanionPlay() {
         val willPlay = !_uiState.value.isCompanionPlaying
+        userWantsPlay = willPlay
         if (willPlay) {
             startCompanionInternal()
             if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
@@ -210,6 +213,7 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun startCompanion() {
+        userWantsPlay = true
         startCompanionInternal()
         if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
             shanlingBluetoothManager.play()
@@ -258,6 +262,7 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun pauseCompanion() {
+        userWantsPlay = false
         pauseCompanionInternal()
         if (_uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
             shanlingBluetoothManager.pause()
@@ -319,6 +324,10 @@ class LyricBookletViewModel @Inject constructor(
                 // CD 机光头物理寻道中（通常需 1.5~2.5 秒），严格忽略旧音轨帧上报，防止 UI 闪跳回退
                 return
             }
+            // 物理光头已到达目标曲目，若 CD 此时处于暂停状态且用户期望播放，主动唤醒 CD 伺服起播
+            if (!isPlaying && userWantsPlay) {
+                shanlingBluetoothManager.play()
+            }
             // 收到新音轨确认后，仅在距用户操作满 1.5 秒后才解除保护罩，确保物理硬件稳态
             if (now - userTrackSelectionTimestamp > 1500L) {
                 userTrackSelectionTimestamp = 0L
@@ -338,7 +347,12 @@ class LyricBookletViewModel @Inject constructor(
         if (isPlaying && !_uiState.value.isCompanionPlaying) {
             startCompanionInternal()
         } else if (!isPlaying && _uiState.value.isCompanionPlaying) {
-            pauseCompanionInternal()
+            if (userWantsPlay) {
+                // 用户期望播放但 CD 处于暂停（如机械跳轨到位瞬间），主动指令 CD 机起播并保持伴奏播放
+                shanlingBluetoothManager.play()
+            } else {
+                pauseCompanionInternal()
+            }
         }
     }
 
@@ -370,6 +384,7 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun playCdTrack(trackIndex: Int) {
+        userWantsPlay = true
         val tracks = _uiState.value.albumWithTracks?.tracks ?: emptyList()
         if (trackIndex in tracks.indices) {
             selectTrack(trackIndex, notifyCdPlayer = true)
