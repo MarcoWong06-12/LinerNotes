@@ -38,5 +38,9 @@ data class BookletUiState(
     val isCdTracklistOpen: Boolean = false,
     val isCdMatchAlbumOpen: Boolean = false,
     val isBookletSheetOpen: Boolean = false,
-    val isAiLinerNotesOpen: Boolean = false
+    val isAiLinerNotesOpen: Boolean = false,
+    // Discogs 实体 CD 版本库状态
+    val isDiscogsPickerOpen: Boolean = false,
+    val isDiscogsLoading: Boolean = false,
+    val discogsResults: List<com.linernotes.app.data.remote.DiscogsReleaseSummary> = emptyList()
 )

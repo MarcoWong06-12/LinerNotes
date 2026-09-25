@@ -23,6 +23,8 @@ import com.linernotes.app.data.local.dao.BookletDao
 import com.linernotes.app.data.local.dao.LyricOffsetDao
 import com.linernotes.app.data.local.entity.BookletPageEntity
 import com.linernotes.app.data.local.entity.LyricOffsetEntity
+import com.linernotes.app.data.local.entity.AlbumEntity
+import com.linernotes.app.data.remote.DiscogsService
 import com.linernotes.app.presentation.booklet.components.FuriganaMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -917,5 +919,180 @@ class LyricBookletViewModel @Inject constructor(
     fun getCurrentTrack(): TrackEntity? {
         val state = _uiState.value
         return state.albumWithTracks?.tracks?.getOrNull(state.currentTrackIndex)
+    }
+
+    // ==========================================
+    // 实体 CD 版本库 (Discogs) 交互逻辑
+    // ==========================================
+
+    fun openDiscogsPicker(isOpen: Boolean) {
+        _uiState.update { it.copy(isDiscogsPickerOpen = isOpen) }
+        if (isOpen && _uiState.value.discogsResults.isEmpty()) {
+            searchDiscogs()
+        }
+    }
+
+    fun searchDiscogs(query: String? = null) {
+        val album = _uiState.value.albumWithTracks?.album
+        val rawQuery = query?.trim()
+        val token = aiPreferences.discogsToken.takeIf { it.isNotBlank() }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDiscogsLoading = true) }
+            try {
+                val results = if (!rawQuery.isNullOrBlank()) {
+                    val cleanBarcode = rawQuery.replace("[^0-9]".toRegex(), "")
+                    if (cleanBarcode.length in 8..14 && rawQuery.matches(Regex("^[0-9\\-\\s]+$"))) {
+                        val barcodeRes = DiscogsService.searchByBarcode(cleanBarcode, token)
+                        if (barcodeRes.isNotEmpty()) barcodeRes
+                        else DiscogsService.searchReleases(rawQuery, token)
+                    } else {
+                        DiscogsService.searchReleases(rawQuery, token)
+                    }
+                } else if (album != null) {
+                    if (!album.barcode.isNullOrBlank()) {
+                        val barcodeRes = DiscogsService.searchByBarcode(album.barcode, token)
+                        if (barcodeRes.isNotEmpty()) barcodeRes
+                        else DiscogsService.searchReleasesByAlbumAndArtist(album.title, album.artist, token)
+                    } else {
+                        DiscogsService.searchReleasesByAlbumAndArtist(album.title, album.artist, token)
+                    }
+                } else {
+                    emptyList()
+                }
+
+                _uiState.update {
+                    it.copy(
+                        isDiscogsLoading = false,
+                        discogsResults = results,
+                        userMessage = if (results.isEmpty() && !rawQuery.isNullOrBlank()) "未在 Discogs 找到匹配版本" else it.userMessage
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isDiscogsLoading = false,
+                        userMessage = "Discogs 检索失败: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun applyDiscogsRelease(releaseId: Long) {
+        val albumWithTracks = _uiState.value.albumWithTracks ?: return
+        val album = albumWithTracks.album
+        val existingTracks = albumWithTracks.tracks
+        val token = aiPreferences.discogsToken.takeIf { it.isNotBlank() }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDiscogsLoading = true) }
+            val detail = try {
+                DiscogsService.fetchReleaseDetail(releaseId, token)
+            } catch (e: Exception) {
+                null
+            }
+
+            if (detail == null) {
+                _uiState.update {
+                    it.copy(
+                        isDiscogsLoading = false,
+                        userMessage = "获取 Discogs 版本详情失败，请检查网络或配置 Token"
+                    )
+                }
+                return@launch
+            }
+
+            val updatedQuality = when {
+                detail.mediaType.contains("SACD", ignoreCase = true) -> "SACD"
+                detail.mediaType.contains("XRCD", ignoreCase = true) -> "XRCD"
+                detail.mediaType.contains("SHM", ignoreCase = true) -> "SHM-CD"
+                detail.mediaType.contains("BSCD", ignoreCase = true) -> "BSCD2"
+                detail.mediaType.contains("HDCD", ignoreCase = true) -> "HDCD"
+                else -> album.audioQuality ?: "STANDARD"
+            }
+
+            val newNotes = buildString {
+                val existing = album.notes?.trim()
+                if (!existing.isNullOrBlank()) {
+                    append(existing)
+                    append("\n\n")
+                }
+                append("【实体 CD 压盘版本】\n")
+                append("• 介质规格: ${detail.mediaType}\n")
+                if (!detail.country.isNullOrBlank()) append("• 发行国家/地区: ${detail.country}\n")
+                if (!detail.year.isNullOrBlank()) append("• 发行年份: ${detail.year}\n")
+                if (!detail.label.isNullOrBlank()) append("• 唱片厂牌/编号: ${detail.label}\n")
+                if (!detail.barcode.isNullOrBlank()) append("• 条形码: ${detail.barcode}\n")
+                if (detail.credits.isNotEmpty()) {
+                    append("\n【演职制作名单】\n")
+                    detail.credits.take(20).forEach { c ->
+                        append("• ${c.role}: ${c.name}\n")
+                    }
+                }
+                if (!detail.notes.isNullOrBlank()) {
+                    append("\n【版本档案备注】\n")
+                    append(detail.notes)
+                }
+            }.trim()
+
+            val updatedAlbum = album.copy(
+                mediaType = detail.mediaType,
+                label = detail.label ?: album.label,
+                barcode = detail.barcode ?: album.barcode,
+                releaseYear = detail.year ?: album.releaseYear,
+                coverUrl = detail.coverUrl ?: album.coverUrl,
+                audioQuality = updatedQuality,
+                notes = newNotes
+            )
+
+            // 对齐音轨列表与持续时间
+            val updatedTracks = if (detail.tracklist.isNotEmpty()) {
+                detail.tracklist.mapIndexed { idx, dTrack ->
+                    val match = existingTracks.find { it.trackNumber == dTrack.trackNumber }
+                        ?: existingTracks.find { it.title.equals(dTrack.title, ignoreCase = true) }
+                        ?: existingTracks.getOrNull(idx)
+
+                    TrackEntity(
+                        id = match?.id ?: 0L,
+                        albumId = album.id,
+                        trackNumber = dTrack.trackNumber,
+                        title = if (match != null && match.title.isNotBlank()) match.title else dTrack.title,
+                        translatedTitle = match?.translatedTitle,
+                        originalLyrics = match?.originalLyrics,
+                        translatedLyrics = match?.translatedLyrics,
+                        durationMs = dTrack.durationMs ?: match?.durationMs
+                    )
+                }
+            } else {
+                existingTracks
+            }
+
+            repository.saveAlbum(updatedAlbum, updatedTracks)
+
+            // 导入内页扫描切片（若此前尚未导入任何内页画册）
+            if (detail.bookletImageUrls.isNotEmpty()) {
+                val existingPageCount = bookletDao.getPageCount(album.id)
+                if (existingPageCount == 0) {
+                    val bookletEntities = detail.bookletImageUrls.take(12).mapIndexed { pIdx, imgUrl ->
+                        BookletPageEntity(
+                            albumId = album.id,
+                            pageNumber = pIdx + 1,
+                            imagePath = imgUrl,
+                            pageType = if (pIdx == 0) "COVER_FRONT" else "CONTENT"
+                        )
+                    }
+                    bookletDao.insertPages(bookletEntities)
+                }
+            }
+
+            _uiState.update {
+                it.copy(
+                    isDiscogsLoading = false,
+                    isDiscogsPickerOpen = false,
+                    userMessage = "已成功切换至 [${detail.mediaType} · ${detail.country ?: "实体 CD"}] 压盘版本！"
+                )
+            }
+        }
     }
 }

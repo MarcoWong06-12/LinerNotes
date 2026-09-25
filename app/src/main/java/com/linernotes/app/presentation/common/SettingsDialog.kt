@@ -30,6 +30,7 @@ fun SettingsDialog(
     var appLanguage by remember { mutableStateOf(aiPreferences.appLanguage) }
     var targetLanguage by remember { mutableStateOf(aiPreferences.targetLanguage) }
     var lyricsSource by remember { mutableStateOf(aiPreferences.lyricsSource) }
+    var discogsToken by remember { mutableStateOf(aiPreferences.discogsToken) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -161,6 +162,32 @@ fun SettingsDialog(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // ==========================================
+                // 3. Discogs 实体唱片库配置 (可选)
+                // ==========================================
+                Text(
+                    text = "Discogs 唱片资料库 (可选)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "默认免 Token 即可检索。如遇请求频率限制（25次/分），可在 discogs.com/settings/developers 生成 Personal Access Token 填入以提升限额至 60次/分。",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = discogsToken,
+                    onValueChange = { discogsToken = it },
+                    placeholder = { Text("Discogs Personal Access Token...", fontSize = 12.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
@@ -169,6 +196,7 @@ fun SettingsDialog(
                     aiPreferences.appLanguage = appLanguage
                     aiPreferences.targetLanguage = targetLanguage
                     aiPreferences.lyricsSource = lyricsSource
+                    aiPreferences.discogsToken = discogsToken.trim()
                     onSaved()
                 }
             ) {

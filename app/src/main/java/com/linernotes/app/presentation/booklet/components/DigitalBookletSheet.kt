@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DiscFull
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,6 +54,7 @@ fun DigitalBookletSheet(
     pages: List<BookletPageEntity>,
     onAddPages: (List<Uri>) -> Unit,
     onDeletePage: (Long) -> Unit,
+    onOpenDiscogsPicker: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -162,7 +164,8 @@ fun DigitalBookletSheet(
                     // 演职员鸣谢滚动列表 (Credits Roll)
                     BookletCreditsRoll(
                         album = album,
-                        tracks = tracks
+                        tracks = tracks,
+                        onOpenDiscogsPicker = onOpenDiscogsPicker
                     )
                 }
             }
@@ -336,7 +339,8 @@ private fun BookletPagesViewer(
 @Composable
 private fun BookletCreditsRoll(
     album: AlbumEntity?,
-    tracks: List<TrackEntity>
+    tracks: List<TrackEntity>,
+    onOpenDiscogsPicker: (() -> Unit)? = null
 ) {
     val scrollState = rememberScrollState()
 
@@ -354,15 +358,32 @@ private fun BookletCreditsRoll(
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "SPECIFICATIONS & CATALOG",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 2.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "SPECIFICATIONS & CATALOG",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 2.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (onOpenDiscogsPicker != null) {
+                        BouncyTonalButton(
+                            onClick = onOpenDiscogsPicker,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Icon(Icons.Default.DiscFull, contentDescription = null, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("切换版本", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

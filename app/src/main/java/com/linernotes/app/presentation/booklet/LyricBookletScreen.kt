@@ -495,6 +495,21 @@ fun LyricBookletScreen(
                                 leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.secondary) }
                             )
 
+                            // 2.3 实体 CD 压盘版本库 (Discogs)
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text("切换实体 CD 版本 (Discogs)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text("日版SHM-CD/美版/SACD/首版压盘与内页", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.openDiscogsPicker(true)
+                                },
+                                leadingIcon = { Icon(Icons.Default.DiscFull, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            )
+
                             // 2.4 导出标准 LRC 歌词
                             DropdownMenuItem(
                                 text = {
@@ -911,6 +926,10 @@ fun LyricBookletScreen(
             pages = bookletPages,
             onAddPages = { uris -> viewModel.addBookletPages(uris) },
             onDeletePage = { pageId -> viewModel.deleteBookletPage(pageId) },
+            onOpenDiscogsPicker = {
+                viewModel.openBookletSheet(false)
+                viewModel.openDiscogsPicker(true)
+            },
             onDismiss = { viewModel.openBookletSheet(false) }
         )
     }
@@ -924,6 +943,18 @@ fun LyricBookletScreen(
                 viewModel.retranslateCurrentTrack()
             },
             onDismiss = { viewModel.openAiLinerNotes(false) }
+        )
+    }
+
+    if (state.isDiscogsPickerOpen) {
+        val initialQuery = state.albumWithTracks?.album?.let { "${it.title} ${it.artist}" } ?: ""
+        DiscogsReleasePickerSheet(
+            initialQuery = initialQuery,
+            results = state.discogsResults,
+            isLoading = state.isDiscogsLoading,
+            onSearch = { query -> viewModel.searchDiscogs(query) },
+            onSelectRelease = { releaseId -> viewModel.applyDiscogsRelease(releaseId) },
+            onDismiss = { viewModel.openDiscogsPicker(false) }
         )
     }
 }
