@@ -38,6 +38,9 @@ import com.linernotes.app.data.remote.DiscogsReleaseSummary
 import com.linernotes.app.presentation.common.BouncyButton
 import com.linernotes.app.presentation.common.BouncyIconButton
 import com.linernotes.app.presentation.common.BouncyTonalButton
+import com.linernotes.app.presentation.common.bouncyClickable
+import com.linernotes.app.presentation.common.bouncyPress
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.linernotes.app.presentation.theme.VaultBlack
 import com.linernotes.app.presentation.theme.VaultSurface
 
@@ -47,8 +50,11 @@ fun DiscogsReleasePickerSheet(
     initialQuery: String,
     results: List<DiscogsReleaseSummary>,
     isLoading: Boolean,
+    currentAlbumCover: String? = null,
+    discogsToken: String = "",
     onSearch: (String) -> Unit,
     onSelectRelease: (Long) -> Unit,
+    onViewDetail: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -176,12 +182,15 @@ fun DiscogsReleasePickerSheet(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 filters.forEach { filter ->
+                    val chipInteractionSource = remember { MutableInteractionSource() }
                     FilterChip(
                         selected = selectedFilter == filter,
                         onClick = { selectedFilter = filter },
                         label = { Text(filter, fontSize = 12.sp) },
+                        interactionSource = chipInteractionSource,
+                        modifier = Modifier.bouncyPress(interactionSource = chipInteractionSource, pressedScale = 0.94f),
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
                             selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     )
@@ -257,7 +266,10 @@ fun DiscogsReleasePickerSheet(
                     items(filteredResults, key = { it.id }) { release ->
                         DiscogsReleaseCard(
                             release = release,
-                            onSelect = { onSelectRelease(release.id) }
+                            currentAlbumCover = currentAlbumCover,
+                            discogsToken = discogsToken,
+                            onSelect = { onSelectRelease(release.id) },
+                            onViewDetail = { onViewDetail(release.id) }
                         )
                     }
                 }
@@ -269,13 +281,18 @@ fun DiscogsReleasePickerSheet(
 @Composable
 private fun DiscogsReleaseCard(
     release: DiscogsReleaseSummary,
-    onSelect: () -> Unit
+    currentAlbumCover: String?,
+    discogsToken: String,
+    onSelect: () -> Unit,
+    onViewDetail: () -> Unit
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = VaultSurface,
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .bouncyClickable { onViewDetail() }
     ) {
         Row(
             modifier = Modifier
@@ -283,26 +300,33 @@ private fun DiscogsReleaseCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 封面缩略图
-            val imgUrl = release.thumbUrl ?: release.coverImageUrl
+            // 封面缩略图 (优先 Release 自身封面，回退至当前专辑封面)
+            val imgUrl = release.thumbUrl?.takeIf { it.isNotBlank() }
+                ?: release.coverImageUrl?.takeIf { it.isNotBlank() }
+                ?: currentAlbumCover?.takeIf { it.isNotBlank() }
+
             if (!imgUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(imgUrl)
+                        .addHeader("User-Agent", "LinerNotes/1.0 (Android; +https://github.com/MarcoWong06-12/LinerNotes)")
+                        .apply {
+                            if (discogsToken.isNotBlank()) addHeader("Authorization", "Discogs token=${discogsToken.trim()}")
+                        }
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .size(68.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(Color.White.copy(alpha = 0.05f))
                 )
             } else {
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .size(68.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(Color.White.copy(alpha = 0.08f)),
                     contentAlignment = Alignment.Center
                 ) {
@@ -425,14 +449,28 @@ private fun DiscogsReleaseCard(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // 选择应用按钮
-            BouncyButton(
-                onClick = onSelect,
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                modifier = Modifier.height(36.dp)
+            // 详情与选用操作按钮组
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text("选用", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                BouncyTonalButton(
+                    onClick = onViewDetail,
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text("详情", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+
+                BouncyButton(
+                    onClick = onSelect,
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text("选用", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

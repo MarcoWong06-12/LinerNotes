@@ -48,4 +48,31 @@ class DiscogsServiceTest {
         assertTrue(DiscogsService.searchByBarcode("").isEmpty())
         assertTrue(DiscogsService.searchByBarcode("---").isEmpty())
     }
+
+    @Test
+    fun testDiscogsReleaseDetailDefaults() {
+        val detail = DiscogsReleaseDetail(
+            id = 123L,
+            title = "Test Album",
+            artist = "Test Artist",
+            year = "2024",
+            country = "Japan",
+            releasedDate = "2024-01-01",
+            label = "Sony Music",
+            catalogNumber = "SICX-100",
+            barcode = "4547366000000",
+            formats = listOf("CD", "SHM-CD"),
+            mediaType = "SHM-CD",
+            notes = "Test notes",
+            coverUrl = "http://example.com/cover.jpg",
+            bookletImageUrls = listOf("http://example.com/scan1.jpg"),
+            tracklist = emptyList(),
+            credits = emptyList()
+        )
+        assertTrue(detail.genres.isEmpty())
+        assertTrue(detail.styles.isEmpty())
+        assertTrue(detail.companies.isEmpty())
+        assertNull(detail.rating)
+        assertNull(detail.haveCount)
+    }
 }

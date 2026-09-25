@@ -34,6 +34,11 @@ data class DiscogsReleaseDetail(
     val barcode: String?,
     val formats: List<String>,
     val mediaType: String,
+    val genres: List<String> = emptyList(),
+    val styles: List<String> = emptyList(),
+    val companies: List<String> = emptyList(),
+    val rating: Float? = null,
+    val haveCount: Int? = null,
     val notes: String?,
     val coverUrl: String?,
     val bookletImageUrls: List<String>,
@@ -324,6 +329,38 @@ object DiscogsService {
                 }
             }
 
+            // 流派与风格
+            val genresArray = root.optJSONArray("genres") ?: JSONArray()
+            val genresList = mutableListOf<String>()
+            for (g in 0 until genresArray.length()) {
+                val gStr = genresArray.optString(g, "").trim()
+                if (gStr.isNotBlank()) genresList.add(gStr)
+            }
+
+            val stylesArray = root.optJSONArray("styles") ?: JSONArray()
+            val stylesList = mutableListOf<String>()
+            for (s in 0 until stylesArray.length()) {
+                val sStr = stylesArray.optString(s, "").trim()
+                if (sStr.isNotBlank()) stylesList.add(sStr)
+            }
+
+            // 制作与制造单位 (Companies / Studios)
+            val companiesArray = root.optJSONArray("companies") ?: JSONArray()
+            val companiesList = mutableListOf<String>()
+            for (c in 0 until companiesArray.length()) {
+                val cObj = companiesArray.optJSONObject(c) ?: continue
+                val entityType = cObj.optString("entity_type_name", "").trim()
+                val cName = cObj.optString("name", "").replace("\\s*\\(\\d+\\)$".toRegex(), "").trim()
+                if (cName.isNotBlank()) {
+                    companiesList.add(if (entityType.isNotBlank()) "$entityType: $cName" else cName)
+                }
+            }
+
+            // 社区评分与收藏数
+            val communityObj = root.optJSONObject("community")
+            val ratingAvg = communityObj?.optJSONObject("rating")?.optDouble("average", 0.0)?.toFloat()?.takeIf { it > 0f }
+            val have = communityObj?.optInt("have", 0)?.takeIf { it > 0 }
+
             DiscogsReleaseDetail(
                 id = id,
                 title = title,
@@ -336,6 +373,11 @@ object DiscogsService {
                 barcode = barcode,
                 formats = formatList,
                 mediaType = mediaType,
+                genres = genresList,
+                styles = stylesList,
+                companies = companiesList,
+                rating = ratingAvg,
+                haveCount = have,
                 notes = notes,
                 coverUrl = coverUrl,
                 bookletImageUrls = bookletImages,

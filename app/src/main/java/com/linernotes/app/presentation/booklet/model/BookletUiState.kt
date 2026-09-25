@@ -42,5 +42,7 @@ data class BookletUiState(
     // Discogs 实体 CD 版本库状态
     val isDiscogsPickerOpen: Boolean = false,
     val isDiscogsLoading: Boolean = false,
-    val discogsResults: List<com.linernotes.app.data.remote.DiscogsReleaseSummary> = emptyList()
+    val discogsResults: List<com.linernotes.app.data.remote.DiscogsReleaseSummary> = emptyList(),
+    val selectedDiscogsDetail: com.linernotes.app.data.remote.DiscogsReleaseDetail? = null,
+    val isDiscogsDetailLoading: Boolean = false
 )

@@ -952,9 +952,52 @@ fun LyricBookletScreen(
             initialQuery = initialQuery,
             results = state.discogsResults,
             isLoading = state.isDiscogsLoading,
+            currentAlbumCover = state.albumWithTracks?.album?.coverUrl,
+            discogsToken = viewModel.aiPreferences.discogsToken,
             onSearch = { query -> viewModel.searchDiscogs(query) },
             onSelectRelease = { releaseId -> viewModel.applyDiscogsRelease(releaseId) },
+            onViewDetail = { releaseId -> viewModel.viewDiscogsReleaseDetail(releaseId) },
             onDismiss = { viewModel.openDiscogsPicker(false) }
+        )
+    }
+
+    if (state.isDiscogsDetailLoading) {
+        Dialog(onDismissRequest = { viewModel.closeDiscogsReleaseDetail() }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFF1B1B20),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        strokeWidth = 3.dp
+                    )
+                    Text(
+                        text = "正在拉取 Discogs 压盘详细档案...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+
+    if (state.selectedDiscogsDetail != null) {
+        DiscogsReleaseDetailSheet(
+            detail = state.selectedDiscogsDetail!!,
+            currentAlbumCover = state.albumWithTracks?.album?.coverUrl,
+            discogsToken = viewModel.aiPreferences.discogsToken,
+            onApplyRelease = { releaseId ->
+                viewModel.applyDiscogsRelease(releaseId)
+            },
+            onDismiss = { viewModel.closeDiscogsReleaseDetail() }
         )
     }
 }

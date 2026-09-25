@@ -1090,9 +1090,34 @@ class LyricBookletViewModel @Inject constructor(
                 it.copy(
                     isDiscogsLoading = false,
                     isDiscogsPickerOpen = false,
+                    selectedDiscogsDetail = null,
+                    isDiscogsDetailLoading = false,
                     userMessage = "已成功切换至 [${detail.mediaType} · ${detail.country ?: "实体 CD"}] 压盘版本！"
                 )
             }
         }
+    }
+
+    fun viewDiscogsReleaseDetail(releaseId: Long) {
+        val token = aiPreferences.discogsToken.takeIf { it.isNotBlank() }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDiscogsDetailLoading = true) }
+            val detail = try {
+                DiscogsService.fetchReleaseDetail(releaseId, token)
+            } catch (e: Exception) {
+                null
+            }
+            _uiState.update {
+                it.copy(
+                    isDiscogsDetailLoading = false,
+                    selectedDiscogsDetail = detail,
+                    userMessage = if (detail == null) "获取版本详细信息失败，请检查网络或配置 Token" else it.userMessage
+                )
+            }
+        }
+    }
+
+    fun closeDiscogsReleaseDetail() {
+        _uiState.update { it.copy(selectedDiscogsDetail = null, isDiscogsDetailLoading = false) }
     }
 }
