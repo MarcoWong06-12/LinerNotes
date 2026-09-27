@@ -72,7 +72,8 @@ class CdShelfViewModel @Inject constructor(
             // 导入专辑后静默预取全辑 Genius 歌词典故与背景故事（无感且极速）
             if (tracks.isNotEmpty()) {
                 viewModelScope.launch(Dispatchers.IO) {
-                    annotationRepository.prefetchAlbumAnnotations(album.artist, tracks)
+                    val savedAlbum = repository.getAlbumBookletStream(album.id).filterNotNull().first()
+                    annotationRepository.prefetchAlbumAnnotations(album.artist, savedAlbum.tracks)
                 }
             }
         }

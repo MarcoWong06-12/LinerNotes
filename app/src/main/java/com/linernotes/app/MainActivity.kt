@@ -7,7 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
-import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.linernotes.app.core.i18n.LocalStrings
 import com.linernotes.app.core.i18n.resolveAppStrings
 import com.linernotes.app.core.preference.AiPreferences
@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
 
             CompositionLocalProvider(LocalStrings provides strings) {
                 LinerNotesTheme {
-                    var selectedAlbumId by remember { mutableStateOf<String?>(null) }
+                    var selectedAlbumId by rememberSaveable { mutableStateOf<String?>(null) }
 
                     // Top-level back handler: when in an album, pressing/swiping back returns to CD Shelf
                     BackHandler(enabled = selectedAlbumId != null) {

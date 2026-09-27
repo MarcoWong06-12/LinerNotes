@@ -153,6 +153,9 @@ class LyricBookletViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
+    private var loadBookletJob: kotlinx.coroutines.Job? = null
+    private var prefetchedAlbumId: String? = null
+
     fun setAlbumId(id: String) {
         if (currentAlbumId != id) {
             currentAlbumId = id
@@ -161,7 +164,8 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     private fun loadBooklet(id: String) {
-        viewModelScope.launch {
+        loadBookletJob?.cancel()
+        loadBookletJob = viewModelScope.launch {
             repository.getAlbumBookletStream(id).collect { albumWithTracks ->
                 if (albumWithTracks != null) {
                     val rawTracks = albumWithTracks.tracks.sortedBy { it.trackNumber }
@@ -203,7 +207,8 @@ class LyricBookletViewModel @Inject constructor(
                     }
                     loadAnnotationsForCurrentTrack()
                     val otherTracks = albumWithTracks.tracks.filter { it.id != currentTrack?.id }
-                    if (otherTracks.isNotEmpty()) {
+                    if (prefetchedAlbumId != id && otherTracks.isNotEmpty()) {
+                        prefetchedAlbumId = id
                         viewModelScope.launch(Dispatchers.IO) {
                             annotationRepository.prefetchAlbumAnnotations(albumWithTracks.album.artist, otherTracks)
                         }

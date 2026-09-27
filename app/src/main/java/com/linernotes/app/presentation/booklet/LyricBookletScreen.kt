@@ -159,10 +159,11 @@ fun LyricBookletScreen(
     }
 
     // 当伴侣播放器推进歌词时间轴时，平滑自动滚动居中聚焦当前活动行
-    LaunchedEffect(state.activeLineIndex) {
+    LaunchedEffect(state.activeLineIndex, state.songStory != null) {
         if (state.activeLineIndex in state.alignedLyrics.indices) {
+            val targetIndex = if (state.songStory != null) state.activeLineIndex + 1 else state.activeLineIndex
             listState.animateScrollToItem(
-                index = state.activeLineIndex,
+                index = targetIndex,
                 scrollOffset = -220
             )
         }

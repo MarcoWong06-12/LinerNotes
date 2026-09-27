@@ -95,11 +95,12 @@ object FuriganaEngine {
     )
 
     fun isJapanese(text: String): Boolean {
+        // 真正的日文歌词必含平假名、片假名，或含有行内注音标记如 夢(ゆめ)
+        // 纯 CJK 汉字（如中文歌词）绝不可被误判为日文
         return text.any {
             it in '\u3040'..'\u309F' || // Hiragana
-            it in '\u30A0'..'\u30FF' || // Katakana
-            it in '\u4E00'..'\u9FFF'    // CJK
-        }
+            it in '\u30A0'..'\u30FF'    // Katakana
+        } || (text.contains("(") && parseInlineReadings(text).any { it.reading != null })
     }
 
     fun katakanaToHiragana(text: String): String {

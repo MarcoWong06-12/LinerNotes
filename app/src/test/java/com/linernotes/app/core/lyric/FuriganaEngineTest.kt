@@ -12,6 +12,8 @@ class FuriganaEngineTest {
         assertTrue(FuriganaEngine.isJapanese("カタカナ"))
         assertFalse(FuriganaEngine.isJapanese("Hello World! This is English."))
         assertFalse(FuriganaEngine.isJapanese("1234567890"))
+        assertFalse(FuriganaEngine.isJapanese("晴天 - 周杰伦 故事的小黄花"))
+        assertFalse(FuriganaEngine.isJapanese("我爱你中国"))
     }
 
     @Test

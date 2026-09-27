@@ -76,12 +76,18 @@ object UnifiedLyricsService {
 
         val neteaseRes = neteaseDeferred.await()
         if (neteaseRes != null && neteaseRes.isBilingual && neteaseRes.originalLyrics.isNotBlank()) {
+            if (!LyricSanitizer.hasCensorship(neteaseRes.originalLyrics) && !LyricSanitizer.hasCensorship(neteaseRes.title)) {
+                return@supervisorScope neteaseRes
+            }
             val lrclibRes = lrclibDeferred.await()
             return@supervisorScope sanitizeResult(neteaseRes, lrclibRes)
         }
 
         val qqRes = qqDeferred.await()
         if (qqRes != null && qqRes.isBilingual && qqRes.originalLyrics.isNotBlank()) {
+            if (!LyricSanitizer.hasCensorship(qqRes.originalLyrics) && !LyricSanitizer.hasCensorship(qqRes.title)) {
+                return@supervisorScope qqRes
+            }
             val lrclibRes = lrclibDeferred.await()
             return@supervisorScope sanitizeResult(qqRes, lrclibRes)
         }
