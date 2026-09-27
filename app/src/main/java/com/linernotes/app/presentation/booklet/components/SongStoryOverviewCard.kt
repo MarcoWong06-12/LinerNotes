@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -18,7 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.linernotes.app.core.lyric.AiAnnotationCurator
 import com.linernotes.app.data.local.entity.SongStoryEntity
 import com.linernotes.app.presentation.common.BouncyTonalButton
 
@@ -39,6 +40,15 @@ fun SongStoryOverviewCard(
     modifier: Modifier = Modifier
 ) {
     if (story == null || story.descriptionPlain.isBlank()) return
+
+    val isChinese = remember(story.descriptionPlain) {
+        AiAnnotationCurator.isAlreadyChinese(story.descriptionPlain)
+    }
+
+    val hasTranslation = !story.descriptionTranslation.isNullOrBlank()
+    var showTranslation by remember(story.trackId, story.descriptionTranslation) {
+        mutableStateOf(hasTranslation)
+    }
 
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -80,7 +90,8 @@ fun SongStoryOverviewCard(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         Surface(
                             shape = CircleShape,
@@ -129,8 +140,8 @@ fun SongStoryOverviewCard(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // 故事文本（折叠时最多显示 3 行，展开显示全部）
-                val displayText = if (!story.descriptionTranslation.isNullOrBlank()) {
-                    story.descriptionTranslation
+                val displayText = if (!isChinese && showTranslation && hasTranslation) {
+                    story.descriptionTranslation!!
                 } else {
                     story.descriptionPlain
                 }
@@ -146,15 +157,18 @@ fun SongStoryOverviewCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                // 展开状态下提供翻译与折叠控制
-                AnimatedVisibility(visible = isExpanded) {
+                // 展开状态下：仅当故事非中文时才提供翻译与原文切换控制
+                AnimatedVisibility(visible = isExpanded && !isChinese) {
                     Column(modifier = Modifier.padding(top = 12.dp)) {
-                        if (story.descriptionTranslation.isNullOrBlank()) {
+                        if (!hasTranslation) {
+                            // 未翻译状态：提供一键翻译按钮
                             BouncyTonalButton(
                                 onClick = { onTranslate(story) },
                                 shape = RoundedCornerShape(10.dp),
                                 enabled = !isTranslating,
-                                modifier = Modifier.fillMaxWidth().height(36.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(36.dp)
                             ) {
                                 if (isTranslating) {
                                     CircularProgressIndicator(
@@ -165,9 +179,55 @@ fun SongStoryOverviewCard(
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text("正在翻译背景故事...", fontSize = 12.sp)
                                 } else {
-                                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text("一键中文翻译", fontSize = 12.sp)
+                                }
+                            }
+                        } else {
+                            // 已翻译状态：提供双向自由切换段 [ 原文 | 中文释义 ]
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(10.dp))
+                                    .padding(3.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Surface(
+                                    onClick = { showTranslation = false },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (!showTranslation) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Transparent,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 6.dp)) {
+                                        Text(
+                                            text = "英文原文",
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontWeight = if (!showTranslation) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (!showTranslation) Color.White else Color.White.copy(alpha = 0.6f)
+                                            )
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    onClick = { showTranslation = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (showTranslation) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Transparent,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 6.dp)) {
+                                        Text(
+                                            text = "中文释义",
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontWeight = if (showTranslation) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (showTranslation) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
+                                            )
+                                        )
+                                    }
                                 }
                             }
                         }

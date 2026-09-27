@@ -784,7 +784,7 @@ fun LyricBookletScreen(
                                         isCompanionPlaying = state.isCompanionPlaying,
                                         furiganaMode = state.furiganaMode,
                                         annotation = lineAnnotation,
-                                        onClick = { viewModel.onLyricLineClicked(line) }
+                                        onClick = { viewModel.onLyricLineClicked(index, line) }
                                     )
                                 }
                                 item {

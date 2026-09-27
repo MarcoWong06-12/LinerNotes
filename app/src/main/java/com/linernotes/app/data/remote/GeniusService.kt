@@ -73,8 +73,8 @@ object GeniusService {
      */
     private fun sanitizeSearchQuery(title: String, artist: String): String {
         val cleanTitle = title
-            .replace(Regex("""\s*[\(\[\{](?:feat|ft|live|remaster|version|deluxe|bonus|mono|stereo|anniversary|ost|soundtrack).*?[\)\]\}]""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s*-\s*(?:feat|live|remaster|version|deluxe|bonus).*$""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s*[\(\[\{](?:feat|ft|radio\s*mix|club\s*mix|extended\s*mix|original\s*mix|mix|remix|edit|radio\s*edit|single\s*version|album\s*version|acoustic|live|remaster(?:ed)?|version|deluxe|bonus|mono|stereo|anniversary|ost|soundtrack).*?[\)\]\}]""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s*-\s*(?:feat|radio\s*mix|club\s*mix|mix|remix|edit|radio\s*edit|single\s*version|live|remaster(?:ed)?|version|deluxe|bonus).*$""", RegexOption.IGNORE_CASE), "")
             .trim()
 
         val cleanArtist = artist

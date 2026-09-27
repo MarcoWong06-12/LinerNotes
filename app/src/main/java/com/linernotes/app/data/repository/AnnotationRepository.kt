@@ -1,6 +1,7 @@
 package com.linernotes.app.data.repository
 
 import com.linernotes.app.core.i18n.TranslationTargetLanguage
+import com.linernotes.app.core.lyric.AiAnnotationCurator
 import com.linernotes.app.core.preference.AiPreferences
 import com.linernotes.app.data.local.dao.LyricAnnotationDao
 import com.linernotes.app.data.local.entity.LyricAnnotationEntity
@@ -40,102 +41,147 @@ class AnnotationRepository @Inject constructor(
     suspend fun fetchAndCacheAnnotations(
         track: TrackEntity,
         artist: String,
+        alignedLines: List<String> = emptyList(),
         forceRefresh: Boolean = false
     ): Result<Pair<SongStoryEntity?, List<LyricAnnotationEntity>>> = withContext(Dispatchers.IO) {
         val trackId = track.id
+
+        // 提取有效歌词文本行
+        val effectiveLines = if (alignedLines.isNotEmpty()) {
+            alignedLines
+        } else {
+            track.originalLyrics?.lines()
+                ?.map { it.replace(Regex("""^\[\d+:\d+(?:\.\d+)?\]"""), "").trim() }
+                ?.filter { it.isNotBlank() && !it.startsWith("[") }
+                ?: emptyList()
+        }
 
         // 1. 若非强制刷新，先检查本地 Room 缓存
         if (!forceRefresh) {
             val cachedAnnotations = lyricAnnotationDao.getAnnotations(trackId)
             val cachedStory = lyricAnnotationDao.getSongStory(trackId)
-            if (cachedAnnotations.isNotEmpty() || cachedStory != null) {
-                return@withContext Result.success(Pair(cachedStory, cachedAnnotations))
+
+            // 只有当故事与逐句典故均已缓存完整时，才直接返回本地缓存
+            // 如果仅有故事而典故为空（或相反），绝不能提早退出，必须继续向下执行 Genius 抓取或 AI 深度策展
+            if (cachedStory != null && cachedAnnotations.isNotEmpty()) {
+                val fixedStory = if (AiAnnotationCurator.isAlreadyChinese(cachedStory.descriptionPlain) &&
+                    !cachedStory.descriptionTranslation.isNullOrBlank()
+                ) {
+                    val s = cachedStory.copy(descriptionTranslation = null)
+                    lyricAnnotationDao.updateSongStory(s)
+                    s
+                } else cachedStory
+
+                return@withContext Result.success(Pair(fixedStory, cachedAnnotations))
             }
         }
 
+        val cleanTitle = AiAnnotationCurator.cleanSongTitle(track.title)
         val customToken = aiPreferences.geniusToken.takeIf { it.isNotBlank() }
 
-        // 2. 检索 Genius 条目
-        val searchHit = GeniusService.searchSong(
-            title = track.title,
-            artist = artist,
-            customToken = customToken
-        )
+        var storyEntity: SongStoryEntity? = null
+        val annotationEntities = mutableListOf<LyricAnnotationEntity>()
 
-        if (searchHit != null) {
-            val songId = searchHit.id
+        // 2. 尝试从 Genius 检索原生条目
+        try {
+            val searchHit = GeniusService.searchSong(
+                title = cleanTitle,
+                artist = artist,
+                customToken = customToken
+            )
 
-            // 2.1 获取歌曲概览与时代背景
-            val detail = GeniusService.getSongDetails(songId, customToken)
-            var storyEntity: SongStoryEntity? = null
-            if (detail != null && (detail.descriptionPlain.isNotBlank() || !detail.headerImageUrl.isNullOrBlank())) {
-                storyEntity = SongStoryEntity(
-                    trackId = trackId,
-                    geniusSongId = songId,
-                    title = detail.title,
-                    artist = detail.artist,
-                    descriptionPlain = detail.descriptionPlain,
-                    releaseDate = detail.releaseDate,
-                    headerImageUrl = detail.headerImageUrl ?: searchHit.coverUrl,
-                    songArtImageUrl = detail.songArtImageUrl ?: searchHit.coverUrl,
-                    producerCredits = detail.producerCredits,
-                    songUrl = detail.songUrl ?: searchHit.url
-                )
-                lyricAnnotationDao.insertSongStory(storyEntity)
-            }
+            if (searchHit != null) {
+                val songId = searchHit.id
 
-            // 2.2 获取歌词典故注释列表 (Referents)
-            val referents = GeniusService.getReferents(songId, customToken)
-            val annotationEntities = mutableListOf<LyricAnnotationEntity>()
-
-            for (ref in referents) {
-                val primaryAnnot = ref.annotations.firstOrNull() ?: continue
-                val imagesJson = if (primaryAnnot.imageUrls.isNotEmpty()) {
-                    JSONArray(primaryAnnot.imageUrls).toString()
-                } else null
-
-                annotationEntities.add(
-                    LyricAnnotationEntity(
+                // 2.1 获取歌曲概览与时代背景
+                val detail = GeniusService.getSongDetails(songId, customToken)
+                if (detail != null && (detail.descriptionPlain.isNotBlank() || !detail.headerImageUrl.isNullOrBlank())) {
+                    storyEntity = SongStoryEntity(
                         trackId = trackId,
-                        lyricFragment = ref.fragment,
-                        explanationText = primaryAnnot.bodyPlain,
-                        authorName = primaryAnnot.authorName,
-                        authorAvatarUrl = primaryAnnot.authorAvatarUrl,
-                        isVerified = primaryAnnot.verified,
-                        votesTotal = primaryAnnot.votesTotal,
-                        imageUrlsJson = imagesJson,
-                        source = "GENIUS",
                         geniusSongId = songId,
-                        geniusUrl = primaryAnnot.url ?: searchHit.url
+                        title = detail.title,
+                        artist = detail.artist,
+                        descriptionPlain = detail.descriptionPlain,
+                        releaseDate = detail.releaseDate,
+                        headerImageUrl = detail.headerImageUrl ?: searchHit.coverUrl,
+                        songArtImageUrl = detail.songArtImageUrl ?: searchHit.coverUrl,
+                        producerCredits = detail.producerCredits,
+                        songUrl = detail.songUrl ?: searchHit.url
                     )
-                )
-            }
+                }
 
-            if (annotationEntities.isNotEmpty()) {
-                lyricAnnotationDao.deleteAnnotationsForTrack(trackId)
-                lyricAnnotationDao.insertAnnotations(annotationEntities)
-            }
+                // 2.2 获取歌词典故注释列表 (Referents)
+                val referents = GeniusService.getReferents(songId, customToken)
+                for (ref in referents) {
+                    val primaryAnnot = ref.annotations.firstOrNull() ?: continue
+                    val imagesJson = if (primaryAnnot.imageUrls.isNotEmpty()) {
+                        JSONArray(primaryAnnot.imageUrls).toString()
+                    } else null
 
-            return@withContext Result.success(Pair(storyEntity, annotationEntities))
+                    annotationEntities.add(
+                        LyricAnnotationEntity(
+                            trackId = trackId,
+                            lyricFragment = ref.fragment,
+                            explanationText = primaryAnnot.bodyPlain,
+                            authorName = primaryAnnot.authorName,
+                            authorAvatarUrl = primaryAnnot.authorAvatarUrl,
+                            isVerified = primaryAnnot.verified,
+                            votesTotal = primaryAnnot.votesTotal,
+                            imageUrlsJson = imagesJson,
+                            source = "GENIUS",
+                            geniusSongId = songId,
+                            geniusUrl = primaryAnnot.url ?: searchHit.url
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            // 网络受限或 Genius 403/超时，平滑进入 AI 策展容灾模式
         }
 
-        // 3. 若 Genius 未收录，唤起 AI 唱片学者生成歌曲背景故事
-        val fallbackStory = SongStoryEntity(
-            trackId = trackId,
-            title = track.title,
-            artist = artist,
-            descriptionPlain = "《${track.title}》收录于经典唱片内页。作品在旋律起伏与配器编排中蕴含着词曲作者的真挚心绪，细腻勾勒了独特的时代风貌与情感共鸣。",
-            source = "AI_CURATED"
-        )
-        lyricAnnotationDao.insertSongStory(fallbackStory)
-        return@withContext Result.success(Pair(fallbackStory, emptyList()))
+        // 3. 容灾与深度策展保障：若未能从 Genius 获得有效注释或背景故事，唤起 AI 唱片学者深度策展引擎
+        if (storyEntity == null || storyEntity.descriptionPlain.isBlank() || annotationEntities.isEmpty()) {
+            val (curatedStory, curatedAnnotations) = AiAnnotationCurator.curateTrack(
+                track = track,
+                artist = artist,
+                alignedLines = effectiveLines
+            )
+
+            if (storyEntity == null || storyEntity.descriptionPlain.isBlank()) {
+                storyEntity = curatedStory
+            }
+            if (annotationEntities.isEmpty() && curatedAnnotations.isNotEmpty()) {
+                annotationEntities.addAll(curatedAnnotations)
+            }
+        }
+
+        // 4. 持久化存储至本地 Room 数据库
+        if (storyEntity != null) {
+            // 清除旧的可能被误翻译成英文的 descriptionTranslation
+            if (AiAnnotationCurator.isAlreadyChinese(storyEntity.descriptionPlain)) {
+                storyEntity = storyEntity.copy(descriptionTranslation = null)
+            }
+            lyricAnnotationDao.insertSongStory(storyEntity)
+        }
+
+        if (annotationEntities.isNotEmpty()) {
+            lyricAnnotationDao.deleteAnnotationsForTrack(trackId)
+            lyricAnnotationDao.insertAnnotations(annotationEntities)
+        }
+
+        return@withContext Result.success(Pair(storyEntity, annotationEntities))
     }
 
     /**
-     * 针对外文注释或背景故事进行本地中文/目标语言机器翻译并持久化
+     * 针对外文注释进行本地中文/目标语言机器翻译并持久化
      */
     suspend fun translateAnnotation(annotation: LyricAnnotationEntity): LyricAnnotationEntity = withContext(Dispatchers.IO) {
         if (!annotation.explanationTranslation.isNullOrBlank()) {
+            return@withContext annotation
+        }
+
+        // 如果已经是中文，无需发起机器翻译（避免将中文误翻为英文）
+        if (AiAnnotationCurator.isAlreadyChinese(annotation.explanationText)) {
             return@withContext annotation
         }
 
@@ -148,8 +194,16 @@ class AnnotationRepository @Inject constructor(
         updated
     }
 
+    /**
+     * 针对外文歌曲背景故事进行本地中文/目标语言机器翻译并持久化
+     */
     suspend fun translateSongStory(story: SongStoryEntity): SongStoryEntity = withContext(Dispatchers.IO) {
         if (!story.descriptionTranslation.isNullOrBlank()) {
+            return@withContext story
+        }
+
+        // 如果已经是中文，无需发起机器翻译（避免将中文误翻为英文）
+        if (AiAnnotationCurator.isAlreadyChinese(story.descriptionPlain)) {
             return@withContext story
         }
 

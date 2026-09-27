@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.linernotes.app.core.lyric.AiAnnotationCurator
 import com.linernotes.app.data.local.entity.LyricAnnotationEntity
 import com.linernotes.app.presentation.common.BouncyButton
 import com.linernotes.app.presentation.common.BouncyIconButton
@@ -50,6 +51,10 @@ fun LyricAnnotationSheet(
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scrollState = rememberScrollState()
+
+    val isChinese = remember(annotation.explanationText) {
+        AiAnnotationCurator.isAlreadyChinese(annotation.explanationText)
+    }
 
     // 解析配图列表
     val imageUrls = remember(annotation.imageUrlsJson) {
@@ -296,65 +301,67 @@ fun LyricAnnotationSheet(
                     }
                 }
 
-                // 5. 中文翻译与本地化解读区域 (Translation Bridge)
-                if (!annotation.explanationTranslation.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = "中文释义与典故解析",
-                                    style = MaterialTheme.typography.labelLarge.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
+                // 5. 中文翻译与本地化解读区域 (仅当原文非中文时显示)
+                if (!isChinese) {
+                    if (!annotation.explanationTranslation.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
                                     )
+                                    Text(
+                                        text = "中文释义与典故解析",
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = annotation.explanationTranslation,
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.sp,
+                                        lineHeight = 24.sp
+                                    ),
+                                    color = Color(0xFFE8E8E8)
                                 )
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = annotation.explanationTranslation,
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontSize = 15.sp,
-                                    lineHeight = 24.sp
-                                ),
-                                color = Color(0xFFE8E8E8)
-                            )
                         }
-                    }
-                } else {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    BouncyTonalButton(
-                        onClick = { onTranslate(annotation) },
-                        shape = RoundedCornerShape(12.dp),
-                        enabled = !isTranslating,
-                        modifier = Modifier.fillMaxWidth().height(42.dp)
-                    ) {
-                        if (isTranslating) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("正在智能翻译典故...", fontSize = 13.sp)
-                        } else {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("查看中文释义与智能解析", fontSize = 13.sp)
+                    } else {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        BouncyTonalButton(
+                            onClick = { onTranslate(annotation) },
+                            shape = RoundedCornerShape(12.dp),
+                            enabled = !isTranslating,
+                            modifier = Modifier.fillMaxWidth().height(42.dp)
+                        ) {
+                            if (isTranslating) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("正在智能翻译典故...", fontSize = 13.sp)
+                            } else {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("查看中文释义与智能解析", fontSize = 13.sp)
+                            }
                         }
                     }
                 }

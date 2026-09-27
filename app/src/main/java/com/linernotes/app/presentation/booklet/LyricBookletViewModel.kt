@@ -485,9 +485,15 @@ class LyricBookletViewModel @Inject constructor(
         val track = tracks.getOrNull(index) ?: return
         val artist = _uiState.value.albumWithTracks?.album?.artist ?: ""
 
+        val lyricTexts = _uiState.value.alignedLyrics.map { it.original }.ifEmpty {
+            track.originalLyrics?.lines()
+                ?.map { it.replace(Regex("""^\[\d+:\d+(?:\.\d+)?\]"""), "").trim() }
+                ?.filter { it.isNotBlank() && !it.startsWith("[") } ?: emptyList()
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingAnnotations = true) }
-            val result = annotationRepository.fetchAndCacheAnnotations(track, artist, forceRefresh)
+            val result = annotationRepository.fetchAndCacheAnnotations(track, artist, lyricTexts, forceRefresh)
             result.onSuccess { (story, annotations) ->
                 val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(
                     _uiState.value.alignedLyrics,
@@ -558,15 +564,19 @@ class LyricBookletViewModel @Inject constructor(
         }
     }
 
-    fun onLyricLineClicked(line: BilingualLyricLine) {
-        val lineIndex = _uiState.value.alignedLyrics.indexOfFirst { it.lineNumber == line.lineNumber }
-        val annotation = if (lineIndex >= 0) _uiState.value.lineAnnotations[lineIndex] else null
+    fun onLyricLineClicked(lineIndex: Int, line: BilingualLyricLine) {
+        val annotation = _uiState.value.lineAnnotations[lineIndex]
         if (annotation != null) {
             openAnnotation(annotation)
         }
         if (line.startTimeMs != null) {
             seekCompanion(line.startTimeMs)
         }
+    }
+
+    fun onLyricLineClicked(line: BilingualLyricLine) {
+        val lineIndex = _uiState.value.alignedLyrics.indexOfFirst { it.lineNumber == line.lineNumber }
+        onLyricLineClicked(if (lineIndex >= 0) lineIndex else 0, line)
     }
 
     fun toggleCalibrationBar() {
