@@ -29,6 +29,7 @@ import com.linernotes.app.core.lyric.AiAnnotationCurator
 import com.linernotes.app.core.util.ChineseConverter
 import com.linernotes.app.data.local.entity.SongStoryEntity
 import com.linernotes.app.presentation.common.BouncyTonalButton
+import com.linernotes.app.presentation.common.bouncyClickable
 
 @Composable
 fun SongStoryOverviewCard(
