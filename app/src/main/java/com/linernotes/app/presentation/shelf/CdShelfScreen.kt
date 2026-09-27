@@ -29,6 +29,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.Activity
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.linernotes.app.presentation.common.BouncyIconButton
 import com.linernotes.app.presentation.common.SettingsDialog
@@ -44,6 +48,30 @@ fun CdShelfScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val strings = com.linernotes.app.core.i18n.LocalStrings.current
+    val context = LocalContext.current
+    var lastBackPressTime by remember { mutableLongStateOf(0L) }
+
+    // 适配 Android 系统手势导航 (关闭搜索/弹窗，主界面双击防误触退出)
+    BackHandler(enabled = true) {
+        when {
+            state.isAddSheetOpen -> viewModel.setAddSheetOpen(false)
+            state.isSettingsOpen -> viewModel.setSettingsOpen(false)
+            state.isSearchActive -> viewModel.setSearchActive(false)
+            else -> {
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastBackPressTime < 2000L) {
+                    (context as? Activity)?.finish()
+                } else {
+                    lastBackPressTime = currentTime
+                    Toast.makeText(
+                        context,
+                        "再按一次退出 LinerNotes",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {

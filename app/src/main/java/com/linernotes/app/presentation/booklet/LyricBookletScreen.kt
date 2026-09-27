@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Pause
 import com.linernotes.app.core.util.ChineseConverter
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -101,6 +102,25 @@ fun LyricBookletScreen(
     val listState = rememberLazyListState()
     val context = LocalContext.current
     var isCoverViewerOpen by remember { mutableStateOf(false) }
+
+    // 适配 Android 系统手势导航 (全面屏边缘侧滑返回上一级)
+    BackHandler(enabled = true) {
+        when {
+            state.selectedDiscogsDetail != null -> viewModel.closeDiscogsReleaseDetail()
+            state.isDiscogsDetailLoading -> viewModel.closeDiscogsReleaseDetail()
+            state.isDiscogsPickerOpen -> viewModel.openDiscogsPicker(false)
+            state.isAnnotationSheetOpen -> viewModel.dismissAnnotationSheet()
+            isCoverViewerOpen -> isCoverViewerOpen = false
+            state.isEditingSheetOpen -> viewModel.openEditSheet(false)
+            state.isSettingsOpen -> viewModel.openSettings(false)
+            state.isCdMatchAlbumOpen -> viewModel.openCdMatchAlbum(false)
+            state.isCdTracklistOpen -> viewModel.openCdTracklist(false)
+            state.isCdSheetOpen -> viewModel.openCdSheet(false)
+            state.isBookletSheetOpen -> viewModel.openBookletSheet(false)
+            state.isAiLinerNotesOpen -> viewModel.openAiLinerNotes(false)
+            else -> onNavigateBack()
+        }
+    }
 
     val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -734,10 +754,28 @@ fun LyricBookletScreen(
                         .weight(1f)
                         .pointerInput(state.currentTrackIndex, totalTracks) {
                             var totalDragX = 0f
+                            var startX = 0f
                             detectHorizontalDragGestures(
+                                onDragStart = { offset ->
+                                    startX = offset.x
+                                    totalDragX = 0f
+                                },
                                 onDragEnd = {
-                                    if (totalDragX > 150f) viewModel.previousTrack()
-                                    else if (totalDragX < -150f) viewModel.nextTrack()
+                                    val width = size.width
+                                    val edgeThreshold = 48.dp.toPx()
+                                    if (startX <= edgeThreshold && totalDragX > 100f) {
+                                        // 从左边缘向右侧滑：返回唱片架
+                                        onNavigateBack()
+                                    } else if (startX >= width - edgeThreshold && totalDragX < -100f) {
+                                        // 从右边缘向左侧滑：返回唱片架
+                                        onNavigateBack()
+                                    } else if (totalDragX > 150f) {
+                                        // 屏幕中央向右滑：上一曲
+                                        viewModel.previousTrack()
+                                    } else if (totalDragX < -150f) {
+                                        // 屏幕中央向左滑：下一曲
+                                        viewModel.nextTrack()
+                                    }
                                     totalDragX = 0f
                                 },
                                 onDragCancel = { totalDragX = 0f },
