@@ -202,8 +202,8 @@ class LyricBookletViewModel @Inject constructor(
                         )
                     }
                     loadAnnotationsForCurrentTrack()
-                    val otherTracks = albumWithTracks.tracks
-                    if (otherTracks.size > 1) {
+                    val otherTracks = albumWithTracks.tracks.filter { it.id != currentTrack?.id }
+                    if (otherTracks.isNotEmpty()) {
                         viewModelScope.launch(Dispatchers.IO) {
                             annotationRepository.prefetchAlbumAnnotations(albumWithTracks.album.artist, otherTracks)
                         }
@@ -261,6 +261,8 @@ class LyricBookletViewModel @Inject constructor(
                     currentPositionMs = 0L,
                     trackDurationMs = duration,
                     activeLineIndex = -1,
+                    songStory = null,
+                    lineAnnotations = emptyMap(),
                     isCdTracklistOpen = false
                 )
             }
@@ -508,6 +510,7 @@ class LyricBookletViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingAnnotations = true, isTraditionalMode = isTrad) }
             val result = annotationRepository.fetchAndCacheAnnotations(track, artist, lyricTexts, forceRefresh)
+            if (_uiState.value.currentTrackIndex != index) return@launch
             result.onSuccess { (story, annotations) ->
                 val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(
                     _uiState.value.alignedLyrics,

@@ -85,6 +85,7 @@ class AnnotationRepository @Inject constructor(
                     continue
                 }
                 fetchAndCacheAnnotations(track = track, artist = artist)
+                kotlinx.coroutines.delay(300)
             } catch (e: Exception) {
                 // 静默处理，避免干扰前台正常交互
             }
@@ -93,8 +94,8 @@ class AnnotationRepository @Inject constructor(
 
     /**
      * 从 Genius 检索、解析并本地持久化当前曲目的歌词典故与背景故事。
-     * 若获取到外文注释与故事，会自动预先并发翻译为中文对照并一并缓存入库。
-     * 不套用虚假默认模板，保持真实性与优雅感。
+     * 原生 Genius 数据解析完成后即刻入库并返回界面渲染（秒级展示），
+     * 中文对照翻译在后台异步平滑执行，绝不阻塞界面，不套用虚假默认模板。
      */
     suspend fun fetchAndCacheAnnotations(
         track: TrackEntity,
@@ -134,33 +135,23 @@ class AnnotationRepository @Inject constructor(
         }
 
         // 2. 尝试向 Genius 检索原生数据 (优先执行)
-        val cleanTitle = AiAnnotationCurator.cleanSongTitle(track.title)
+        val cleanTitle = GeniusService.sanitizeTitle(track.title)
         val customToken = aiPreferences.geniusToken.takeIf { it.isNotBlank() }
 
         var storyEntity: SongStoryEntity? = null
         val annotationEntities = mutableListOf<LyricAnnotationEntity>()
 
         try {
-            // 2.1 优先使用清洗后的规范曲名搜索
-            var searchHit = GeniusService.searchSong(
+            val searchHit = GeniusService.searchSong(
                 title = cleanTitle,
                 artist = artist,
                 customToken = customToken
             )
 
-            // 若未命中且原标题与清洗标题不同，尝试原标题
-            if (searchHit == null && !cleanTitle.equals(track.title, ignoreCase = true)) {
-                searchHit = GeniusService.searchSong(
-                    title = track.title,
-                    artist = artist,
-                    customToken = customToken
-                )
-            }
-
             if (searchHit != null) {
                 val songId = searchHit.id
 
-                // 2.2 获取歌曲背景总览 (About this Song)
+                // 2.1 获取歌曲背景总览 (About this Song)
                 val detail = GeniusService.getSongDetails(songId, customToken)
                 if (detail != null && (detail.descriptionPlain.isNotBlank() || !detail.headerImageUrl.isNullOrBlank())) {
                     storyEntity = SongStoryEntity(
@@ -178,7 +169,7 @@ class AnnotationRepository @Inject constructor(
                     )
                 }
 
-                // 2.3 获取该曲目的全部逐句歌词典故列表 (Referents)
+                // 2.2 获取该曲目的全部逐句歌词典故列表 (Referents)
                 val referents = GeniusService.getReferents(songId, customToken)
                 for (ref in referents) {
                     val primaryAnnot = ref.annotations.firstOrNull() ?: continue
@@ -207,47 +198,7 @@ class AnnotationRepository @Inject constructor(
             // 网络受限或 Genius 超时
         }
 
-        // 3. 自动中英翻译处理：如果获取到了 Genius 英文内容，立即并发自动翻译为中文对照（含歌词引用与背景故事）
-        val finalAnnotations = mutableListOf<LyricAnnotationEntity>()
-        if (annotationEntities.isNotEmpty()) {
-            supervisorScope {
-                val translatedList = annotationEntities.map { annot ->
-                    async {
-                        var updated = annot
-                        // 3.1 翻译歌词片段 (lyricFragment)
-                        if (!AiAnnotationCurator.isAlreadyChinese(annot.lyricFragment) && annot.lyricTranslation.isNullOrBlank()) {
-                            val lyricTrans = translationService.translateText(annot.lyricFragment, "zh")
-                            if (!lyricTrans.isNullOrBlank()) {
-                                val finalLyricTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(lyricTrans) else lyricTrans
-                                updated = updated.copy(lyricTranslation = finalLyricTrans)
-                            }
-                        }
-                        // 3.2 翻译典故解说 (explanationText)
-                        if (!AiAnnotationCurator.isAlreadyChinese(annot.explanationText) && annot.explanationTranslation.isNullOrBlank()) {
-                            val trans = translationService.translateText(annot.explanationText, "zh")
-                            if (!trans.isNullOrBlank()) {
-                                val finalTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(trans) else trans
-                                updated = updated.copy(explanationTranslation = finalTrans)
-                            }
-                        }
-                        updated
-                    }
-                }.awaitAll()
-                finalAnnotations.addAll(translatedList)
-            }
-        }
-
-        if (storyEntity != null && !storyEntity.descriptionPlain.isBlank()) {
-            if (!AiAnnotationCurator.isAlreadyChinese(storyEntity.descriptionPlain) && storyEntity.descriptionTranslation.isNullOrBlank()) {
-                val transStory = translationService.translateText(storyEntity.descriptionPlain, "zh")
-                if (!transStory.isNullOrBlank()) {
-                    val finalStoryTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(transStory) else transStory
-                    storyEntity = storyEntity.copy(descriptionTranslation = finalStoryTrans)
-                }
-            }
-        }
-
-        // 4. 本地 Room 持久化（不使用伪造模板，如无 Genius 数据则干净利落，不污染页面）
+        // 3. 立即本地持久化原生 Genius 数据（不等翻译！让界面毫秒级秒开展示！）
         if (storyEntity != null) {
             if (AiAnnotationCurator.isAlreadyChinese(storyEntity.descriptionPlain)) {
                 storyEntity = storyEntity.copy(descriptionTranslation = null)
@@ -255,13 +206,58 @@ class AnnotationRepository @Inject constructor(
             lyricAnnotationDao.insertSongStory(storyEntity)
         }
 
-        // 清理旧数据，保存真实 Genius 典故
         lyricAnnotationDao.deleteAnnotationsForTrack(trackId)
-        if (finalAnnotations.isNotEmpty()) {
-            lyricAnnotationDao.insertAnnotations(finalAnnotations)
+        if (annotationEntities.isNotEmpty()) {
+            lyricAnnotationDao.insertAnnotations(annotationEntities)
         }
 
-        return@withContext Result.success(Pair(storyEntity, finalAnnotations))
+        // 4. 在后台异步协程中温和执行中文对照翻译，逐步更新数据库，绝不阻塞前台渲染
+        if (annotationEntities.isNotEmpty() || (storyEntity != null && !storyEntity.descriptionPlain.isBlank())) {
+            val bgScope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO)
+            bgScope.launch {
+                // 4.1 异步翻译背景故事
+                if (storyEntity != null && !storyEntity.descriptionPlain.isBlank() &&
+                    !AiAnnotationCurator.isAlreadyChinese(storyEntity.descriptionPlain) &&
+                    storyEntity.descriptionTranslation.isNullOrBlank()
+                ) {
+                    try {
+                        val transStory = translationService.translateText(storyEntity.descriptionPlain, "zh")
+                        if (!transStory.isNullOrBlank()) {
+                            val finalStoryTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(transStory) else transStory
+                            val updatedStory = storyEntity.copy(descriptionTranslation = finalStoryTrans)
+                            lyricAnnotationDao.updateSongStory(updatedStory)
+                        }
+                    } catch (e: Exception) { /* ignore */ }
+                }
+
+                // 4.2 顺序/温和翻译各条歌词注释与片段 (带延时防限流)
+                for (annot in annotationEntities) {
+                    try {
+                        var updated = annot
+                        if (!AiAnnotationCurator.isAlreadyChinese(annot.lyricFragment) && annot.lyricTranslation.isNullOrBlank()) {
+                            val lyricTrans = translationService.translateText(annot.lyricFragment, "zh")
+                            if (!lyricTrans.isNullOrBlank()) {
+                                val finalLyricTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(lyricTrans) else lyricTrans
+                                updated = updated.copy(lyricTranslation = finalLyricTrans)
+                            }
+                        }
+                        if (!AiAnnotationCurator.isAlreadyChinese(annot.explanationText) && annot.explanationTranslation.isNullOrBlank()) {
+                            val trans = translationService.translateText(annot.explanationText, "zh")
+                            if (!trans.isNullOrBlank()) {
+                                val finalTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(trans) else trans
+                                updated = updated.copy(explanationTranslation = finalTrans)
+                            }
+                        }
+                        if (updated != annot) {
+                            lyricAnnotationDao.updateAnnotation(updated)
+                        }
+                        kotlinx.coroutines.delay(100)
+                    } catch (e: Exception) { /* ignore */ }
+                }
+            }
+        }
+
+        return@withContext Result.success(Pair(storyEntity, annotationEntities))
     }
 
     /**

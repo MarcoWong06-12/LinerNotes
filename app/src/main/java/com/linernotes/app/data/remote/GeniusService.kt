@@ -58,9 +58,10 @@ object GeniusService {
 
     private fun buildHeaders(customToken: String?): Map<String, String> {
         val headers = mutableMapOf(
-            "User-Agent" to USER_AGENT,
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept" to "application/json, text/plain, */*",
-            "Referer" to "https://genius.com"
+            "Accept-Language" to "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
+            "Referer" to "https://genius.com/"
         )
         if (!customToken.isNullOrBlank()) {
             headers["Authorization"] = "Bearer ${customToken.trim()}"
@@ -69,94 +70,119 @@ object GeniusService {
     }
 
     /**
-     * 清理曲目名称中的干扰后缀（如 feat., Live, Remastered, Bonus Track 等）以便提高 Genius 检索召回率
+     * 清理曲目名称中的干扰前缀与后缀（如音轨编号 "01. ", "1 - ", feat., Live, Remastered 等）以便提高 Genius 检索召回率
      */
-    private fun sanitizeSearchQuery(title: String, artist: String): String {
-        val cleanTitle = title
-            .replace(Regex("""\s*[\(\[\{](?:feat|ft|radio\s*mix|club\s*mix|extended\s*mix|original\s*mix|mix|remix|edit|radio\s*edit|single\s*version|album\s*version|acoustic|live|remaster(?:ed)?|version|deluxe|bonus|mono|stereo|anniversary|ost|soundtrack).*?[\)\]\}]""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s*-\s*(?:feat|radio\s*mix|club\s*mix|mix|remix|edit|radio\s*edit|single\s*version|live|remaster(?:ed)?|version|deluxe|bonus).*$""", RegexOption.IGNORE_CASE), "")
+    fun sanitizeTitle(title: String): String {
+        return title
+            .replace(Regex("""^\d+[\.\s\-_、]+\s*"""), "") // 剥离前导音轨编号如 "01. ", "1 - "
+            .replace(Regex("""\s*[\(\[\{](?:feat|ft|radio\s*mix|club\s*mix|extended\s*mix|original\s*mix|mix|remix|edit|radio\s*edit|single\s*version|album\s*version|acoustic|live|remaster(?:ed)?|version|deluxe|bonus|mono|stereo|anniversary|ost|soundtrack|explicit|clean).*?[\)\]\}]""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s*-\s*(?:feat|radio\s*mix|club\s*mix|mix|remix|edit|radio\s*edit|single\s*version|live|remaster(?:ed)?|version|deluxe|bonus|explicit|clean).*$""", RegexOption.IGNORE_CASE), "")
             .trim()
+    }
 
-        val cleanArtist = artist
+    fun sanitizeArtist(artist: String): String {
+        return artist
             .replace(Regex("""\s*[\(\[\{].*?[\)\]\}]"""), "")
             .replace(Regex("""\s*feat\..*$""", RegexOption.IGNORE_CASE), "")
             .trim()
-
-        return "$cleanTitle $cleanArtist".trim()
     }
 
     /**
-     * 检索 Genius 歌曲条目获取 song_id
+     * 检索 Genius 歌曲条目获取 song_id（支持多重候选回退检索）
      */
     suspend fun searchSong(
         title: String,
         artist: String,
         customToken: String? = null
     ): GeniusSongSearchResult? = withContext(Dispatchers.IO) {
-        val query = sanitizeSearchQuery(title, artist)
-        if (query.isBlank()) return@withContext null
+        val cleanTitle = sanitizeTitle(title)
+        val cleanArtist = sanitizeArtist(artist)
 
+        val candidates = mutableListOf<String>()
+        if (cleanTitle.isNotBlank() && cleanArtist.isNotBlank()) {
+            candidates.add("$cleanTitle $cleanArtist")
+        }
+        if (cleanTitle.isNotBlank()) {
+            candidates.add(cleanTitle)
+        }
+        val rawTitle = title.trim()
+        val rawArtist = artist.trim()
+        if (rawTitle.isNotBlank() && rawArtist.isNotBlank() && "$rawTitle $rawArtist" !in candidates) {
+            candidates.add("$rawTitle $rawArtist")
+        }
+
+        for (query in candidates) {
+            val result = executeSearch(query, customToken)
+            if (result != null) return@withContext result
+        }
+        null
+    }
+
+    private fun executeSearch(query: String, customToken: String?): GeniusSongSearchResult? {
         val hasCustomToken = !customToken.isNullOrBlank()
-        val url = if (hasCustomToken) {
-            "$GENIUS_PROD_API/search?q=${URLEncoder.encode(query, "UTF-8")}"
+        val encodedQuery = URLEncoder.encode(query, "UTF-8")
+
+        val urls = if (hasCustomToken) {
+            listOf("$GENIUS_PROD_API/search?q=$encodedQuery")
         } else {
-            "$GENIUS_WEB_API/search/multi?q=${URLEncoder.encode(query, "UTF-8")}"
+            listOf(
+                "$GENIUS_WEB_API/search/multi?q=$encodedQuery",
+                "$GENIUS_WEB_API/search/song?q=$encodedQuery"
+            )
         }
 
-        try {
-            val jsonStr = LinerNotesHttpClient.get(url, buildHeaders(customToken)) ?: return@withContext null
-            val root = JSONObject(jsonStr)
-            val responseObj = root.optJSONObject("response") ?: return@withContext null
+        for (url in urls) {
+            try {
+                val jsonStr = LinerNotesHttpClient.get(url, buildHeaders(customToken)) ?: continue
+                val root = JSONObject(jsonStr)
+                val responseObj = root.optJSONObject("response") ?: continue
 
-            if (hasCustomToken) {
-                // api.genius.com /search 返回 hits 数组
-                val hits = responseObj.optJSONArray("hits") ?: return@withContext null
-                for (i in 0 until hits.length()) {
-                    val hit = hits.optJSONObject(i) ?: continue
-                    val result = hit.optJSONObject("result") ?: continue
-                    val resultType = hit.optString("type")
-                    if (resultType.equals("song", ignoreCase = true) || hit.has("result")) {
-                        return@withContext parseSongResult(result)
+                if (hasCustomToken) {
+                    val hits = responseObj.optJSONArray("hits") ?: continue
+                    for (i in 0 until hits.length()) {
+                        val hit = hits.optJSONObject(i) ?: continue
+                        val result = hit.optJSONObject("result") ?: continue
+                        val song = parseSongResult(result)
+                        if (song != null) return song
                     }
-                }
-            } else {
-                // genius.com/api/search/multi 返回 sections 数组
-                val sections = responseObj.optJSONArray("sections") ?: return@withContext null
+                } else {
+                    val sections = responseObj.optJSONArray("sections") ?: continue
 
-                // 1. 优先从 type == "song" 专用段中查找精准曲目
-                for (i in 0 until sections.length()) {
-                    val sec = sections.optJSONObject(i) ?: continue
-                    if (sec.optString("type").equals("song", ignoreCase = true)) {
-                        val hits = sec.optJSONArray("hits") ?: continue
-                        for (j in 0 until hits.length()) {
-                            val hit = hits.optJSONObject(j) ?: continue
-                            val result = hit.optJSONObject("result") ?: continue
-                            val song = parseSongResult(result)
-                            if (song != null) return@withContext song
+                    // 1. 优先从 type == "song" 专用段中查找精准曲目
+                    for (i in 0 until sections.length()) {
+                        val sec = sections.optJSONObject(i) ?: continue
+                        if (sec.optString("type").equals("song", ignoreCase = true)) {
+                            val hits = sec.optJSONArray("hits") ?: continue
+                            for (j in 0 until hits.length()) {
+                                val hit = hits.optJSONObject(j) ?: continue
+                                val result = hit.optJSONObject("result") ?: continue
+                                val song = parseSongResult(result)
+                                if (song != null) return song
+                            }
+                        }
+                    }
+
+                    // 2. 其次从 top_hit 段中查找类型为 song 的条目
+                    for (i in 0 until sections.length()) {
+                        val sec = sections.optJSONObject(i) ?: continue
+                        if (sec.optString("type").equals("top_hit", ignoreCase = true)) {
+                            val hits = sec.optJSONArray("hits") ?: continue
+                            for (j in 0 until hits.length()) {
+                                val hit = hits.optJSONObject(j) ?: continue
+                                val hitType = hit.optString("type")
+                                if (hitType.isNotBlank() && !hitType.equals("song", ignoreCase = true)) continue
+                                val result = hit.optJSONObject("result") ?: continue
+                                val song = parseSongResult(result)
+                                if (song != null) return song
+                            }
                         }
                     }
                 }
-
-                // 2. 其次从 top_hit 段中查找类型为 song 的条目
-                for (i in 0 until sections.length()) {
-                    val sec = sections.optJSONObject(i) ?: continue
-                    if (sec.optString("type").equals("top_hit", ignoreCase = true)) {
-                        val hits = sec.optJSONArray("hits") ?: continue
-                        for (j in 0 until hits.length()) {
-                            val hit = hits.optJSONObject(j) ?: continue
-                            val hitType = hit.optString("type")
-                            if (hitType.isNotBlank() && !hitType.equals("song", ignoreCase = true)) continue
-                            val result = hit.optJSONObject("result") ?: continue
-                            val song = parseSongResult(result)
-                            if (song != null) return@withContext song
-                        }
-                    }
-                }
+            } catch (e: Exception) {
+                // 尝试下一个候选 URL
             }
-            null
-        } catch (e: Exception) {
-            null
         }
+        return null
     }
 
     private fun parseSongResult(result: JSONObject): GeniusSongSearchResult? {
@@ -170,9 +196,12 @@ object GeniusService {
         if (title.isBlank()) return null
         val fullTitle = result.optString("full_title").ifBlank { title }
         val primaryArtist = result.optJSONObject("primary_artist")
-        val artistName = primaryArtist?.optString("name") ?: ""
+        val artistName = primaryArtist?.optString("name")?.takeIf { it.isNotBlank() }
+            ?: result.optString("artist_names")
         val thumbUrl = result.optString("song_art_image_thumbnail_url").takeIf { it.isNotBlank() }
+            ?: result.optString("header_image_thumbnail_url").takeIf { it.isNotBlank() }
         val coverUrl = result.optString("song_art_image_url").takeIf { it.isNotBlank() }
+            ?: result.optString("header_image_url").takeIf { it.isNotBlank() }
         val url = result.optString("url").takeIf { it.isNotBlank() }
 
         return GeniusSongSearchResult(

@@ -11,12 +11,13 @@ import java.util.concurrent.TimeUnit
 object LinerNotesHttpClient {
 
     private const val DEFAULT_USER_AGENT =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
     val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(6, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
-        .writeTimeout(6, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .callTimeout(30, TimeUnit.SECONDS)
         .connectionPool(ConnectionPool(32, 5, TimeUnit.MINUTES))
         .followRedirects(true)
         .followSslRedirects(true)
@@ -28,9 +29,10 @@ object LinerNotesHttpClient {
             val reqBuilder = Request.Builder()
                 .url(url)
                 .header("User-Agent", headers["User-Agent"] ?: DEFAULT_USER_AGENT)
+                .header("Accept-Language", headers["Accept-Language"] ?: "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7")
 
             headers.forEach { (k, v) ->
-                if (!k.equals("User-Agent", ignoreCase = true)) {
+                if (!k.equals("User-Agent", ignoreCase = true) && !k.equals("Accept-Language", ignoreCase = true)) {
                     reqBuilder.header(k, v)
                 }
             }
@@ -39,10 +41,12 @@ object LinerNotesHttpClient {
                 if (response.isSuccessful) {
                     response.body?.string()
                 } else {
+                    android.util.Log.w("LinerNotesHttp", "HTTP GET failed: ${response.code} for $url")
                     null
                 }
             }
         } catch (e: Exception) {
+            android.util.Log.e("LinerNotesHttp", "HTTP GET error for $url: ${e.message}")
             null
         }
     }
