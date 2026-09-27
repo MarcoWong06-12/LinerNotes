@@ -31,6 +31,7 @@ fun SettingsDialog(
     var targetLanguage by remember { mutableStateOf(aiPreferences.targetLanguage) }
     var lyricsSource by remember { mutableStateOf(aiPreferences.lyricsSource) }
     var discogsToken by remember { mutableStateOf(aiPreferences.discogsToken) }
+    var geniusToken by remember { mutableStateOf(aiPreferences.geniusToken) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -188,6 +189,31 @@ fun SettingsDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // ==========================================
+                // 4. Genius 歌词典故与故事库 (可选)
+                // ==========================================
+                Text(
+                    text = "Genius 歌词典故与故事库 (可选)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "默认内置免密检索。如需更高并发或专属开发者配额，可在 genius.com/api-clients 申请 Client Access Token 填入。",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = geniusToken,
+                    onValueChange = { geniusToken = it },
+                    placeholder = { Text("Genius Client Access Token...", fontSize = 12.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
@@ -197,6 +223,7 @@ fun SettingsDialog(
                     aiPreferences.targetLanguage = targetLanguage
                     aiPreferences.lyricsSource = lyricsSource
                     aiPreferences.discogsToken = discogsToken.trim()
+                    aiPreferences.geniusToken = geniusToken.trim()
                     onSaved()
                 }
             ) {

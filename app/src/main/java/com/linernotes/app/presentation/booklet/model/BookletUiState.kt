@@ -44,5 +44,14 @@ data class BookletUiState(
     val isDiscogsLoading: Boolean = false,
     val discogsResults: List<com.linernotes.app.data.remote.DiscogsReleaseSummary> = emptyList(),
     val selectedDiscogsDetail: com.linernotes.app.data.remote.DiscogsReleaseDetail? = null,
-    val isDiscogsDetailLoading: Boolean = false
+    val isDiscogsDetailLoading: Boolean = false,
+    // Genius 歌词典故与背景故事
+    val lineAnnotations: Map<Int, com.linernotes.app.data.local.entity.LyricAnnotationEntity> = emptyMap(),
+    val songStory: com.linernotes.app.data.local.entity.SongStoryEntity? = null,
+    val selectedAnnotation: com.linernotes.app.data.local.entity.LyricAnnotationEntity? = null,
+    val isAnnotationSheetOpen: Boolean = false,
+    val isSongStoryExpanded: Boolean = false,
+    val isLoadingAnnotations: Boolean = false,
+    val isTranslatingAnnotation: Boolean = false,
+    val isTranslatingSongStory: Boolean = false
 )

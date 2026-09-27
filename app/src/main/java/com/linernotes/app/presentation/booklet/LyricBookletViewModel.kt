@@ -26,6 +26,10 @@ import com.linernotes.app.data.local.entity.LyricOffsetEntity
 import com.linernotes.app.data.local.entity.AlbumEntity
 import com.linernotes.app.data.remote.DiscogsService
 import com.linernotes.app.presentation.booklet.components.FuriganaMode
+import com.linernotes.app.core.lyric.LyricFragmentMatcher
+import com.linernotes.app.data.local.entity.LyricAnnotationEntity
+import com.linernotes.app.data.local.entity.SongStoryEntity
+import com.linernotes.app.data.repository.AnnotationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -49,7 +53,8 @@ class LyricBookletViewModel @Inject constructor(
     private val batchTranslationManager: BatchTranslationManager,
     val shanlingBluetoothManager: ShanlingBluetoothManager,
     private val lyricOffsetDao: LyricOffsetDao,
-    private val bookletDao: BookletDao
+    private val bookletDao: BookletDao,
+    private val annotationRepository: AnnotationRepository
 ) : ViewModel() {
 
     private var currentAlbumId: String = ""
@@ -194,6 +199,7 @@ class LyricBookletViewModel @Inject constructor(
                             trackDurationMs = duration
                         )
                     }
+                    loadAnnotationsForCurrentTrack()
                 } else {
                     _uiState.update { it.copy(isLoading = false) }
                 }
@@ -268,6 +274,7 @@ class LyricBookletViewModel @Inject constructor(
                     }
                 }
             }
+            loadAnnotationsForCurrentTrack()
             if (notifyCdPlayer && _uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
                 // CdPlayQueueReq.index is 0-based (0 for 1st song, 1 for 2nd song...)
                 val cdQueueIndex = if (track.trackNumber > 0) track.trackNumber - 1 else index
@@ -472,7 +479,91 @@ class LyricBookletViewModel @Inject constructor(
         )
     }
 
+    fun loadAnnotationsForCurrentTrack(forceRefresh: Boolean = false) {
+        val tracks = _uiState.value.albumWithTracks?.tracks ?: return
+        val index = _uiState.value.currentTrackIndex
+        val track = tracks.getOrNull(index) ?: return
+        val artist = _uiState.value.albumWithTracks?.album?.artist ?: ""
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingAnnotations = true) }
+            val result = annotationRepository.fetchAndCacheAnnotations(track, artist, forceRefresh)
+            result.onSuccess { (story, annotations) ->
+                val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(
+                    _uiState.value.alignedLyrics,
+                    annotations
+                )
+                _uiState.update {
+                    it.copy(
+                        songStory = story,
+                        lineAnnotations = lineMap,
+                        isLoadingAnnotations = false
+                    )
+                }
+            }.onFailure {
+                _uiState.update { it.copy(isLoadingAnnotations = false) }
+            }
+        }
+    }
+
+    fun openAnnotation(annotation: LyricAnnotationEntity) {
+        _uiState.update {
+            it.copy(
+                selectedAnnotation = annotation,
+                isAnnotationSheetOpen = true
+            )
+        }
+    }
+
+    fun dismissAnnotationSheet() {
+        _uiState.update {
+            it.copy(
+                isAnnotationSheetOpen = false,
+                selectedAnnotation = null
+            )
+        }
+    }
+
+    fun toggleSongStoryExpanded() {
+        _uiState.update { it.copy(isSongStoryExpanded = !it.isSongStoryExpanded) }
+    }
+
+    fun translateAnnotation(annotation: LyricAnnotationEntity) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isTranslatingAnnotation = true) }
+            val updated = annotationRepository.translateAnnotation(annotation)
+            _uiState.update { state ->
+                val updatedMap = state.lineAnnotations.mapValues { (_, v) ->
+                    if (v.id == updated.id) updated else v
+                }
+                state.copy(
+                    isTranslatingAnnotation = false,
+                    selectedAnnotation = if (state.selectedAnnotation?.id == updated.id) updated else state.selectedAnnotation,
+                    lineAnnotations = updatedMap
+                )
+            }
+        }
+    }
+
+    fun translateSongStory(story: SongStoryEntity) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isTranslatingSongStory = true) }
+            val updated = annotationRepository.translateSongStory(story)
+            _uiState.update {
+                it.copy(
+                    isTranslatingSongStory = false,
+                    songStory = updated
+                )
+            }
+        }
+    }
+
     fun onLyricLineClicked(line: BilingualLyricLine) {
+        val lineIndex = _uiState.value.alignedLyrics.indexOfFirst { it.lineNumber == line.lineNumber }
+        val annotation = if (lineIndex >= 0) _uiState.value.lineAnnotations[lineIndex] else null
+        if (annotation != null) {
+            openAnnotation(annotation)
+        }
         if (line.startTimeMs != null) {
             seekCompanion(line.startTimeMs)
         }

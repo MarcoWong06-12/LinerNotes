@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -32,6 +33,7 @@ import android.content.Intent
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.DiscFull
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -510,7 +512,22 @@ fun LyricBookletScreen(
                                 leadingIcon = { Icon(Icons.Default.DiscFull, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
                             )
 
-                            // 2.4 导出标准 LRC 歌词
+                            // 2.4 刷新 Genius 歌词典故与背景故事
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                                        Text("重新检索 Genius 歌词典故", style = MaterialTheme.typography.bodyMedium)
+                                        Text("重新抓取认证背景与内页故事", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.loadAnnotationsForCurrentTrack(forceRefresh = true)
+                                },
+                                leadingIcon = { Icon(Icons.Default.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            )
+
+                            // 2.5 导出标准 LRC 歌词
                             DropdownMenuItem(
                                 text = {
                                     Column(modifier = Modifier.padding(vertical = 2.dp)) {
@@ -735,6 +752,18 @@ fun LyricBookletScreen(
                             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 180.dp),
                             horizontalAlignment = Alignment.Start
                         ) {
+                            if (state.songStory != null) {
+                                item {
+                                    SongStoryOverviewCard(
+                                        story = state.songStory,
+                                        isExpanded = state.isSongStoryExpanded,
+                                        onToggleExpand = { viewModel.toggleSongStoryExpanded() },
+                                        isTranslating = state.isTranslatingSongStory,
+                                        onTranslate = { viewModel.translateSongStory(it) },
+                                        modifier = Modifier.padding(bottom = 18.dp)
+                                    )
+                                }
+                            }
                             if (state.alignedLyrics.isEmpty()) {
                                 item {
                                     Text(
@@ -747,12 +776,14 @@ fun LyricBookletScreen(
                             } else {
                                 itemsIndexed(state.alignedLyrics, key = { index, line -> "${line.lineNumber}_$index" }) { index, line ->
                                     val isActive = index == state.activeLineIndex
+                                    val lineAnnotation = state.lineAnnotations[index]
                                     LyricLineItem(
                                         line = line,
                                         mode = state.displayMode,
                                         isActive = isActive,
                                         isCompanionPlaying = state.isCompanionPlaying,
                                         furiganaMode = state.furiganaMode,
+                                        annotation = lineAnnotation,
                                         onClick = { viewModel.onLyricLineClicked(line) }
                                     )
                                 }
@@ -998,6 +1029,15 @@ fun LyricBookletScreen(
                 viewModel.applyDiscogsRelease(releaseId)
             },
             onDismiss = { viewModel.closeDiscogsReleaseDetail() }
+        )
+    }
+
+    if (state.isAnnotationSheetOpen && state.selectedAnnotation != null) {
+        LyricAnnotationSheet(
+            annotation = state.selectedAnnotation,
+            isTranslating = state.isTranslatingAnnotation,
+            onTranslate = { viewModel.translateAnnotation(it) },
+            onDismiss = { viewModel.dismissAnnotationSheet() }
         )
     }
 }
@@ -1455,12 +1495,16 @@ private fun LyricLineItem(
     isActive: Boolean,
     isCompanionPlaying: Boolean,
     furiganaMode: FuriganaMode = FuriganaMode.OFF,
+    annotation: com.linernotes.app.data.local.entity.LyricAnnotationEntity? = null,
     onClick: () -> Unit
 ) {
     if (line.isStanzaBreak) {
         Spacer(modifier = Modifier.height(28.dp))
         return
     }
+
+    val hasAnnotation = annotation != null
+    val containerShape = RoundedCornerShape(14.dp)
 
     val lineInteractionSource = remember { MutableInteractionSource() }
     val isLinePressed by lineInteractionSource.collectIsPressedAsState()
@@ -1480,13 +1524,22 @@ private fun LyricLineItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(containerShape)
+            .then(
+                if (hasAnnotation) {
+                    Modifier
+                        .background(Color.White.copy(alpha = 0.08f), containerShape)
+                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)), containerShape)
+                        .padding(horizontal = 12.dp, vertical = if (mode == LyricDisplayMode.BILINGUAL) 12.dp else 10.dp)
+                } else {
+                    Modifier.padding(horizontal = 4.dp, vertical = if (mode == LyricDisplayMode.BILINGUAL) 12.dp else 8.dp)
+                }
+            )
             .clickable(
                 interactionSource = lineInteractionSource,
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 4.dp, vertical = if (mode == LyricDisplayMode.BILINGUAL) 12.dp else 8.dp)
             .graphicsLayer {
                 alpha = alphaAnim
                 scaleX = scaleAnim
@@ -1495,6 +1548,38 @@ private fun LyricLineItem(
             },
         horizontalAlignment = Alignment.Start
     ) {
+        if (hasAnnotation) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                modifier = Modifier.padding(bottom = 6.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color(0xFFFFD54F).copy(alpha = 0.18f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = if (annotation.isVerified) "⭐ 认证典故" else "💬 歌词典故",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFFD54F)
+                            )
+                        )
+                    }
+                }
+                Text(
+                    text = "点击查看背景故事",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                    color = Color.White.copy(alpha = 0.45f)
+                )
+            }
+        }
         when (mode) {
             LyricDisplayMode.BILINGUAL -> {
                 if (line.original.isNotBlank()) {

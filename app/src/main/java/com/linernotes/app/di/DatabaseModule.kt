@@ -42,4 +42,10 @@ object DatabaseModule {
     fun provideLyricOffsetDao(database: LinerNotesDatabase): com.linernotes.app.data.local.dao.LyricOffsetDao {
         return database.lyricOffsetDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideLyricAnnotationDao(database: LinerNotesDatabase): com.linernotes.app.data.local.dao.LyricAnnotationDao {
+        return database.lyricAnnotationDao()
+    }
 }

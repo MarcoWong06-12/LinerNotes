@@ -38,6 +38,10 @@ class AiPreferences @Inject constructor(
         get() = prefs.getString("discogs_token", "") ?: ""
         set(value) = prefs.edit().putString("discogs_token", value.trim()).apply()
 
+    var geniusToken: String
+        get() = prefs.getString("genius_token", "") ?: ""
+        set(value) = prefs.edit().putString("genius_token", value.trim()).apply()
+
     var lyricsSource: String
         get() = prefs.getString("lyrics_source", LyricsSourcePreference.AUTO_FIRST.code) ?: LyricsSourcePreference.AUTO_FIRST.code
         set(value) = prefs.edit().putString("lyrics_source", value).apply()
