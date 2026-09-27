@@ -40,8 +40,8 @@ object AiAnnotationCurator {
 
     fun cleanSongTitle(title: String): String {
         return title
-            .replace(Regex("""\s*[\(\[\{](?:feat|ft|radio\s*mix|club\s*mix|extended\s*mix|original\s*mix|mix|remix|edit|radio\s*edit|single\s*version|album\s*version|acoustic|live|remaster(?:ed)?|version|deluxe|bonus|mono|stereo|anniversary|ost|soundtrack).*?[\)\]\}]""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s*-\s*(?:feat|radio\s*mix|club\s*mix|mix|remix|edit|radio\s*edit|single\s*version|live|remaster(?:ed)?|version|deluxe|bonus).*$""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s*[\(\[\{](?:feat|ft|radio\s*mix|club\s*mix|extended\s*mix|original\s*mix|mix|remix|edit|radio\s*edit|single\s*version|album\s*version|acoustic|live|remaster(?:ed)?|version|deluxe|bonus|mono|stereo|anniversary|ost|soundtrack|explicit|clean).*?[\)\]\}]""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s*-\s*(?:feat|radio\s*mix|club\s*mix|mix|remix|edit|radio\s*edit|single\s*version|live|remaster(?:ed)?|version|deluxe|bonus|explicit|clean).*$""", RegexOption.IGNORE_CASE), "")
             .trim()
     }
 
@@ -230,7 +230,7 @@ object AiAnnotationCurator {
             trackId = trackId,
             title = cleanTitle,
             artist = artist.ifBlank { "经典创作者" },
-            descriptionPlain = "《$cleanTitle》是 ${artist.ifBlank { "该歌手" }} 极具代表性的录音室作品。曲目在编曲声场与诗意词作间构建了鲜明的叙事张力，原词以极具画面感的修辞与情感隐喻，层层递进地铺陈出作者对时代、命运与人际羁绊的深沉思考。",
+            descriptionPlain = "《$cleanTitle》收录于 ${artist.ifBlank { "创作者" }} 的录音室专辑中。作品在旋律推进与诗意词作间构建了鲜明的叙事张力，原词以极具画面感的修辞与情感隐喻，层层递进地铺陈出作者对时代、命运与人际羁绊的深沉思考。",
             source = "AI_CURATED"
         )
 
@@ -244,11 +244,12 @@ object AiAnnotationCurator {
 
         for ((idx, reason) in candidateIndices) {
             val lineText = alignedLines.getOrNull(idx) ?: continue
+            val cleanSnippet = lineText.replace(Regex("""\[.*?\]"""), "").trim()
             val explanation = when (reason) {
-                LineType.HOOK -> "【核心主题升华】本句作为整首作品的记忆锚点与情感核心，运用了强烈的通感修辞。在旋律的高潮推进中，词作者将隐忍的情绪彻底释放，形成了极具穿透力的共鸣感。"
-                LineType.INTRO_SETTING -> "【意象铺陈与时空定位】曲目开门见山，以具象的生活细节与环境描摹破题，巧妙勾勒出主人公此时此刻的心理处境，为整首故事的发展奠定了基调。"
-                LineType.EMOTIONAL_TURNING -> "【转折与思辨高光】在此处，词作打破了前段的平铺直叙，展现了从迷茫自我怀疑到坚韧释怀的思维转折，富有古典抒情诗的哲思意蕴。"
-                LineType.METAPHOR -> "【隐喻与双关解构】词作者在此处化用了多重视角的文学双关，表面叙述人情往来，深层实则映射了个体在理想与现实夹缝中的挣扎与坚守。"
+                LineType.HOOK -> "“$cleanSnippet” —— 此句作为曲目的记忆锚点与情感核心，词作者在旋律高潮推进中将情绪彻底释放，以极具穿透力的词句完成了整首作品的主题升华。"
+                LineType.INTRO_SETTING -> "“$cleanSnippet” —— 曲目开篇以极具画面感的生活细节与心理描摹破题，巧妙勾勒出主人公此时此刻的心理处境，为整首故事的发展奠定了基调。"
+                LineType.EMOTIONAL_TURNING -> "“$cleanSnippet” —— 词作在此处形成鲜明的心境转折，打破前段叙事，直面内心的矛盾与觉醒，展现了由迷茫走向释怀的思维蜕变。"
+                LineType.METAPHOR -> "“$cleanSnippet” —— 词作者在此处化用了富于张力的文学隐喻，表面叙述人情往来与具象细节，深层映射了个体在理想与现实夹缝中的坚守与思索。"
             }
 
             annotations.add(

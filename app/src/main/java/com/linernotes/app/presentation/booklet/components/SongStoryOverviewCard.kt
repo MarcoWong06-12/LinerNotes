@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -43,11 +42,6 @@ fun SongStoryOverviewCard(
 
     val isChinese = remember(story.descriptionPlain) {
         AiAnnotationCurator.isAlreadyChinese(story.descriptionPlain)
-    }
-
-    val hasTranslation = !story.descriptionTranslation.isNullOrBlank()
-    var showTranslation by remember(story.trackId, story.descriptionTranslation) {
-        mutableStateOf(hasTranslation)
     }
 
     Surface(
@@ -139,99 +133,58 @@ fun SongStoryOverviewCard(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // 故事文本（折叠时最多显示 3 行，展开显示全部）
-                val displayText = if (!isChinese && showTranslation && hasTranslation) {
-                    story.descriptionTranslation!!
-                } else {
-                    story.descriptionPlain
-                }
+                if (isExpanded) {
+                    // 展开状态：使用段落级双语对照阅读视图
+                    BilingualContentView(
+                        originalText = story.descriptionPlain,
+                        translatedText = story.descriptionTranslation,
+                        isTranslating = isTranslating,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-                Text(
-                    text = displayText,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 14.sp,
-                        lineHeight = 22.sp
-                    ),
-                    color = Color.White.copy(alpha = 0.85f),
-                    maxLines = if (isExpanded) Int.MAX_VALUE else 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                // 展开状态下：仅当故事非中文时才提供翻译与原文切换控制
-                AnimatedVisibility(visible = isExpanded && !isChinese) {
-                    Column(modifier = Modifier.padding(top = 12.dp)) {
-                        if (!hasTranslation) {
-                            // 未翻译状态：提供一键翻译按钮
-                            BouncyTonalButton(
-                                onClick = { onTranslate(story) },
-                                shape = RoundedCornerShape(10.dp),
-                                enabled = !isTranslating,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(36.dp)
-                            ) {
-                                if (isTranslating) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(14.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("正在翻译背景故事...", fontSize = 12.sp)
-                                } else {
-                                    Icon(
-                                        Icons.Default.AutoAwesome,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("一键中文翻译", fontSize = 12.sp)
-                                }
-                            }
-                        } else {
-                            // 已翻译状态：提供双向自由切换段 [ 原文 | 中文释义 ]
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(10.dp))
-                                    .padding(3.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Surface(
-                                    onClick = { showTranslation = false },
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (!showTranslation) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Transparent,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 6.dp)) {
-                                        Text(
-                                            text = "英文原文",
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontWeight = if (!showTranslation) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (!showTranslation) Color.White else Color.White.copy(alpha = 0.6f)
-                                            )
-                                        )
-                                    }
-                                }
-                                Surface(
-                                    onClick = { showTranslation = true },
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (showTranslation) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Transparent,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 6.dp)) {
-                                        Text(
-                                            text = "中文释义",
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontWeight = if (showTranslation) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (showTranslation) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
-                                            )
-                                        )
-                                    }
-                                }
+                    // 若未翻译（如网络超时），提供一键重试翻译按钮
+                    if (!isChinese && story.descriptionTranslation.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        BouncyTonalButton(
+                            onClick = { onTranslate(story) },
+                            shape = RoundedCornerShape(10.dp),
+                            enabled = !isTranslating,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp)
+                        ) {
+                            if (isTranslating) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("正在翻译背景故事...", fontSize = 12.sp)
+                            } else {
+                                Icon(
+                                    Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("一键生成中文对照", fontSize = 12.sp)
                             }
                         }
                     }
+                } else {
+                    // 折叠状态：显示前 3 行预览（优先显示中文翻译）
+                    val previewText = story.descriptionTranslation?.takeIf { it.isNotBlank() } ?: story.descriptionPlain
+                    Text(
+                        text = previewText,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 14.sp,
+                            lineHeight = 22.sp
+                        ),
+                        color = Color.White.copy(alpha = 0.85f),
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }

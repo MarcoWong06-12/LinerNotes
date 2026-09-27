@@ -282,86 +282,35 @@ fun LyricAnnotationSheet(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                // 4. 注解正文内容 (Explanation Story Text)
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color.White.copy(alpha = 0.04f),
+                // 4. 注解正文与段落级双语对照 (Bilingual Aligned Content)
+                BilingualContentView(
+                    originalText = annotation.explanationText,
+                    translatedText = annotation.explanationTranslation,
+                    isTranslating = isTranslating,
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = annotation.explanationText,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontSize = 16.sp,
-                                lineHeight = 25.sp,
-                                letterSpacing = 0.2.sp
-                            ),
-                            color = Color(0xFFF0F0F0)
-                        )
-                    }
-                }
+                )
 
-                // 5. 中文翻译与本地化解读区域 (仅当原文非中文时显示)
-                if (!isChinese) {
-                    if (!annotation.explanationTranslation.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.AutoAwesome,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = "中文释义与典故解析",
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = annotation.explanationTranslation,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.sp,
-                                        lineHeight = 24.sp
-                                    ),
-                                    color = Color(0xFFE8E8E8)
-                                )
-                            }
-                        }
-                    } else {
-                        Spacer(modifier = Modifier.height(14.dp))
-                        BouncyTonalButton(
-                            onClick = { onTranslate(annotation) },
-                            shape = RoundedCornerShape(12.dp),
-                            enabled = !isTranslating,
-                            modifier = Modifier.fillMaxWidth().height(42.dp)
-                        ) {
-                            if (isTranslating) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("正在智能翻译典故...", fontSize = 13.sp)
-                            } else {
-                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("查看中文释义与智能解析", fontSize = 13.sp)
-                            }
+                // 若未翻译完成（如在断网环境加载），提供手动翻译触发按钮
+                if (!isChinese && annotation.explanationTranslation.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    BouncyTonalButton(
+                        onClick = { onTranslate(annotation) },
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isTranslating,
+                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                    ) {
+                        if (isTranslating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("正在智能翻译典故...", fontSize = 13.sp)
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("翻译为中文对照", fontSize = 13.sp)
                         }
                     }
                 }
