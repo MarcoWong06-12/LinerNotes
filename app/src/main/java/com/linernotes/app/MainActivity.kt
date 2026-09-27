@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.linernotes.app.core.i18n.LocalStrings
 import com.linernotes.app.core.i18n.resolveAppStrings
