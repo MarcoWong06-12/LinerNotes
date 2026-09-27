@@ -2,7 +2,6 @@ package com.linernotes.app.presentation.booklet.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,11 +15,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.linernotes.app.core.lyric.AiAnnotationCurator
+import com.linernotes.app.core.util.ChineseConverter
 
 enum class BilingualDisplayTab {
-    PARALLEL, // 📖 中英对照
-    CHINESE,  // 🇨🇳 纯中文
-    ORIGINAL  // 🔤 纯英文
+    PARALLEL, // 中英对照
+    CHINESE,  // 纯中文
+    ORIGINAL  // 纯英文
 }
 
 data class AlignedParagraph(
@@ -71,14 +71,16 @@ object ParagraphAligner {
 
 /**
  * 专业段落级双语对照视图
- * 支持 [ 📖 中英对照 | 🇨🇳 纯中文 | 🔤 纯英文 ] 自由平滑切换，
- * 彻底消除“英文在上面、中文在下面”无法对照阅读的痛点。
+ * 支持 [ 中英对照 | 纯中文 | 纯英文 ] 自由平滑切换。
+ * 排版与歌词翻译一致，英文段落下方紧跟中文译文，去除冗余卡片框与 Emoji，简洁高雅。
+ * 完整支持一键繁体中文切换。
  */
 @Composable
 fun BilingualContentView(
     originalText: String,
     translatedText: String?,
     isTranslating: Boolean = false,
+    isTraditional: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     if (originalText.isBlank()) return
@@ -87,24 +89,30 @@ fun BilingualContentView(
         AiAnnotationCurator.isAlreadyChinese(originalText)
     }
 
-    val hasTranslation = !translatedText.isNullOrBlank()
+    val effectiveTranslation = remember(translatedText, isTraditional) {
+        if (translatedText.isNullOrBlank()) null
+        else if (isTraditional) ChineseConverter.toTraditional(translatedText)
+        else translatedText
+    }
 
-    // 默认展示中英对照模式（若原文已是中文则无需对照标签）
+    val hasTranslation = !effectiveTranslation.isNullOrBlank()
+
+    // 默认展示中英对照模式（若原文已是中文则直接展示）
     var selectedTab by remember(hasTranslation) {
         mutableStateOf(if (hasTranslation) BilingualDisplayTab.PARALLEL else BilingualDisplayTab.ORIGINAL)
     }
 
-    val paragraphs = remember(originalText, translatedText) {
-        ParagraphAligner.align(originalText, translatedText)
+    val paragraphs = remember(originalText, effectiveTranslation) {
+        ParagraphAligner.align(originalText, effectiveTranslation)
     }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 顶部切换控制器 (仅当原文非中文且有翻译或翻译中时显示)
+        // 顶部切换控制器 (仅当原文非中文且有翻译时显示，简洁无 Emoji)
         if (!isAlreadyChinese && hasTranslation) {
             Row(
                 modifier = Modifier
@@ -115,19 +123,19 @@ fun BilingualContentView(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 TabItem(
-                    title = "📖 中英对照",
+                    title = if (isTraditional) "中英對照" else "中英对照",
                     isSelected = selectedTab == BilingualDisplayTab.PARALLEL,
                     modifier = Modifier.weight(1f),
                     onClick = { selectedTab = BilingualDisplayTab.PARALLEL }
                 )
                 TabItem(
-                    title = "🇨🇳 纯中文",
+                    title = if (isTraditional) "純中文" else "纯中文",
                     isSelected = selectedTab == BilingualDisplayTab.CHINESE,
                     modifier = Modifier.weight(1f),
                     onClick = { selectedTab = BilingualDisplayTab.CHINESE }
                 )
                 TabItem(
-                    title = "🔤 纯英文",
+                    title = if (isTraditional) "純英文" else "纯英文",
                     isSelected = selectedTab == BilingualDisplayTab.ORIGINAL,
                     modifier = Modifier.weight(1f),
                     onClick = { selectedTab = BilingualDisplayTab.ORIGINAL }
@@ -153,7 +161,7 @@ fun BilingualContentView(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "唱片学者正在自动为您生成精准中文对照释义...",
+                        text = if (isTraditional) "正在為您生成精準中文對照釋義..." else "正在为您生成精准中文对照释义...",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -165,8 +173,9 @@ fun BilingualContentView(
         if (isAlreadyChinese) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 paragraphs.forEach { p ->
+                    val text = if (isTraditional) ChineseConverter.toTraditional(p.original) else p.original
                     Text(
-                        text = p.original,
+                        text = text,
                         style = MaterialTheme.typography.bodyLarge.copy(
                             fontSize = 15.sp,
                             lineHeight = 24.sp,
@@ -182,63 +191,30 @@ fun BilingualContentView(
         // 按照当前模式逐段展示
         when (selectedTab) {
             BilingualDisplayTab.PARALLEL -> {
-                // 1. 中英段落级精准并排对照 (Paragraph-by-Paragraph Interleaved)
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // 1. 中英段落级精准并排对照：英文段落下方紧跟中文译文，去除了冗余卡片框，像歌词翻译一样自然优美
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     paragraphs.forEach { item ->
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color.White.copy(alpha = 0.04f),
-                            border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.08f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // 原文段落
+                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            // 英文原文段落
+                            Text(
+                                text = item.original,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 15.sp,
+                                    lineHeight = 23.sp,
+                                    color = Color.White.copy(alpha = 0.90f)
+                                )
+                            )
+
+                            // 中文译文段落：英文下面直接跟着中文
+                            if (!item.translation.isNullOrBlank()) {
                                 Text(
-                                    text = item.original,
+                                    text = item.translation,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontSize = 14.5.sp,
-                                        lineHeight = 22.sp,
-                                        color = Color.White.copy(alpha = 0.88f)
+                                        lineHeight = 23.sp,
+                                        color = Color(0xFFFFE082).copy(alpha = 0.90f)
                                     )
                                 )
-
-                                // 中文译文段落
-                                if (!item.translation.isNullOrBlank()) {
-                                    HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.Top,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color = Color(0xFFFFD54F).copy(alpha = 0.20f),
-                                            modifier = Modifier.padding(top = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = "译",
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFFFFD54F)
-                                                ),
-                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                            )
-                                        }
-                                        Text(
-                                            text = item.translation,
-                                            style = MaterialTheme.typography.bodyMedium.copy(
-                                                fontSize = 14.sp,
-                                                lineHeight = 22.sp,
-                                                color = Color(0xFFFFE082).copy(alpha = 0.95f)
-                                            ),
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                }
                             }
                         }
                     }
@@ -247,7 +223,7 @@ fun BilingualContentView(
 
             BilingualDisplayTab.CHINESE -> {
                 // 2. 纯中文流畅阅读视图
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     paragraphs.forEach { item ->
                         val text = item.translation?.takeIf { it.isNotBlank() } ?: item.original
                         Text(
@@ -264,7 +240,7 @@ fun BilingualContentView(
 
             BilingualDisplayTab.ORIGINAL -> {
                 // 3. 纯英文原文视图
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     paragraphs.forEach { item ->
                         Text(
                             text = item.original,

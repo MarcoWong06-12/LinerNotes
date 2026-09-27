@@ -53,5 +53,6 @@ data class BookletUiState(
     val isSongStoryExpanded: Boolean = false,
     val isLoadingAnnotations: Boolean = false,
     val isTranslatingAnnotation: Boolean = false,
-    val isTranslatingSongStory: Boolean = false
+    val isTranslatingSongStory: Boolean = false,
+    val isTraditionalMode: Boolean = false
 )

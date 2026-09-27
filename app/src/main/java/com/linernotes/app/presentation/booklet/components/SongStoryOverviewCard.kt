@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.linernotes.app.core.lyric.AiAnnotationCurator
+import com.linernotes.app.core.util.ChineseConverter
 import com.linernotes.app.data.local.entity.SongStoryEntity
 import com.linernotes.app.presentation.common.BouncyTonalButton
 
@@ -35,6 +36,7 @@ fun SongStoryOverviewCard(
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     isTranslating: Boolean = false,
+    isTraditional: Boolean = false,
     onTranslate: (SongStoryEntity) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -103,14 +105,14 @@ fun SongStoryOverviewCard(
                         }
                         Column {
                             Text(
-                                text = "关于《${story.title}》· 创作心境与背景",
+                                text = if (isTraditional) "關於《${story.title}》· 創作心境與背景" else "关于《${story.title}》· 创作心境与背景",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                 color = Color.White
                             )
                             if (!story.releaseDate.isNullOrBlank() || !story.producerCredits.isNullOrBlank()) {
                                 val metaText = listOfNotNull(
-                                    story.releaseDate?.let { "发行于 $it" },
-                                    story.producerCredits?.let { "制作: $it" }
+                                    story.releaseDate?.let { if (isTraditional) "發行於 $it" else "发行于 $it" },
+                                    story.producerCredits?.let { if (isTraditional) "製作: $it" else "制作: $it" }
                                 ).joinToString(" • ")
                                 Text(
                                     text = metaText,
@@ -139,6 +141,7 @@ fun SongStoryOverviewCard(
                         originalText = story.descriptionPlain,
                         translatedText = story.descriptionTranslation,
                         isTranslating = isTranslating,
+                        isTraditional = isTraditional,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -160,7 +163,7 @@ fun SongStoryOverviewCard(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("正在翻译背景故事...", fontSize = 12.sp)
+                                Text(if (isTraditional) "正在翻譯背景故事..." else "正在翻译背景故事...", fontSize = 12.sp)
                             } else {
                                 Icon(
                                     Icons.Default.AutoAwesome,
@@ -168,15 +171,16 @@ fun SongStoryOverviewCard(
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("一键生成中文对照", fontSize = 12.sp)
+                                Text(if (isTraditional) "一鍵生成中文對照" else "一键生成中文对照", fontSize = 12.sp)
                             }
                         }
                     }
                 } else {
                     // 折叠状态：显示前 3 行预览（优先显示中文翻译）
                     val previewText = story.descriptionTranslation?.takeIf { it.isNotBlank() } ?: story.descriptionPlain
+                    val displayPreview = if (isTraditional) ChineseConverter.toTraditional(previewText) else previewText
                     Text(
-                        text = previewText,
+                        text = displayPreview,
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontSize = 14.sp,
                             lineHeight = 22.sp

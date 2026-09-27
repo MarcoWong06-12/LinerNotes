@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Pause
+import com.linernotes.app.core.util.ChineseConverter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -759,6 +760,7 @@ fun LyricBookletScreen(
                                         isExpanded = state.isSongStoryExpanded,
                                         onToggleExpand = { viewModel.toggleSongStoryExpanded() },
                                         isTranslating = state.isTranslatingSongStory,
+                                        isTraditional = state.isTraditionalMode,
                                         onTranslate = { viewModel.translateSongStory(it) },
                                         modifier = Modifier.padding(bottom = 18.dp)
                                     )
@@ -784,6 +786,7 @@ fun LyricBookletScreen(
                                         isCompanionPlaying = state.isCompanionPlaying,
                                         furiganaMode = state.furiganaMode,
                                         annotation = lineAnnotation,
+                                        isTraditional = state.isTraditionalMode,
                                         onClick = { viewModel.onLyricLineClicked(index, line) }
                                     )
                                 }
@@ -1033,9 +1036,24 @@ fun LyricBookletScreen(
     }
 
     if (state.isAnnotationSheetOpen && state.selectedAnnotation != null) {
+        val matchedTranslation = remember(state.selectedAnnotation, state.alignedLyrics) {
+            val frag = state.selectedAnnotation?.lyricFragment?.trim()?.lowercase() ?: ""
+            if (frag.isNotBlank()) {
+                val matched = state.alignedLyrics.filter { line ->
+                    val orig = line.original.trim().lowercase()
+                    orig.isNotBlank() && (frag.contains(orig) || orig.contains(frag)) && line.translation.isNotBlank()
+                }
+                if (matched.isNotEmpty()) {
+                    matched.joinToString("\n") { it.translation }
+                } else null
+            } else null
+        }
+
         LyricAnnotationSheet(
             annotation = state.selectedAnnotation,
             isTranslating = state.isTranslatingAnnotation,
+            isTraditional = state.isTraditionalMode,
+            lyricTranslation = matchedTranslation,
             onTranslate = { viewModel.translateAnnotation(it) },
             onDismiss = { viewModel.dismissAnnotationSheet() }
         )
@@ -1496,6 +1514,7 @@ private fun LyricLineItem(
     isCompanionPlaying: Boolean,
     furiganaMode: FuriganaMode = FuriganaMode.OFF,
     annotation: com.linernotes.app.data.local.entity.LyricAnnotationEntity? = null,
+    isTraditional: Boolean = false,
     onClick: () -> Unit
 ) {
     if (line.isStanzaBreak) {
@@ -1504,7 +1523,6 @@ private fun LyricLineItem(
     }
 
     val hasAnnotation = annotation != null
-    val containerShape = RoundedCornerShape(14.dp)
 
     val lineInteractionSource = remember { MutableInteractionSource() }
     val isLinePressed by lineInteractionSource.collectIsPressedAsState()
@@ -1524,17 +1542,8 @@ private fun LyricLineItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(containerShape)
-            .then(
-                if (hasAnnotation) {
-                    Modifier
-                        .background(Color.White.copy(alpha = 0.08f), containerShape)
-                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)), containerShape)
-                        .padding(horizontal = 12.dp, vertical = if (mode == LyricDisplayMode.BILINGUAL) 12.dp else 10.dp)
-                } else {
-                    Modifier.padding(horizontal = 4.dp, vertical = if (mode == LyricDisplayMode.BILINGUAL) 12.dp else 8.dp)
-                }
-            )
+            .clip(RoundedCornerShape(8.dp))
+            .padding(horizontal = 4.dp, vertical = if (mode == LyricDisplayMode.BILINGUAL) 10.dp else 6.dp)
             .clickable(
                 interactionSource = lineInteractionSource,
                 indication = null,
@@ -1549,37 +1558,42 @@ private fun LyricLineItem(
         horizontalAlignment = Alignment.Start
     ) {
         if (hasAnnotation) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                modifier = Modifier.padding(bottom = 6.dp)
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFFFFD54F).copy(alpha = 0.14f),
+                border = BorderStroke(0.5.dp, Color(0xFFFFD54F).copy(alpha = 0.28f)),
+                modifier = Modifier.padding(bottom = 4.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = Color(0xFFFFD54F).copy(alpha = 0.18f)
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = if (annotation.isVerified) "⭐ 认证典故" else "💬 歌词典故",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFFD54F)
-                            )
+                    Icon(
+                        imageVector = if (annotation.isVerified) Icons.Default.Verified else Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD54F),
+                        modifier = Modifier.size(10.dp)
+                    )
+                    Text(
+                        text = if (annotation.isVerified) {
+                            if (isTraditional) "認證典故" else "认证典故"
+                        } else {
+                            if (isTraditional) "典故" else "典故"
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFFFD54F)
                         )
-                    }
+                    )
                 }
-                Text(
-                    text = "点击查看背景故事",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                    color = Color.White.copy(alpha = 0.45f)
-                )
             }
         }
+        val displayTranslation = remember(line.translation, isTraditional) {
+            if (isTraditional) ChineseConverter.toTraditional(line.translation) else line.translation
+        }
+
         when (mode) {
             LyricDisplayMode.BILINGUAL -> {
                 if (line.original.isNotBlank()) {
@@ -1596,10 +1610,10 @@ private fun LyricLineItem(
                         isActive = isActive
                     )
                 }
-                if (line.translation.isNotBlank()) {
+                if (displayTranslation.isNotBlank()) {
                     Spacer(modifier = Modifier.height(5.dp))
                     Text(
-                        text = line.translation,
+                        text = displayTranslation,
                         style = MaterialTheme.typography.bodyLarge.copy(
                             fontSize = 17.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -1630,9 +1644,9 @@ private fun LyricLineItem(
             }
 
             LyricDisplayMode.TRANSLATED_ONLY -> {
-                if (line.translation.isNotBlank()) {
+                if (displayTranslation.isNotBlank()) {
                     Text(
-                        text = line.translation,
+                        text = displayTranslation,
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,

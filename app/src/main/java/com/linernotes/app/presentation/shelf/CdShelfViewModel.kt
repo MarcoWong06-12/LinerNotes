@@ -5,9 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.linernotes.app.core.preference.AiPreferences
 import com.linernotes.app.data.local.entity.AlbumEntity
 import com.linernotes.app.data.local.entity.TrackEntity
+import com.linernotes.app.data.repository.AnnotationRepository
 import com.linernotes.app.domain.repository.AlbumRepository
 import com.linernotes.app.presentation.shelf.model.ShelfUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -17,7 +19,8 @@ import javax.inject.Inject
 @HiltViewModel
 class CdShelfViewModel @Inject constructor(
     private val repository: AlbumRepository,
-    val aiPreferences: AiPreferences
+    val aiPreferences: AiPreferences,
+    private val annotationRepository: AnnotationRepository
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -66,6 +69,12 @@ class CdShelfViewModel @Inject constructor(
         viewModelScope.launch {
             repository.saveAlbum(album, tracks)
             _isAddSheetOpen.value = false
+            // 导入专辑后静默预取全辑 Genius 歌词典故与背景故事（无感且极速）
+            if (tracks.isNotEmpty()) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    annotationRepository.prefetchAlbumAnnotations(album.artist, tracks)
+                }
+            }
         }
     }
 

@@ -22,7 +22,7 @@ import com.linernotes.app.data.local.entity.TrackEntity
         LyricAnnotationEntity::class,
         SongStoryEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class LinerNotesDatabase : RoomDatabase() {

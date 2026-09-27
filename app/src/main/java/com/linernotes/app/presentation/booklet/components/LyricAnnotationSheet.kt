@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.linernotes.app.core.lyric.AiAnnotationCurator
+import com.linernotes.app.core.util.ChineseConverter
 import com.linernotes.app.data.local.entity.LyricAnnotationEntity
 import com.linernotes.app.presentation.common.BouncyButton
 import com.linernotes.app.presentation.common.BouncyIconButton
@@ -43,6 +44,8 @@ import org.json.JSONArray
 fun LyricAnnotationSheet(
     annotation: LyricAnnotationEntity?,
     isTranslating: Boolean = false,
+    isTraditional: Boolean = false,
+    lyricTranslation: String? = null,
     onTranslate: (LyricAnnotationEntity) -> Unit = {},
     onDismiss: () -> Unit
 ) {
@@ -145,14 +148,17 @@ fun LyricAnnotationSheet(
                     .verticalScroll(scrollState)
                     .padding(bottom = 24.dp)
             ) {
-                // 1. 歌词原文引用卡片 (Quoted Lyric Card)
+                // 1. 歌词原文引用卡片 (Quoted Lyric Card: 英文原文下紧随中文翻译)
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = Color.White.copy(alpha = 0.06f),
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Text(
                             text = "“ ${annotation.lyricFragment} ”",
                             style = MaterialTheme.typography.titleMedium.copy(
@@ -162,6 +168,19 @@ fun LyricAnnotationSheet(
                                 color = Color(0xFFFFE082)
                             )
                         )
+
+                        val displayLyricTrans = lyricTranslation?.takeIf { it.isNotBlank() } ?: annotation.lyricTranslation
+                        if (!displayLyricTrans.isNullOrBlank()) {
+                            val convertedTrans = if (isTraditional) ChineseConverter.toTraditional(displayLyricTrans) else displayLyricTrans
+                            Text(
+                                text = convertedTrans,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 14.5.sp,
+                                    lineHeight = 22.sp,
+                                    color = Color(0xFFEDE8E3).copy(alpha = 0.90f)
+                                )
+                            )
+                        }
                     }
                 }
 
@@ -287,6 +306,7 @@ fun LyricAnnotationSheet(
                     originalText = annotation.explanationText,
                     translatedText = annotation.explanationTranslation,
                     isTranslating = isTranslating,
+                    isTraditional = isTraditional,
                     modifier = Modifier.fillMaxWidth()
                 )
 

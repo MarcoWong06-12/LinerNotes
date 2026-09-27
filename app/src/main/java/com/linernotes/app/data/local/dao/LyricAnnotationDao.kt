@@ -41,4 +41,10 @@ interface LyricAnnotationDao {
 
     @Query("DELETE FROM song_stories WHERE trackId = :trackId")
     suspend fun deleteSongStoryForTrack(trackId: Long)
+
+    @Query("SELECT * FROM lyric_annotations WHERE trackId IN (:trackIds)")
+    suspend fun getAnnotationsForTracks(trackIds: List<Long>): List<LyricAnnotationEntity>
+
+    @Query("SELECT * FROM song_stories WHERE trackId IN (:trackIds)")
+    suspend fun getSongStoriesForTracks(trackIds: List<Long>): List<SongStoryEntity>
 }

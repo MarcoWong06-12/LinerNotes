@@ -200,6 +200,12 @@ class LyricBookletViewModel @Inject constructor(
                         )
                     }
                     loadAnnotationsForCurrentTrack()
+                    val otherTracks = albumWithTracks.tracks
+                    if (otherTracks.size > 1) {
+                        viewModelScope.launch(Dispatchers.IO) {
+                            annotationRepository.prefetchAlbumAnnotations(albumWithTracks.album.artist, otherTracks)
+                        }
+                    }
                 } else {
                     _uiState.update { it.copy(isLoading = false) }
                 }
@@ -491,8 +497,14 @@ class LyricBookletViewModel @Inject constructor(
                 ?.filter { it.isNotBlank() && !it.startsWith("[") } ?: emptyList()
         }
 
+        val isTrad = _uiState.value.isTraditionalMode ||
+            aiPreferences.targetLanguage == "zh-TW" ||
+            com.linernotes.app.core.i18n.TranslationTargetLanguage.fromCode(aiPreferences.targetLanguage) == com.linernotes.app.core.i18n.TranslationTargetLanguage.ZH_TW ||
+            ChineseConverter.isTraditional(track.translatedLyrics) ||
+            ChineseConverter.isTraditional(track.translatedTitle)
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingAnnotations = true) }
+            _uiState.update { it.copy(isLoadingAnnotations = true, isTraditionalMode = isTrad) }
             val result = annotationRepository.fetchAndCacheAnnotations(track, artist, lyricTexts, forceRefresh)
             result.onSuccess { (story, annotations) ->
                 val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(
@@ -503,7 +515,8 @@ class LyricBookletViewModel @Inject constructor(
                     it.copy(
                         songStory = story,
                         lineAnnotations = lineMap,
-                        isLoadingAnnotations = false
+                        isLoadingAnnotations = false,
+                        isTraditionalMode = isTrad
                     )
                 }
             }.onFailure {
@@ -940,11 +953,52 @@ class LyricBookletViewModel @Inject constructor(
                 translatedLyrics = newLyrics
             )
 
+            // 同步转换当前曲目的 Genius 背景故事
+            val currentStory = _uiState.value.songStory
+            val newStory = currentStory?.let { s ->
+                val updatedStory = s.copy(
+                    descriptionTranslation = if (toTraditional) ChineseConverter.toTraditional(s.descriptionTranslation) else ChineseConverter.toSimplified(s.descriptionTranslation),
+                    descriptionPlain = if (AiAnnotationCurator.isAlreadyChinese(s.descriptionPlain)) {
+                        if (toTraditional) ChineseConverter.toTraditional(s.descriptionPlain) else ChineseConverter.toSimplified(s.descriptionPlain)
+                    } else s.descriptionPlain
+                )
+                annotationRepository.updateSongStory(updatedStory)
+                updatedStory
+            }
+
+            // 同步转换所有逐句典故与歌词翻译
+            val newAnnotations = _uiState.value.lineAnnotations.mapValues { (_, annot) ->
+                val newExplTrans = if (toTraditional) ChineseConverter.toTraditional(annot.explanationTranslation) else ChineseConverter.toSimplified(annot.explanationTranslation)
+                val newLyricTrans = if (toTraditional) ChineseConverter.toTraditional(annot.lyricTranslation) else ChineseConverter.toSimplified(annot.lyricTranslation)
+                val newExplText = if (AiAnnotationCurator.isAlreadyChinese(annot.explanationText)) {
+                    if (toTraditional) ChineseConverter.toTraditional(annot.explanationText) else ChineseConverter.toSimplified(annot.explanationText)
+                } else annot.explanationText
+                val updatedAnnot = annot.copy(
+                    explanationTranslation = newExplTrans,
+                    lyricTranslation = newLyricTrans,
+                    explanationText = newExplText
+                )
+                annotationRepository.updateAnnotation(updatedAnnot)
+                updatedAnnot
+            }
+
+            val currentSelected = _uiState.value.selectedAnnotation
+            val newSelected = currentSelected?.let { annot ->
+                newAnnotations.values.find { it.id == annot.id } ?: annot.copy(
+                    explanationTranslation = if (toTraditional) ChineseConverter.toTraditional(annot.explanationTranslation) else ChineseConverter.toSimplified(annot.explanationTranslation),
+                    lyricTranslation = if (toTraditional) ChineseConverter.toTraditional(annot.lyricTranslation) else ChineseConverter.toSimplified(annot.lyricTranslation)
+                )
+            }
+
             val aligned = LyricAligner.align(currentTrack.originalLyrics, newLyrics)
             _uiState.update { state ->
                 state.copy(
                     alignedLyrics = aligned,
-                    userMessage = if (toTraditional) "当前曲目译文已成功转换为繁体中文" else "当前曲目译文已成功转换为简体中文"
+                    songStory = newStory,
+                    lineAnnotations = newAnnotations,
+                    selectedAnnotation = newSelected,
+                    isTraditionalMode = toTraditional,
+                    userMessage = if (toTraditional) "当前曲目与典故已成功转换为繁体中文" else "当前曲目与典故已成功转换为简体中文"
                 )
             }
         }
@@ -991,6 +1045,9 @@ class LyricBookletViewModel @Inject constructor(
                 }
             }
 
+            val trackIds = tracks.map { it.id }
+            annotationRepository.convertAllAnnotationsForTracks(trackIds, toTraditional)
+
             val currentTrack = getCurrentTrack()
             val newAligned = if (currentTrack != null) {
                 val newLyrics = if (toTraditional) {
@@ -1003,11 +1060,18 @@ class LyricBookletViewModel @Inject constructor(
                 _uiState.value.alignedLyrics
             }
 
+            val updatedStory = annotationRepository.getSongStory(currentTrack?.id ?: 0L)
+            val updatedAnnots = annotationRepository.getAnnotations(currentTrack?.id ?: 0L)
+            val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(newAligned, updatedAnnots)
+
             val targetType = if (toTraditional) "繁体中文" else "简体中文"
             _uiState.update {
                 it.copy(
                     alignedLyrics = newAligned,
-                    userMessage = "全辑共 $convertedCount 首曲目译文已成功转换为$targetType"
+                    songStory = updatedStory,
+                    lineAnnotations = lineMap,
+                    isTraditionalMode = toTraditional,
+                    userMessage = "全辑共 $convertedCount 首曲目及典故已成功转换为$targetType"
                 )
             }
         }

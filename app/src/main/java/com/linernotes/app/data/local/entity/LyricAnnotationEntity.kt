@@ -30,5 +30,6 @@ data class LyricAnnotationEntity(
     val source: String = "GENIUS",     // "GENIUS" or "AI_CURATED"
     val geniusSongId: Long? = null,
     val geniusUrl: String? = null,
-    val explanationTranslation: String? = null
+    val explanationTranslation: String? = null,
+    val lyricTranslation: String? = null
 )
