@@ -773,7 +773,7 @@ fun LyricBookletScreen(
                 ) {
                     // 1. 实体内页画册
                     item {
-                        val pageCount = state.bookletPages.size
+                        val pageCount = bookletPages.size
                         val bookletLabel = if (pageCount > 0) {
                             if (state.isTraditionalMode) "實體內頁 (${pageCount}P)" else "实体内页 (${pageCount}P)"
                         } else {
@@ -799,13 +799,13 @@ fun LyricBookletScreen(
 
                     // 3. 实体 CD 压盘版本库 (Discogs)
                     item {
-                        val editionLabel = state.selectedDiscogsEdition?.let {
+                        val editionLabel = state.selectedDiscogsDetail?.let {
                             "CD · ${it.country ?: (if (state.isTraditionalMode) "首版" else "首版")}"
                         } ?: if (state.isTraditionalMode) "實體版本庫" else "实体版本库"
                         CapsuleFeatureChip(
                             icon = Icons.Default.Album,
                             label = editionLabel,
-                            isActive = state.selectedDiscogsEdition != null,
+                            isActive = state.selectedDiscogsDetail != null,
                             onClick = { viewModel.openDiscogsPicker(true) }
                         )
                     }
