@@ -10,10 +10,13 @@ import com.linernotes.app.data.local.entity.SongStoryEntity
 import com.linernotes.app.data.local.entity.TrackEntity
 import com.linernotes.app.data.remote.GeniusService
 import com.linernotes.app.data.remote.TranslationService
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -213,8 +216,7 @@ class AnnotationRepository @Inject constructor(
 
         // 4. 在后台异步协程中温和执行中文对照翻译，逐步更新数据库，绝不阻塞前台渲染
         if (annotationEntities.isNotEmpty() || (storyEntity != null && !storyEntity.descriptionPlain.isBlank())) {
-            val bgScope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO)
-            bgScope.launch {
+            CoroutineScope(Dispatchers.IO).launch {
                 // 4.1 异步翻译背景故事
                 if (storyEntity != null && !storyEntity.descriptionPlain.isBlank() &&
                     !AiAnnotationCurator.isAlreadyChinese(storyEntity.descriptionPlain) &&
@@ -251,7 +253,7 @@ class AnnotationRepository @Inject constructor(
                         if (updated != annot) {
                             lyricAnnotationDao.updateAnnotation(updated)
                         }
-                        kotlinx.coroutines.delay(100)
+                        delay(100)
                     } catch (e: Exception) { /* ignore */ }
                 }
             }
