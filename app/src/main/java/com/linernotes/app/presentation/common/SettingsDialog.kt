@@ -27,6 +27,7 @@ fun SettingsDialog(
 ) {
     val strings = LocalStrings.current
 
+    var themeMode by remember { mutableStateOf(aiPreferences.themeMode) }
     var appLanguage by remember { mutableStateOf(aiPreferences.appLanguage) }
     var targetLanguage by remember { mutableStateOf(aiPreferences.targetLanguage) }
     var lyricsSource by remember { mutableStateOf(aiPreferences.lyricsSource) }
@@ -49,7 +50,7 @@ fun SettingsDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 // ==========================================
-                // 1. 语言与本地化配置专区
+                // 1. 语言与外观偏好专区
                 // ==========================================
                 Text(
                     text = strings.sectionLocalization,
@@ -58,6 +59,34 @@ fun SettingsDialog(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // 外观与主题模式 (跟随系统 / 浅色模式 / 深色模式)
+                Text(strings.themeModeLabel, style = MaterialTheme.typography.labelSmall)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val themeOptions = listOf(
+                        AiPreferences.ThemeMode.SYSTEM.code to strings.themeModeSystem,
+                        AiPreferences.ThemeMode.LIGHT.code to strings.themeModeLight,
+                        AiPreferences.ThemeMode.DARK.code to strings.themeModeDark
+                    )
+                    themeOptions.forEach { (code, label) ->
+                        FilterChip(
+                            selected = themeMode == code,
+                            onClick = {
+                                themeMode = code
+                                aiPreferences.themeMode = code
+                            },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // 应用界面语言
                 Text(strings.appLanguageLabel, style = MaterialTheme.typography.labelSmall)
@@ -219,6 +248,7 @@ fun SettingsDialog(
         confirmButton = {
             BouncyButton(
                 onClick = {
+                    aiPreferences.themeMode = themeMode
                     aiPreferences.appLanguage = appLanguage
                     aiPreferences.targetLanguage = targetLanguage
                     aiPreferences.lyricsSource = lyricsSource

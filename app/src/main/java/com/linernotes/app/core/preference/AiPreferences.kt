@@ -14,6 +14,18 @@ class AiPreferences @Inject constructor(
 ) {
     private val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
 
+    private val _themeModeFlow = kotlinx.coroutines.flow.MutableStateFlow(
+        prefs.getString("theme_mode", ThemeMode.SYSTEM.code) ?: ThemeMode.SYSTEM.code
+    )
+    val themeModeFlow: kotlinx.coroutines.flow.StateFlow<String> = _themeModeFlow
+
+    var themeMode: String
+        get() = _themeModeFlow.value
+        set(value) {
+            prefs.edit().putString("theme_mode", value).apply()
+            _themeModeFlow.value = value
+        }
+
     private val _appLanguageFlow = kotlinx.coroutines.flow.MutableStateFlow(
         prefs.getString("app_language", com.linernotes.app.core.i18n.AppLanguage.SYSTEM.code) ?: com.linernotes.app.core.i18n.AppLanguage.SYSTEM.code
     )
@@ -57,6 +69,17 @@ class AiPreferences @Inject constructor(
         companion object {
             fun fromCode(code: String): LyricsSourcePreference =
                 entries.find { it.code.equals(code, ignoreCase = true) } ?: AUTO_FIRST
+        }
+    }
+
+    enum class ThemeMode(val code: String) {
+        SYSTEM("system"),
+        LIGHT("light"),
+        DARK("dark");
+
+        companion object {
+            fun fromCode(code: String): ThemeMode =
+                entries.find { it.code.equals(code, ignoreCase = true) } ?: SYSTEM
         }
     }
 }

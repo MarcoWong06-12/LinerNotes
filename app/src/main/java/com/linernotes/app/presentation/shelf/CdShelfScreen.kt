@@ -108,7 +108,7 @@ fun CdShelfScreen(
                                         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                                         CircleShape
                                     )
-                                    .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), CircleShape)
                                     .padding(horizontal = 14.dp)
                             ) {
                                 Icon(
@@ -257,7 +257,7 @@ fun CdShelfScreen(
                 )
             )
         },
-        containerColor = Color(0xFF121214)
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Box(
             modifier = Modifier

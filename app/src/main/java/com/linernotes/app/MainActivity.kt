@@ -29,12 +29,16 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val appLanguageCode by aiPreferences.appLanguageFlow.collectAsState()
+            val themeModeCode by aiPreferences.themeModeFlow.collectAsState()
+            val themeMode = remember(themeModeCode) {
+                AiPreferences.ThemeMode.fromCode(themeModeCode)
+            }
             val strings = remember(appLanguageCode) {
                 resolveAppStrings(appLanguageCode)
             }
 
             CompositionLocalProvider(LocalStrings provides strings) {
-                LinerNotesTheme {
+                LinerNotesTheme(themeMode = themeMode) {
                     var selectedAlbumId by rememberSaveable { mutableStateOf<String?>(null) }
 
                     // Top-level back handler: when in an album, pressing/swiping back returns to CD Shelf

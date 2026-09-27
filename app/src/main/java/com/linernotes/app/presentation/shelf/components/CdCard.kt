@@ -77,7 +77,7 @@ fun CdCard(
                     ambientColor = Color.Black.copy(alpha = 0.25f)
                 )
                 .clip(RoundedCornerShape(3.dp))
-                .background(Color(0xFF1B1B1E))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .drawWithContent {
                     drawContent()
 
