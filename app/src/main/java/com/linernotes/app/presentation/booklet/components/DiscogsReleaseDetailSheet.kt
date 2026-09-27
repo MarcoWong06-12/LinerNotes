@@ -72,9 +72,9 @@ fun DiscogsReleaseDetailSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = VaultBlack,
+        containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = {
-            BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.25f))
+            BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
         }
     ) {
         Column(
@@ -113,12 +113,12 @@ fun DiscogsReleaseDetailSheet(
                         Text(
                             text = "实体 CD 版本详档 · Discogs",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "Release #${detail.id}",
                             style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                            color = Color.White.copy(alpha = 0.5f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -127,8 +127,8 @@ fun DiscogsReleaseDetailSheet(
                     onClick = onDismiss,
                     shape = CircleShape,
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = Color.White.copy(alpha = 0.10f),
-                        contentColor = Color.White
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        contentColor = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier.size(36.dp)
                 ) {
@@ -139,8 +139,8 @@ fun DiscogsReleaseDetailSheet(
             // 核心专辑卡片：封面 + 格式徽章 + 核心发行信息
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = VaultSurface,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(

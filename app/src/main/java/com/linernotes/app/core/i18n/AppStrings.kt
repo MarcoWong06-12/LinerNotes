@@ -57,9 +57,11 @@ data class AppStrings(
     val addAlbumTooltip: String,
     val back: String,
 
-    // 空唱片架
+    // 空唱片架与唱片统计
     val emptyShelfTitle: String,
     val emptyShelfSubtitle: String,
+    val shelfCollectionCount: String,
+    val shelfSearchResultCount: String,
 
     // 唱片卡片
     val viewBooklet: String,
@@ -205,6 +207,8 @@ val ZhHansStrings = AppStrings(
 
     emptyShelfTitle = "唱片架空空如也",
     emptyShelfSubtitle = "点击右上角「+」收纳你的第一张实体 CD\n翻开属于你的数字化双语内页",
+    shelfCollectionCount = "已珍藏 · %d 张实体唱片",
+    shelfSearchResultCount = "搜索结果 · %d 张唱片",
 
     viewBooklet = "翻阅歌词内页 (Booklet)",
     removeFromShelf = "从唱片架移出",
@@ -345,6 +349,8 @@ val ZhHantStrings = AppStrings(
 
     emptyShelfTitle = "唱片架空空如也",
     emptyShelfSubtitle = "點擊右上角「+」收納你的第一張實體 CD\n翻開屬於你的數位化雙語內頁",
+    shelfCollectionCount = "已珍藏 · %d 張實體唱片",
+    shelfSearchResultCount = "搜尋結果 · %d 張唱片",
 
     viewBooklet = "翻閱歌詞內頁 (Booklet)",
     removeFromShelf = "從唱片架移出",
@@ -485,6 +491,8 @@ val EnStrings = AppStrings(
 
     emptyShelfTitle = "Your Shelf is Empty",
     emptyShelfSubtitle = "Tap \"+\" in the top right to add your first physical CD\nand explore your digital bilingual liner notes",
+    shelfCollectionCount = "COLLECTED · %d PHYSICAL ALBUMS",
+    shelfSearchResultCount = "FOUND · %d ALBUMS",
 
     viewBooklet = "Open Liner Notes Booklet",
     removeFromShelf = "Remove from Shelf",
@@ -625,6 +633,8 @@ val JaStrings = AppStrings(
 
     emptyShelfTitle = "レコード棚は空です",
     emptyShelfSubtitle = "右上の「+」をタップして最初のCDを登録しましょう\nあなただけのデジタルバイリンガルブックレットを開こう",
+    shelfCollectionCount = "コレクション · %d 枚",
+    shelfSearchResultCount = "検索結果 · %d 枚",
 
     viewBooklet = "歌詞カードを開く (Booklet)",
     removeFromShelf = "棚から削除",

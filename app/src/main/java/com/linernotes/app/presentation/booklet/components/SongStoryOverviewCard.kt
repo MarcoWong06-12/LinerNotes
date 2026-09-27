@@ -48,12 +48,20 @@ fun SongStoryOverviewCard(
 
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = Color(0xFF1E1E26).copy(alpha = 0.85f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f),
+        border = BorderStroke(
+            1.dp,
+            androidx.compose.ui.graphics.Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.20f),
+                    Color.White.copy(alpha = 0.05f)
+                )
+            )
+        ),
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(animationSpec = spring())
-            .clickable { onToggleExpand() }
+            .bouncyClickable(pressedScale = 0.98f) { onToggleExpand() }
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // 顶部横幅图片 (若有 headerImageUrl)
@@ -107,7 +115,7 @@ fun SongStoryOverviewCard(
                             Text(
                                 text = if (isTraditional) "關於《${story.title}》· 創作心境與背景" else "关于《${story.title}》· 创作心境与背景",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             if (!story.releaseDate.isNullOrBlank() || !story.producerCredits.isNullOrBlank()) {
                                 val metaText = listOfNotNull(
@@ -117,7 +125,7 @@ fun SongStoryOverviewCard(
                                 Text(
                                     text = metaText,
                                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                    color = Color.White.copy(alpha = 0.55f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -128,7 +136,7 @@ fun SongStoryOverviewCard(
                     Icon(
                         imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                         contentDescription = if (isExpanded) "Collapse" else "Expand",
-                        tint = Color.White.copy(alpha = 0.7f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -185,7 +193,7 @@ fun SongStoryOverviewCard(
                             fontSize = 14.sp,
                             lineHeight = 22.sp
                         ),
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f),
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )

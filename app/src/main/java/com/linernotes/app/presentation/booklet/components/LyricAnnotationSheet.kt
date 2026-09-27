@@ -80,9 +80,9 @@ fun LyricAnnotationSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = VaultBlack,
+        containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = {
-            BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.25f))
+            BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
         }
     ) {
         Column(
@@ -151,8 +151,8 @@ fun LyricAnnotationSheet(
                 // 1. 歌词原文引用卡片 (Quoted Lyric Card: 英文原文下紧随中文翻译)
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = Color.White.copy(alpha = 0.06f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.20f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -165,7 +165,7 @@ fun LyricAnnotationSheet(
                                 fontStyle = FontStyle.Italic,
                                 fontWeight = FontWeight.SemiBold,
                                 lineHeight = 26.sp,
-                                color = Color(0xFFFFE082)
+                                color = Color(0xFFFFD54F)
                             )
                         )
 
@@ -177,7 +177,7 @@ fun LyricAnnotationSheet(
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontSize = 14.5.sp,
                                     lineHeight = 22.sp,
-                                    color = Color(0xFFEDE8E3).copy(alpha = 0.90f)
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.90f)
                                 )
                             )
                         }
@@ -248,8 +248,8 @@ fun LyricAnnotationSheet(
                     if (annotation.votesTotal > 0) {
                         Surface(
                             shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.08f),
-                            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.20f))
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -265,7 +265,7 @@ fun LyricAnnotationSheet(
                                 Text(
                                     text = "${annotation.votesTotal}",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }

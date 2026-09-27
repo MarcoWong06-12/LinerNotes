@@ -8,12 +8,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -146,6 +149,31 @@ fun CdCard(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
+
+            // 实体唱片介质角标 (CD / SACD / VINYL / CASSETTE)
+            val mediaType = (album.mediaType.ifBlank { "CD" }).uppercase()
+            Surface(
+                shape = RoundedCornerShape(bottomStart = 6.dp),
+                color = Color.Black.copy(alpha = 0.65f),
+                border = BorderStroke(
+                    0.5.dp,
+                    Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.35f), Color.White.copy(alpha = 0.08f))
+                    )
+                ),
+                modifier = Modifier.align(Alignment.TopEnd)
+            ) {
+                Text(
+                    text = mediaType,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    ),
+                    color = Color.White.copy(alpha = 0.90f),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp)
+                )
+            }
 
             DropdownMenu(
                 expanded = isMenuExpanded,

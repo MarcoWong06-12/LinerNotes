@@ -63,6 +63,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -599,7 +600,7 @@ fun LyricBookletScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = Color(0xFF0F0F12)
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Box(
             modifier = Modifier.fillMaxSize()
@@ -630,17 +631,26 @@ fun LyricBookletScreen(
                 )
             }
 
-            // 纵深暗阶遮罩 (Apple Music 暗黑沉浸氛围)
+            // 纵深渐变遮罩 (随主题明暗自适应)
+            val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            listOf(
-                                Color(0xFF1E1E22).copy(alpha = 0.70f),
-                                Color(0xFF141417).copy(alpha = 0.88f),
-                                Color(0xFF0F0F12)
-                            )
+                            if (isDark) {
+                                listOf(
+                                    Color(0xFF1E1E22).copy(alpha = 0.70f),
+                                    Color(0xFF141417).copy(alpha = 0.88f),
+                                    MaterialTheme.colorScheme.background
+                                )
+                            } else {
+                                listOf(
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0.65f),
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0.88f),
+                                    MaterialTheme.colorScheme.background
+                                )
+                            }
                         )
                     )
             )
@@ -1404,18 +1414,26 @@ private fun FloatingCompanionCapsule(
             }
         }
 
-        // 主胶囊药丸容器 (Gemini Pill)
+        // 主胶囊药丸容器 (Apple Music / Gemini Pill Island)
         Surface(
-            shape = RoundedCornerShape(36.dp),
-            color = Color(0xFF1B1B20).copy(alpha = 0.95f),
+            shape = RoundedCornerShape(32.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
             tonalElevation = 10.dp,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+            border = BorderStroke(
+                1.dp,
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.22f),
+                        Color.White.copy(alpha = 0.05f)
+                    )
+                )
+            ),
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(
                     elevation = 20.dp,
-                    shape = RoundedCornerShape(36.dp),
-                    spotColor = Color.Black.copy(alpha = 0.65f)
+                    shape = RoundedCornerShape(32.dp),
+                    spotColor = Color.Black.copy(alpha = 0.45f)
                 )
         ) {
             Column(
@@ -1457,11 +1475,11 @@ private fun FloatingCompanionCapsule(
                         colors = SliderDefaults.colors(
                             thumbColor = MaterialTheme.colorScheme.primary,
                             activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
                         ),
                         modifier = Modifier
                             .weight(1f)
-                            .height(28.dp)
+                            .height(24.dp)
                             .padding(horizontal = 4.dp)
                     )
                     Text(
@@ -1473,136 +1491,48 @@ private fun FloatingCompanionCapsule(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-                // 控制按钮行
+                // 控制按钮行 (Modern Player Island Layout)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // 上一曲（圆形）
-                    BouncyIconButton(
-                        onClick = onPrevious,
-                        enabled = hasPrevious,
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SkipPrevious,
-                            contentDescription = strings.prevTrack,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    // 核心高亮播放/暂停大圆纽 (Gemini 标志性大圆形按钮，带弹簧物理深潜与弹性回弹)
-                    val playInteractionSource = remember { MutableInteractionSource() }
-                    val isPlayPressed by playInteractionSource.collectIsPressedAsState()
-                    val heroScale by animateFloatAsState(
-                        targetValue = if (isPlayPressed) 0.86f else if (isPlaying) 1.05f else 1.0f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
-                        label = "heroScale"
-                    )
-                    val heroAlpha by animateFloatAsState(
-                        targetValue = if (isPlayPressed) 0.82f else 1.0f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
-                        label = "heroAlpha"
-                    )
-
-                    Surface(
-                        onClick = onTogglePlay,
-                        interactionSource = playInteractionSource,
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        shadowElevation = 8.dp,
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(50.dp)
-                            .scale(heroScale)
-                            .graphicsLayer { alpha = heroAlpha }
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            AnimatedContent(
-                                targetState = isPlaying,
-                                transitionSpec = {
-                                    (fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
-                                            scaleIn(initialScale = 0.8f))
-                                        .togetherWith(
-                                            fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
-                                                    scaleOut(targetScale = 0.8f)
-                                        )
-                                },
-                                label = "playPause"
-                            ) { playing ->
-                                Icon(
-                                    imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (playing) strings.cdCompanionPause else strings.cdCompanionPlay,
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    // 下一曲（圆形）
-                    BouncyIconButton(
-                        onClick = onNext,
-                        enabled = hasNext,
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SkipNext,
-                            contentDescription = strings.nextTrack,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    // 曲名与音轨胶囊（可点击快速展开曲目列表）
+                    // 左侧：曲名与音轨胶囊（可点击快速展开曲目列表）
                     Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                        horizontalAlignment = Alignment.Start,
                         modifier = Modifier
                             .weight(1f)
-                            .padding(horizontal = 6.dp)
+                            .padding(end = 8.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .bouncyClickable(pressedScale = 0.96f) { onOpenCdTracklist() }
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                            horizontalArrangement = Arrangement.Start
                         ) {
                             if (cdConnectionState == CdConnectionState.CONNECTED) {
                                 Surface(
                                     shape = CircleShape,
                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                    modifier = Modifier.padding(end = 4.dp)
+                                    modifier = Modifier.padding(end = 5.dp)
                                 ) {
                                     Text(
                                         text = "CD",
                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                     )
                                 }
                             }
                             Text(
                                 text = if (trackTitle.isNotBlank()) "$trackNumber. $trackTitle" else "Track $trackNumber",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.5.sp
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -1611,7 +1541,7 @@ private fun FloatingCompanionCapsule(
                         if (!translatedTitle.isNullOrBlank()) {
                             Text(
                                 text = translatedTitle,
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
@@ -1619,38 +1549,135 @@ private fun FloatingCompanionCapsule(
                         }
                     }
 
-                    // CD 实时曲目清单快捷按钮 (QueueMusic)
-                    BouncyIconButton(
-                        onClick = onOpenCdTracklist,
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        modifier = Modifier.size(38.dp)
+                    // 右侧：媒体控制与快捷操作坞 (Transport Dock)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.QueueMusic,
-                            contentDescription = strings.cdTracklistTitle,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                        // 上一曲
+                        BouncyIconButton(
+                            onClick = onPrevious,
+                            enabled = hasPrevious,
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SkipPrevious,
+                                contentDescription = strings.prevTrack,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
 
-                    // 校准微调芯片（圆形）
-                    BouncyIconButton(
-                        onClick = onToggleCalibration,
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = if (showCalibration) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            contentColor = if (showCalibration) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Tune,
-                            contentDescription = "Tune",
-                            modifier = Modifier.size(18.dp)
+                        // 核心高亮播放/暂停大圆纽 (Hero Button)
+                        val playInteractionSource = remember { MutableInteractionSource() }
+                        val isPlayPressed by playInteractionSource.collectIsPressedAsState()
+                        val heroScale by animateFloatAsState(
+                            targetValue = if (isPlayPressed) 0.88f else if (isPlaying) 1.04f else 1.0f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            label = "heroScale"
                         )
+                        val heroAlpha by animateFloatAsState(
+                            targetValue = if (isPlayPressed) 0.85f else 1.0f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            label = "heroAlpha"
+                        )
+
+                        Surface(
+                            onClick = onTogglePlay,
+                            interactionSource = playInteractionSource,
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            shadowElevation = 6.dp,
+                            modifier = Modifier
+                                .padding(horizontal = 2.dp)
+                                .size(44.dp)
+                                .scale(heroScale)
+                                .graphicsLayer { alpha = heroAlpha }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                AnimatedContent(
+                                    targetState = isPlaying,
+                                    transitionSpec = {
+                                        (fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                                                scaleIn(initialScale = 0.8f))
+                                            .togetherWith(
+                                                fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                                                        scaleOut(targetScale = 0.8f)
+                                            )
+                                    },
+                                    label = "playPause"
+                                ) { playing ->
+                                    Icon(
+                                        imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = if (playing) strings.cdCompanionPause else strings.cdCompanionPlay,
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(23.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // 下一曲
+                        BouncyIconButton(
+                            onClick = onNext,
+                            enabled = hasNext,
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SkipNext,
+                                contentDescription = strings.nextTrack,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+
+                        // CD 实时曲目清单快捷按钮 (QueueMusic)
+                        BouncyIconButton(
+                            onClick = onOpenCdTracklist,
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QueueMusic,
+                                contentDescription = strings.cdTracklistTitle,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+
+                        // 校准微调芯片（圆形）
+                        BouncyIconButton(
+                            onClick = onToggleCalibration,
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = if (showCalibration) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                contentColor = if (showCalibration) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = "Tune",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
