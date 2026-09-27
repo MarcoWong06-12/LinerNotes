@@ -122,13 +122,30 @@ object GeniusService {
             } else {
                 // genius.com/api/search/multi 返回 sections 数组
                 val sections = responseObj.optJSONArray("sections") ?: return@withContext null
+
+                // 1. 优先从 type == "song" 专用段中查找精准曲目
                 for (i in 0 until sections.length()) {
                     val sec = sections.optJSONObject(i) ?: continue
-                    val secType = sec.optString("type")
-                    if (secType.equals("song", ignoreCase = true) || secType.equals("top_hit", ignoreCase = true)) {
+                    if (sec.optString("type").equals("song", ignoreCase = true)) {
                         val hits = sec.optJSONArray("hits") ?: continue
                         for (j in 0 until hits.length()) {
                             val hit = hits.optJSONObject(j) ?: continue
+                            val result = hit.optJSONObject("result") ?: continue
+                            val song = parseSongResult(result)
+                            if (song != null) return@withContext song
+                        }
+                    }
+                }
+
+                // 2. 其次从 top_hit 段中查找类型为 song 的条目
+                for (i in 0 until sections.length()) {
+                    val sec = sections.optJSONObject(i) ?: continue
+                    if (sec.optString("type").equals("top_hit", ignoreCase = true)) {
+                        val hits = sec.optJSONArray("hits") ?: continue
+                        for (j in 0 until hits.length()) {
+                            val hit = hits.optJSONObject(j) ?: continue
+                            val hitType = hit.optString("type")
+                            if (hitType.isNotBlank() && !hitType.equals("song", ignoreCase = true)) continue
                             val result = hit.optJSONObject("result") ?: continue
                             val song = parseSongResult(result)
                             if (song != null) return@withContext song
@@ -143,10 +160,15 @@ object GeniusService {
     }
 
     private fun parseSongResult(result: JSONObject): GeniusSongSearchResult? {
+        val type = result.optString("_type")
+        if (type.isNotBlank() && !type.equals("song", ignoreCase = true)) {
+            return null
+        }
         val id = result.optLong("id", 0L)
         if (id <= 0L) return null
-        val title = result.optString("title")
-        val fullTitle = result.optString("full_title")
+        val title = result.optString("title").trim()
+        if (title.isBlank()) return null
+        val fullTitle = result.optString("full_title").ifBlank { title }
         val primaryArtist = result.optJSONObject("primary_artist")
         val artistName = primaryArtist?.optString("name") ?: ""
         val thumbUrl = result.optString("song_art_image_thumbnail_url").takeIf { it.isNotBlank() }
