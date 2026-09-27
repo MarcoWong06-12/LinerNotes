@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.linernotes.app.presentation.common.bouncyClickable
 import com.linernotes.app.presentation.theme.VaultBlack
 import com.linernotes.app.presentation.theme.VaultSurfaceVariant
 import kotlinx.coroutines.isActive
@@ -33,7 +34,8 @@ fun RotatingCdDisc(
     isPlaying: Boolean,
     currentTrackIndex: Int = 0,
     totalTracks: Int = 1,
-    discSize: Dp = 280.dp
+    discSize: Dp = 280.dp,
+    onClick: (() -> Unit)? = null
 ) {
     // 1. Calculate RPM and degrees/ms
     val rpm = 500f - (currentTrackIndex.toFloat() / maxOf(totalTracks, 1)) * 300f
@@ -98,8 +100,17 @@ fun RotatingCdDisc(
         )
     }
 
+    val clickModifier = if (onClick != null) {
+        Modifier.bouncyClickable(
+            pressedScale = 0.95f,
+            onClick = onClick
+        )
+    } else Modifier
+
     Box(
-        modifier = modifier.size(discSize),
+        modifier = modifier
+            .size(discSize)
+            .then(clickModifier),
         contentAlignment = Alignment.Center
     ) {
         AsyncImage(

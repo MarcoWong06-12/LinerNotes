@@ -224,6 +224,19 @@ class LyricBookletViewModel @Inject constructor(
         _uiState.update { it.copy(displayMode = mode) }
     }
 
+    fun cycleDisplayMode() {
+        val nextMode = when (_uiState.value.displayMode) {
+            LyricDisplayMode.BILINGUAL -> LyricDisplayMode.ORIGINAL_ONLY
+            LyricDisplayMode.ORIGINAL_ONLY -> LyricDisplayMode.TRANSLATED_ONLY
+            LyricDisplayMode.TRANSLATED_ONLY -> LyricDisplayMode.BILINGUAL
+        }
+        _uiState.update { it.copy(displayMode = nextMode) }
+    }
+
+    fun toggleTraditionalMode() {
+        convertCurrentTrackTranslation(toTraditional = !_uiState.value.isTraditionalMode)
+    }
+
     private fun computeTrackDuration(track: TrackEntity?, aligned: List<BilingualLyricLine>): Long {
         val dbDuration = track?.durationMs ?: 0L
         if (dbDuration > 0L) return dbDuration

@@ -1,11 +1,16 @@
 package com.linernotes.app.presentation.shelf
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -50,6 +55,13 @@ fun CdShelfScreen(
     val strings = com.linernotes.app.core.i18n.LocalStrings.current
     val context = LocalContext.current
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
+    val searchFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(state.isSearchActive) {
+        if (state.isSearchActive) {
+            searchFocusRequester.requestFocus()
+        }
+    }
 
     // 适配 Android 系统手势导航 (关闭搜索/弹窗，主界面双击防误触退出)
     BackHandler(enabled = true) {
@@ -115,7 +127,9 @@ fun CdShelfScreen(
                                         fontSize = 14.sp
                                     ),
                                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .focusRequester(searchFocusRequester),
                                     decorationBox = { innerTextField ->
                                         Box(
                                             contentAlignment = Alignment.CenterStart,
@@ -175,7 +189,7 @@ fun CdShelfScreen(
                                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                     contentColor = MaterialTheme.colorScheme.onSurface
                                 ),
-                                modifier = Modifier.size(38.dp)
+                                modifier = Modifier.padding(end = 4.dp).size(38.dp)
                             ) {
                                 Icon(Icons.Default.Close, contentDescription = strings.closeSearch, modifier = Modifier.size(20.dp))
                             }
@@ -194,40 +208,48 @@ fun CdShelfScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    BouncyIconButton(
-                        onClick = { viewModel.setSettingsOpen(true) },
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        modifier = Modifier.size(38.dp)
+                    AnimatedVisibility(
+                        visible = !state.isSearchActive,
+                        enter = fadeIn(tween(150)) + expandHorizontally(),
+                        exit = fadeOut(tween(100)) + shrinkHorizontally()
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = strings.settingsTitle,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Spacer(modifier = Modifier.width(6.dp))
 
-                    Spacer(modifier = Modifier.width(6.dp))
+                            BouncyIconButton(
+                                onClick = { viewModel.setSettingsOpen(true) },
+                                shape = CircleShape,
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = strings.settingsTitle,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
 
-                    BouncyIconButton(
-                        onClick = { viewModel.setAddSheetOpen(true) },
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        modifier = Modifier.padding(end = 8.dp).size(38.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = strings.addAlbumTooltip,
-                            modifier = Modifier.size(22.dp)
-                        )
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            BouncyIconButton(
+                                onClick = { viewModel.setAddSheetOpen(true) },
+                                shape = CircleShape,
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                modifier = Modifier.padding(end = 8.dp).size(38.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = strings.addAlbumTooltip,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

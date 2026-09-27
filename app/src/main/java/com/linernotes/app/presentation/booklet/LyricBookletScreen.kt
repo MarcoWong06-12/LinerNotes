@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Spellcheck
 import com.linernotes.app.core.util.ChineseConverter
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -731,7 +733,8 @@ fun LyricBookletScreen(
                             isPlaying = state.isCompanionPlaying,
                             currentTrackIndex = state.currentTrackIndex,
                             totalTracks = totalTracks,
-                            discSize = 220.dp
+                            discSize = 220.dp,
+                            onClick = { viewModel.toggleCompanionPlay() }
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Surface(
@@ -740,12 +743,131 @@ fun LyricBookletScreen(
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
                         ) {
                             Text(
-                                text = if (state.isCompanionPlaying) "物理 CD 伺服转速: ~$discRpm RPM · 全息激光反射" else "CD 伺服待机中",
+                                text = if (state.isCompanionPlaying) "物理 CD 伺服转速: ~$discRpm RPM · 点击光盘启停" else "CD 伺服待机中 · 点击光盘启停",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                             )
                         }
+                    }
+                }
+
+                // Apple Music 风格横向功能胶囊快捷栏 (1-Tap Quick Action Capsule Bar)
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp),
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 1. 实体内页画册
+                    item {
+                        val pageCount = state.bookletPages.size
+                        val bookletLabel = if (pageCount > 0) {
+                            if (state.isTraditionalMode) "實體內頁 (${pageCount}P)" else "实体内页 (${pageCount}P)"
+                        } else {
+                            if (state.isTraditionalMode) "實體內頁" else "实体内页"
+                        }
+                        CapsuleFeatureChip(
+                            icon = Icons.Default.Book,
+                            label = bookletLabel,
+                            isActive = pageCount > 0,
+                            onClick = { viewModel.openBookletSheet(true) }
+                        )
+                    }
+
+                    // 2. AI 唱片策展人 · 深度导赏
+                    item {
+                        CapsuleFeatureChip(
+                            icon = Icons.Default.AutoAwesome,
+                            label = if (state.isTraditionalMode) "AI 導賞" else "AI 导赏",
+                            tint = Color(0xFFFFD54F),
+                            onClick = { viewModel.openAiLinerNotes(true) }
+                        )
+                    }
+
+                    // 3. 实体 CD 压盘版本库 (Discogs)
+                    item {
+                        val editionLabel = state.selectedDiscogsEdition?.let {
+                            "CD · ${it.country ?: (if (state.isTraditionalMode) "首版" else "首版")}"
+                        } ?: if (state.isTraditionalMode) "實體版本庫" else "实体版本库"
+                        CapsuleFeatureChip(
+                            icon = Icons.Default.Album,
+                            label = editionLabel,
+                            isActive = state.selectedDiscogsEdition != null,
+                            onClick = { viewModel.openDiscogsPicker(true) }
+                        )
+                    }
+
+                    // 4. 拟物 CD 旋转光盘视窗切换
+                    item {
+                        val cdLabel = if (state.isDiscViewExpanded) {
+                            if (state.isTraditionalMode) "收起轉盤" else "收起转盘"
+                        } else {
+                            if (state.isTraditionalMode) "CD 轉盤" else "CD 转盘"
+                        }
+                        CapsuleFeatureChip(
+                            icon = Icons.Default.DiscFull,
+                            label = cdLabel,
+                            isActive = state.isDiscViewExpanded,
+                            onClick = { viewModel.toggleDiscViewExpanded() }
+                        )
+                    }
+
+                    // 5. 歌词显示模式切换 (双语 / 原文 / 译文)
+                    item {
+                        val modeLabel = when (state.displayMode) {
+                            LyricDisplayMode.BILINGUAL -> if (state.isTraditionalMode) "雙語對照" else "双语对照"
+                            LyricDisplayMode.ORIGINAL_ONLY -> if (state.isTraditionalMode) "純原文" else "纯原文"
+                            LyricDisplayMode.TRANSLATED_ONLY -> if (state.isTraditionalMode) "純譯文" else "纯译文"
+                        }
+                        CapsuleFeatureChip(
+                            icon = Icons.Default.Translate,
+                            label = modeLabel,
+                            isActive = state.displayMode == LyricDisplayMode.BILINGUAL,
+                            onClick = { viewModel.cycleDisplayMode() }
+                        )
+                    }
+
+                    // 6. 日文注音 (假名 / 罗马音 / 关闭)
+                    item {
+                        val furiganaLabel = when (state.furiganaMode) {
+                            FuriganaMode.OFF -> if (state.isTraditionalMode) "注音: 關" else "注音: 关"
+                            FuriganaMode.HIRAGANA -> if (state.isTraditionalMode) "注音: 假名" else "注音: 假名"
+                            FuriganaMode.ROMAJI -> if (state.isTraditionalMode) "注音: 羅馬音" else "注音: 罗马音"
+                        }
+                        CapsuleFeatureChip(
+                            icon = Icons.Default.Language,
+                            label = furiganaLabel,
+                            isActive = state.furiganaMode != FuriganaMode.OFF,
+                            onClick = { viewModel.cycleFuriganaMode() }
+                        )
+                    }
+
+                    // 7. 繁简切换
+                    item {
+                        CapsuleFeatureChip(
+                            icon = Icons.Default.Spellcheck,
+                            label = if (state.isTraditionalMode) "繁體" else "简体",
+                            isActive = state.isTraditionalMode,
+                            onClick = { viewModel.toggleTraditionalMode() }
+                        )
+                    }
+
+                    // 8. 时间轴校准
+                    item {
+                        val offsetLabel = if (state.lyricOffsetMs != 0L) {
+                            "${if (state.lyricOffsetMs > 0) "+" else ""}${state.lyricOffsetMs}ms"
+                        } else {
+                            if (state.isTraditionalMode) "校準微調" else "校准微调"
+                        }
+                        CapsuleFeatureChip(
+                            icon = Icons.Default.Tune,
+                            label = offsetLabel,
+                            isActive = state.showCalibrationBar || state.lyricOffsetMs != 0L,
+                            onClick = { viewModel.toggleCalibrationBar() }
+                        )
                     }
                 }
 
@@ -955,7 +1077,8 @@ fun LyricBookletScreen(
                         isPlaying = state.isCompanionPlaying,
                         currentTrackIndex = state.currentTrackIndex,
                         totalTracks = totalTracks,
-                        discSize = 250.dp
+                        discSize = 250.dp,
+                        onClick = { viewModel.toggleCompanionPlay() }
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
@@ -1598,36 +1721,30 @@ private fun LyricLineItem(
         horizontalAlignment = Alignment.Start
     ) {
         if (hasAnnotation) {
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = Color(0xFFFFD54F).copy(alpha = 0.14f),
-                border = BorderStroke(0.5.dp, Color(0xFFFFD54F).copy(alpha = 0.28f)),
-                modifier = Modifier.padding(bottom = 4.dp)
+            Row(
+                modifier = Modifier.padding(bottom = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Icon(
-                        imageVector = if (annotation.isVerified) Icons.Default.Verified else Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = Color(0xFFFFD54F),
-                        modifier = Modifier.size(10.dp)
+                Icon(
+                    imageVector = if (annotation.isVerified) Icons.Default.Verified else Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = Color(0xFFFFD54F).copy(alpha = 0.9f),
+                    modifier = Modifier.size(11.dp)
+                )
+                Text(
+                    text = if (annotation.isVerified) {
+                        if (isTraditional) "認證典故" else "认证典故"
+                    } else {
+                        if (isTraditional) "典故" else "典故"
+                    },
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.5.sp,
+                        color = Color(0xFFFFD54F).copy(alpha = 0.85f)
                     )
-                    Text(
-                        text = if (annotation.isVerified) {
-                            if (isTraditional) "認證典故" else "认证典故"
-                        } else {
-                            if (isTraditional) "典故" else "典故"
-                        },
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFFFD54F)
-                        )
-                    )
-                }
+                )
             }
         }
         val displayTranslation = remember(line.translation, isTraditional) {
@@ -1729,5 +1846,57 @@ private fun OriginalLyricText(
         )
     }
 }
+
+@Composable
+private fun CapsuleFeatureChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    isActive: Boolean = false,
+    tint: Color? = null,
+    onClick: () -> Unit
+) {
+    val activeBg = Color.White.copy(alpha = 0.18f)
+    val inactiveBg = Color.White.copy(alpha = 0.07f)
+    val activeBorder = Color.White.copy(alpha = 0.32f)
+    val inactiveBorder = Color.White.copy(alpha = 0.12f)
+    val contentColor = tint ?: if (isActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.88f)
+
+    Surface(
+        shape = CircleShape,
+        color = if (isActive) activeBg else inactiveBg,
+        border = BorderStroke(0.5.dp, if (isActive) activeBorder else inactiveBorder),
+        modifier = modifier
+            .height(32.dp)
+            .bouncyClickable(
+                pressedScale = 0.93f,
+                onClick = onClick
+            )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(13.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 11.5.sp,
+                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
+                    letterSpacing = 0.2.sp
+                ),
+                color = if (isActive) Color.White else Color.White.copy(alpha = 0.80f),
+                maxLines = 1
+            )
+        }
+    }
+}
+
 
 
