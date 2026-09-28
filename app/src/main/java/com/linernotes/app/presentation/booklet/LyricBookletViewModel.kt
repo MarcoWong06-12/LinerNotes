@@ -309,7 +309,8 @@ class LyricBookletViewModel @Inject constructor(
                     songStory = null,
                     lineAnnotations = emptyMap(),
                     isCdTracklistOpen = false,
-                    expandedAnnotationLineIndex = null
+                    expandedAnnotationLineIndex = null,
+                    annotationLoadState = com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADING
                 )
             }
             viewModelScope.launch {
@@ -321,7 +322,8 @@ class LyricBookletViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             songStory = cachedStory,
-                            lineAnnotations = lineMap
+                            lineAnnotations = lineMap,
+                            annotationLoadState = com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADED
                         )
                     }
                 }
@@ -580,7 +582,14 @@ class LyricBookletViewModel @Inject constructor(
         loadAnnotationsJob?.cancel()
         loadAnnotationsJob = viewModelScope.launch {
             lastLoadedAnnotationTrackId = track.id
-            _uiState.update { it.copy(isLoadingAnnotations = true, isTraditionalMode = isTrad) }
+            val hasExisting = _uiState.value.songStory != null || _uiState.value.lineAnnotations.isNotEmpty()
+            _uiState.update { 
+                it.copy(
+                    isLoadingAnnotations = true, 
+                    isTraditionalMode = isTrad,
+                    annotationLoadState = if (hasExisting) com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADED else com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADING
+                ) 
+            }
             val result = annotationRepository.fetchAndCacheAnnotations(track, artist, lyricTexts, forceRefresh)
             if (_uiState.value.currentTrackIndex != index) return@launch
             result.onSuccess { (story, annotations) ->
@@ -590,16 +599,28 @@ class LyricBookletViewModel @Inject constructor(
                     currentAligned,
                     annotations
                 )
+                val hasContent = (story != null || lineMap.isNotEmpty())
                 _uiState.update {
                     it.copy(
                         songStory = story ?: it.songStory,
                         lineAnnotations = if (lineMap.isNotEmpty()) lineMap else it.lineAnnotations,
                         isLoadingAnnotations = false,
-                        isTraditionalMode = isTrad
+                        isTraditionalMode = isTrad,
+                        annotationLoadState = if (hasContent || it.songStory != null || it.lineAnnotations.isNotEmpty()) {
+                            com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADED
+                        } else {
+                            com.linernotes.app.presentation.booklet.model.AnnotationLoadState.EMPTY
+                        }
                     )
                 }
             }.onFailure {
-                _uiState.update { it.copy(isLoadingAnnotations = false) }
+                val hasContent = (_uiState.value.songStory != null || _uiState.value.lineAnnotations.isNotEmpty())
+                _uiState.update { 
+                    it.copy(
+                        isLoadingAnnotations = false,
+                        annotationLoadState = if (hasContent) com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADED else com.linernotes.app.presentation.booklet.model.AnnotationLoadState.FAILED
+                    ) 
+                }
             }
         }
     }
@@ -795,7 +816,7 @@ class LyricBookletViewModel @Inject constructor(
 
     fun saveAndBindMatchedAlbum(album: com.linernotes.app.data.local.entity.AlbumEntity, tracks: List<TrackEntity>) {
         viewModelScope.launch {
-            repository.saveAlbum(album, tracks)
+            val savedTracks = repository.saveAlbum(album, tracks)
             switchAlbum(album.id)
             _uiState.update {
                 it.copy(
@@ -805,7 +826,8 @@ class LyricBookletViewModel @Inject constructor(
                 )
             }
             batchFetchOfficialLyricsAlbum()
-            annotationRepository.enqueueAlbumPrefetch(album.id, album.artist, tracks)
+            annotationRepository.enqueueAlbumPrefetch(album.id, album.artist, savedTracks)
+            batchTranslationManager.autoFillMissingTranslations(album.id, album.title, savedTracks)
         }
     }
 

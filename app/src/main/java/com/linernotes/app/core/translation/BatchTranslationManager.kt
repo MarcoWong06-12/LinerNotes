@@ -180,6 +180,51 @@ class BatchTranslationManager @Inject constructor(
         }
     }
 
+    /**
+     * 后台静默为专辑中缺失翻译的曲目自动补全翻译（保留已有优质翻译，绝不重写覆盖）
+     */
+    fun autoFillMissingTranslations(albumId: String, albumTitle: String, inputTracks: List<TrackEntity>? = null) {
+        managerScope.launch {
+            try {
+                val candidateTracks = inputTracks?.takeIf { it.isNotEmpty() }
+                    ?: repository.getAlbumBookletStream(albumId).first()?.tracks ?: emptyList()
+                val missingTracks = candidateTracks.filter { 
+                    !it.originalLyrics.isNullOrBlank() && it.translatedLyrics.isNullOrBlank() 
+                }
+
+                if (missingTracks.isEmpty()) {
+                    Log.d("BatchTranslation", "《$albumTitle》所有歌曲均已具备翻译，无需自动补齐")
+                    return@launch
+                }
+
+                Log.d("BatchTranslation", "《$albumTitle》开始后台自动补齐缺失翻译，共 ${missingTracks.size} 首")
+                var filledCount = 0
+                for ((index, track) in missingTracks.withIndex()) {
+                    if (!isActive) break
+                    try {
+                        val result = translationService.translateTrack(
+                            trackTitle = track.title,
+                            originalLyrics = track.originalLyrics!!
+                        )
+                        repository.updateTrackTranslation(
+                            trackId = track.id,
+                            translatedTitle = result.translatedTitle ?: track.translatedTitle,
+                            originalLyrics = track.originalLyrics,
+                            translatedLyrics = result.translatedLyrics
+                        )
+                        filledCount++
+                        Log.d("BatchTranslation", "已自动补齐《${track.title}》翻译 [${index + 1}/${missingTracks.size}]")
+                    } catch (e: Exception) {
+                        Log.e("BatchTranslation", "自动补译《${track.title}》失败: ${e.message}")
+                    }
+                    delay(300)
+                }
+            } catch (e: Exception) {
+                Log.e("BatchTranslation", "autoFillMissingTranslations 异常: ${e.message}")
+            }
+        }
+    }
+
     fun cancelBatchTranslation() {
         if (_state.value.isTranslating) {
             batchJob?.cancel()

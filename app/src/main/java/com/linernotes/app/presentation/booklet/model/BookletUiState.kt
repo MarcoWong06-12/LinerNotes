@@ -6,6 +6,14 @@ import com.linernotes.app.domain.model.BilingualLyricLine
 import com.linernotes.app.domain.model.LyricDisplayMode
 import com.linernotes.app.presentation.booklet.components.FuriganaMode
 
+enum class AnnotationLoadState {
+    IDLE,
+    LOADING,
+    LOADED,
+    EMPTY,
+    FAILED
+}
+
 data class BookletUiState(
     val isLoading: Boolean = true,
     val albumWithTracks: AlbumWithTracks? = null,
@@ -56,5 +64,6 @@ data class BookletUiState(
     val isTraditionalMode: Boolean = false,
     // 行内手风琴典故展开行索引与沉浸式阅读模式
     val expandedAnnotationLineIndex: Int? = null,
-    val isImmersiveMode: Boolean = false
+    val isImmersiveMode: Boolean = false,
+    val annotationLoadState: AnnotationLoadState = AnnotationLoadState.IDLE
 )

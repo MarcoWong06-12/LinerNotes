@@ -32,9 +32,10 @@ class AlbumRepositoryImpl @Inject constructor(
         return albumDao.getAlbumWithTracksFlow(albumId).flowOn(ioDispatcher)
     }
 
-    override suspend fun saveAlbum(album: AlbumEntity, tracks: List<TrackEntity>) {
-        withContext(ioDispatcher) {
+    override suspend fun saveAlbum(album: AlbumEntity, tracks: List<TrackEntity>): List<TrackEntity> {
+        return withContext(ioDispatcher) {
             albumDao.insertAlbumWithTracks(album, tracks)
+            albumDao.getAlbumWithTracksOnce(album.id)?.tracks ?: tracks
         }
     }
 

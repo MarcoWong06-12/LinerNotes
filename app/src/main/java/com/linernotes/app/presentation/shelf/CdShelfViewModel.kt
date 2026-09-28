@@ -7,6 +7,7 @@ import com.linernotes.app.data.local.entity.AlbumEntity
 import com.linernotes.app.data.local.entity.TrackEntity
 import com.linernotes.app.data.repository.AnnotationRepository
 import com.linernotes.app.domain.repository.AlbumRepository
+import com.linernotes.app.core.translation.BatchTranslationManager
 import com.linernotes.app.presentation.shelf.model.ShelfUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +21,8 @@ import javax.inject.Inject
 class CdShelfViewModel @Inject constructor(
     private val repository: AlbumRepository,
     val aiPreferences: AiPreferences,
-    private val annotationRepository: AnnotationRepository
+    private val annotationRepository: AnnotationRepository,
+    private val batchTranslationManager: BatchTranslationManager
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -67,12 +69,13 @@ class CdShelfViewModel @Inject constructor(
 
     fun saveNewAlbum(album: AlbumEntity, tracks: List<TrackEntity>) {
         viewModelScope.launch {
-            repository.saveAlbum(album, tracks)
+            val savedTracks = repository.saveAlbum(album, tracks)
             _isAddSheetOpen.value = false
-            // 导入专辑后立即在常驻后台调度预取全辑 Genius 歌词典故与背景故事（无感且极速）
-            if (tracks.isNotEmpty()) {
-                val savedAlbum = repository.getAlbumBookletStream(album.id).filterNotNull().first()
-                annotationRepository.enqueueAlbumPrefetch(album.id, album.artist, savedAlbum.tracks)
+            if (savedTracks.isNotEmpty()) {
+                // 1. 常驻后台调度：全辑 Genius 歌词典故与背景故事极速预拉取（携带真实数据库 trackId）
+                annotationRepository.enqueueAlbumPrefetch(album.id, album.artist, savedTracks)
+                // 2. 常驻后台静默自动调度：补齐缺少翻译的单曲（保留已有优质翻译）
+                batchTranslationManager.autoFillMissingTranslations(album.id, album.title, savedTracks)
             }
         }
     }

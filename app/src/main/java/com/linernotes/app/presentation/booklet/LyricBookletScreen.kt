@@ -814,7 +814,33 @@ fun LyricBookletScreen(
                         )
                     }
 
-                    // 2. 实体 CD 压盘版本库 (Discogs)
+                    // 2. Genius 歌词典故与考据 (状态透明与一键重检)
+                    item {
+                        val hasAnnotations = state.lineAnnotations.isNotEmpty() || state.songStory != null
+                        val annotCount = state.lineAnnotations.size + (if (state.songStory != null) 1 else 0)
+                        val annotLabel = when {
+                            state.isLoadingAnnotations -> if (state.isTraditionalMode) "典故檢索中..." else "典故检索中..."
+                            hasAnnotations -> if (state.isTraditionalMode) "典故 (${annotCount})" else "典故 (${annotCount})"
+                            else -> if (state.isTraditionalMode) "重檢典故" else "重检典故"
+                        }
+                        CapsuleFeatureChip(
+                            icon = Icons.Default.MenuBook,
+                            label = annotLabel,
+                            isActive = hasAnnotations || state.isLoadingAnnotations,
+                            tint = Color(0xFFFFD54F),
+                            onClick = {
+                                if (hasAnnotations) {
+                                    if (state.songStory != null) {
+                                        viewModel.toggleSongStoryExpanded()
+                                    }
+                                } else {
+                                    viewModel.loadAnnotationsForCurrentTrack(forceRefresh = true)
+                                }
+                            }
+                        )
+                    }
+
+                    // 3. 实体 CD 压盘版本库 (Discogs)
                     item {
                         val editionLabel = state.selectedDiscogsDetail?.let {
                             "CD · ${it.country ?: (if (state.isTraditionalMode) "首版" else "首版")}"
@@ -987,6 +1013,113 @@ fun LyricBookletScreen(
                                         onTranslate = { viewModel.translateSongStory(it) },
                                         modifier = Modifier.padding(bottom = 18.dp)
                                     )
+                                }
+                            } else if (state.isLoadingAnnotations && state.lineAnnotations.isEmpty()) {
+                                // 1. 正在检索 Genius 典故时的动态微光提示栏 (彻底消除“等好久空白黑盒”问题)
+                                item {
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                        border = BorderStroke(1.dp, Color(0xFFFFD54F).copy(alpha = 0.25f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 18.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = Color(0xFFFFD54F).copy(alpha = 0.15f),
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Text(
+                                                            text = "G",
+                                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                                fontWeight = FontWeight.Black,
+                                                                color = Color(0xFFFFD54F)
+                                                            )
+                                                        )
+                                                    }
+                                                }
+                                                Column {
+                                                    Text(
+                                                        text = if (state.isTraditionalMode) "正在檢索 Genius 歌詞典故與背景故事..." else "正在检索 Genius 歌词典故与背景故事...",
+                                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Text(
+                                                        text = if (state.isTraditionalMode) "跨洋同步全球樂迷考據解析中" else "跨洋同步全球乐迷考据解析中",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(14.dp),
+                                                strokeWidth = 1.8.dp,
+                                                color = Color(0xFFFFD54F)
+                                            )
+                                        }
+                                    }
+                                }
+                            } else if (!state.isLoadingAnnotations && state.lineAnnotations.isEmpty() && state.alignedLyrics.isNotEmpty()) {
+                                // 2. 检索完成但确实未收录典故时的轻量状态栏 (支持一键重新检索)
+                                item {
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 14.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.MenuBook,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                                Text(
+                                                    text = if (state.isTraditionalMode) "當前曲目在 Genius 暫無樂迷考據記錄" else "当前曲目在 Genius 暂无乐迷考据记录",
+                                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                                )
+                                            }
+                                            TextButton(
+                                                onClick = { viewModel.loadAnnotationsForCurrentTrack(forceRefresh = true) },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Refresh,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(13.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = if (state.isTraditionalMode) "重新檢索" else "重新检索",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             if (state.alignedLyrics.isEmpty()) {
