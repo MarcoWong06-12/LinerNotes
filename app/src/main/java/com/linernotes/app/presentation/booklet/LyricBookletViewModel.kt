@@ -88,10 +88,6 @@ class LyricBookletViewModel @Inject constructor(
         _uiState.update { it.copy(isBookletSheetOpen = isOpen) }
     }
 
-    fun openAiLinerNotes(isOpen: Boolean) {
-        _uiState.update { it.copy(isAiLinerNotesOpen = isOpen) }
-    }
-
     fun addBookletPages(uris: List<android.net.Uri>) {
         val albumId = currentAlbumId.takeIf { it.isNotBlank() } ?: return
         viewModelScope.launch {

@@ -136,7 +136,6 @@ fun LyricBookletScreen(
             state.isCdTracklistOpen -> viewModel.openCdTracklist(false)
             state.isCdSheetOpen -> viewModel.openCdSheet(false)
             state.isBookletSheetOpen -> viewModel.openBookletSheet(false)
-            state.isAiLinerNotesOpen -> viewModel.openAiLinerNotes(false)
             else -> onNavigateBack()
         }
     }
@@ -543,22 +542,7 @@ fun LyricBookletScreen(
                                 leadingIcon = { Icon(Icons.Default.Book, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
                             )
 
-                            // 2.2 AI 唱片策展人 (AI Liner Notes & Song Meaning)
-                            DropdownMenuItem(
-                                text = {
-                                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
-                                        Text("AI 唱片策展人 · 深度导赏", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                        Text("时代思潮、歌词隐喻与器乐赏析", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                },
-                                onClick = {
-                                    viewModel.setTranslateMenuOpen(false)
-                                    viewModel.openAiLinerNotes(true)
-                                },
-                                leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-
-                            // 2.3 实体 CD 压盘版本库 (Discogs)
+                            // 2.2 实体 CD 压盘版本库 (Discogs)
                             DropdownMenuItem(
                                 text = {
                                     Column(modifier = Modifier.padding(vertical = 2.dp)) {
@@ -830,17 +814,7 @@ fun LyricBookletScreen(
                         )
                     }
 
-                    // 2. AI 唱片策展人 · 深度导赏
-                    item {
-                        CapsuleFeatureChip(
-                            icon = Icons.Default.AutoAwesome,
-                            label = if (state.isTraditionalMode) "AI 導賞" else "AI 导赏",
-                            tint = Color(0xFFFFD54F),
-                            onClick = { viewModel.openAiLinerNotes(true) }
-                        )
-                    }
-
-                    // 3. 实体 CD 压盘版本库 (Discogs)
+                    // 2. 实体 CD 压盘版本库 (Discogs)
                     item {
                         val editionLabel = state.selectedDiscogsDetail?.let {
                             "CD · ${it.country ?: (if (state.isTraditionalMode) "首版" else "首版")}"
@@ -1301,18 +1275,6 @@ fun LyricBookletScreen(
                 viewModel.openDiscogsPicker(true)
             },
             onDismiss = { viewModel.openBookletSheet(false) }
-        )
-    }
-
-    if (state.isAiLinerNotesOpen) {
-        AiLinerNotesSheet(
-            album = state.albumWithTracks?.album,
-            currentTrack = currentTrack,
-            isGenerating = state.isTranslating,
-            onGenerateOrRefresh = {
-                viewModel.retranslateCurrentTrack()
-            },
-            onDismiss = { viewModel.openAiLinerNotes(false) }
         )
     }
 
