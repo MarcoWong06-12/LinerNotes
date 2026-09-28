@@ -54,5 +54,8 @@ data class BookletUiState(
     val isLoadingAnnotations: Boolean = false,
     val isTranslatingAnnotation: Boolean = false,
     val isTranslatingSongStory: Boolean = false,
-    val isTraditionalMode: Boolean = false
+    val isTraditionalMode: Boolean = false,
+    // 行内手风琴典故展开行索引与沉浸式阅读模式
+    val expandedAnnotationLineIndex: Int? = null,
+    val isImmersiveMode: Boolean = false
 )

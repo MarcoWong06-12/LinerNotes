@@ -284,7 +284,8 @@ class LyricBookletViewModel @Inject constructor(
                     activeLineIndex = -1,
                     songStory = null,
                     lineAnnotations = emptyMap(),
-                    isCdTracklistOpen = false
+                    isCdTracklistOpen = false,
+                    expandedAnnotationLineIndex = null
                 )
             }
             viewModelScope.launch {
@@ -610,10 +611,6 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun onLyricLineClicked(lineIndex: Int, line: BilingualLyricLine) {
-        val annotation = _uiState.value.lineAnnotations[lineIndex]
-        if (annotation != null) {
-            openAnnotation(annotation)
-        }
         if (line.startTimeMs != null) {
             seekCompanion(line.startTimeMs)
         }
@@ -622,6 +619,25 @@ class LyricBookletViewModel @Inject constructor(
     fun onLyricLineClicked(line: BilingualLyricLine) {
         val lineIndex = _uiState.value.alignedLyrics.indexOfFirst { it.lineNumber == line.lineNumber }
         onLyricLineClicked(if (lineIndex >= 0) lineIndex else 0, line)
+    }
+
+    fun toggleInlineAnnotation(lineIndex: Int) {
+        _uiState.update { current ->
+            val newIndex = if (current.expandedAnnotationLineIndex == lineIndex) null else lineIndex
+            current.copy(expandedAnnotationLineIndex = newIndex)
+        }
+    }
+
+    fun collapseInlineAnnotation() {
+        _uiState.update { it.copy(expandedAnnotationLineIndex = null) }
+    }
+
+    fun toggleImmersiveMode() {
+        _uiState.update { it.copy(isImmersiveMode = !it.isImmersiveMode) }
+    }
+
+    fun setImmersiveMode(enabled: Boolean) {
+        _uiState.update { it.copy(isImmersiveMode = enabled) }
     }
 
     fun toggleCalibrationBar() {

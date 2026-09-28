@@ -23,9 +23,16 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Spellcheck
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.linernotes.app.core.util.ChineseConverter
+import com.linernotes.app.presentation.booklet.components.InlineLyricAnnotationCard
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -106,9 +113,18 @@ fun LyricBookletScreen(
     val context = LocalContext.current
     var isCoverViewerOpen by remember { mutableStateOf(false) }
 
-    // 适配 Android 系统手势导航 (全面屏边缘侧滑返回上一级)
-    BackHandler(enabled = true) {
+    val haptic = LocalHapticFeedback.current
+
+    val handleBackAction: () -> Unit = {
         when {
+            state.expandedAnnotationLineIndex != null -> {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.collapseInlineAnnotation()
+            }
+            state.isImmersiveMode -> {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.setImmersiveMode(false)
+            }
             state.selectedDiscogsDetail != null -> viewModel.closeDiscogsReleaseDetail()
             state.isDiscogsDetailLoading -> viewModel.closeDiscogsReleaseDetail()
             state.isDiscogsPickerOpen -> viewModel.openDiscogsPicker(false)
@@ -123,6 +139,11 @@ fun LyricBookletScreen(
             state.isAiLinerNotesOpen -> viewModel.openAiLinerNotes(false)
             else -> onNavigateBack()
         }
+    }
+
+    // 适配 Android 系统手势导航 (全面屏边缘侧滑返回上一级)
+    BackHandler(enabled = true) {
+        handleBackAction()
     }
 
     val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
@@ -180,8 +201,13 @@ fun LyricBookletScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            val strings = com.linernotes.app.core.i18n.LocalStrings.current
-            TopAppBar(
+            AnimatedVisibility(
+                visible = !state.isImmersiveMode,
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
+            ) {
+                val strings = com.linernotes.app.core.i18n.LocalStrings.current
+                TopAppBar(
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -268,6 +294,28 @@ fun LyricBookletScreen(
                                 modifier = Modifier.size(18.dp)
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // 沉浸模式全屏切换 (Zen Immersive Mode)
+                    BouncyIconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.toggleImmersiveMode()
+                        },
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            contentColor = MaterialTheme.colorScheme.onBackground
+                        ),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (state.isImmersiveMode) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = "Immersive Mode",
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
 
                     Spacer(modifier = Modifier.width(6.dp))
@@ -586,7 +634,8 @@ fun LyricBookletScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
-        },
+        }
+    },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Box(
@@ -712,8 +761,15 @@ fun LyricBookletScreen(
                     }
                 }
 
-                // 1.1 拟物 CD 旋转光盘视窗 (可折叠展开)
+                // 顶部控制与功能胶囊区 (沉浸模式下自动平滑收起)
                 AnimatedVisibility(
+                    visible = !state.isImmersiveMode,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column {
+                        // 1.1 拟物 CD 旋转光盘视窗 (可折叠展开)
+                        AnimatedVisibility(
                     visible = state.isDiscViewExpanded,
                     enter = expandVertically() + fadeIn(),
                     exit = shrinkVertically() + fadeOut()
@@ -866,13 +922,32 @@ fun LyricBookletScreen(
                             onClick = { viewModel.toggleCalibrationBar() }
                         )
                     }
+                    // 9. 沉浸模式切换 (Immersive Mode)
+                    item {
+                        val immersiveLabel = if (state.isImmersiveMode) {
+                            if (state.isTraditionalMode) "退出沉浸" else "退出沉浸"
+                        } else {
+                            if (state.isTraditionalMode) "沉浸模式" else "沉浸模式"
+                        }
+                        CapsuleFeatureChip(
+                            icon = if (state.isImmersiveMode) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            label = immersiveLabel,
+                            isActive = state.isImmersiveMode,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.toggleImmersiveMode()
+                            }
+                        )
+                    }
                 }
+            }
+        }
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .pointerInput(state.currentTrackIndex, totalTracks) {
+                        .pointerInput(state.currentTrackIndex, totalTracks, state.expandedAnnotationLineIndex, state.isImmersiveMode) {
                             var totalDragX = 0f
                             var startX = 0f
                             detectHorizontalDragGestures(
@@ -884,16 +959,18 @@ fun LyricBookletScreen(
                                     val width = size.width
                                     val edgeThreshold = 48.dp.toPx()
                                     if (startX <= edgeThreshold && totalDragX > 100f) {
-                                        // 从左边缘向右侧滑：返回唱片架
-                                        onNavigateBack()
+                                        // 从左边缘向右侧滑：层级式返回 (优先收起行内卡片/退出沉浸，最后返回唱片架)
+                                        handleBackAction()
                                     } else if (startX >= width - edgeThreshold && totalDragX < -100f) {
-                                        // 从右边缘向左侧滑：返回唱片架
-                                        onNavigateBack()
+                                        // 从右边缘向左侧滑：层级式返回
+                                        handleBackAction()
                                     } else if (totalDragX > 150f) {
                                         // 屏幕中央向右滑：上一曲
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         viewModel.previousTrack()
                                     } else if (totalDragX < -150f) {
                                         // 屏幕中央向左滑：下一曲
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         viewModel.nextTrack()
                                     }
                                     totalDragX = 0f
@@ -908,8 +985,21 @@ fun LyricBookletScreen(
                     } else {
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 180.dp),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.toggleImmersiveMode()
+                                },
+                            contentPadding = PaddingValues(
+                                start = 24.dp,
+                                end = 24.dp,
+                                top = if (state.isImmersiveMode) 32.dp else 16.dp,
+                                bottom = if (state.isImmersiveMode) 100.dp else 180.dp
+                            ),
                             horizontalAlignment = Alignment.Start
                         ) {
                             if (state.songStory != null) {
@@ -938,6 +1028,7 @@ fun LyricBookletScreen(
                                 itemsIndexed(state.alignedLyrics, key = { index, line -> "${line.lineNumber}_$index" }) { index, line ->
                                     val isActive = index == state.activeLineIndex
                                     val lineAnnotation = state.lineAnnotations[index]
+                                    val isExpanded = state.expandedAnnotationLineIndex == index
                                     LyricLineItem(
                                         line = line,
                                         mode = state.displayMode,
@@ -945,8 +1036,23 @@ fun LyricBookletScreen(
                                         isCompanionPlaying = state.isCompanionPlaying,
                                         furiganaMode = state.furiganaMode,
                                         annotation = lineAnnotation,
+                                        isAnnotationExpanded = isExpanded,
+                                        isTranslatingAnnotation = state.isTranslatingAnnotation,
                                         isTraditional = state.isTraditionalMode,
-                                        onClick = { viewModel.onLyricLineClicked(index, line) }
+                                        onToggleAnnotation = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            viewModel.toggleInlineAnnotation(index)
+                                        },
+                                        onTranslateAnnotation = { viewModel.translateAnnotation(it) },
+                                        onOpenFullAnnotation = {
+                                            if (lineAnnotation != null) {
+                                                viewModel.openAnnotation(lineAnnotation)
+                                            }
+                                        },
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            viewModel.onLyricLineClicked(index, line)
+                                        }
                                     )
                                 }
                                 item {
@@ -958,32 +1064,102 @@ fun LyricBookletScreen(
                 }
             }
 
-            // Gemini 风格悬浮胶囊伴侣控制岛 (Floating Pill Island)
-            FloatingCompanionCapsule(
-                trackNumber = currentTrack?.trackNumber ?: (state.currentTrackIndex + 1),
-                totalTracks = totalTracks,
-                trackTitle = currentTrack?.title?.takeIf { it.isNotBlank() } ?: if (state.cdConnectionState == CdConnectionState.CONNECTED && totalTracks > 0) "${strings.cdTrackFallback} ${String.format(java.util.Locale.getDefault(), "%02d", state.currentTrackIndex + 1)}" else "",
-                translatedTitle = currentTrack?.translatedTitle,
-                currentPosMs = state.currentPositionMs,
-                durationMs = state.trackDurationMs,
-                isPlaying = state.isCompanionPlaying,
-                hasPrevious = state.currentTrackIndex > 0,
-                hasNext = state.currentTrackIndex < totalTracks - 1,
-                showCalibration = state.showCalibrationBar,
-                currentOffsetMs = state.lyricOffsetMs,
-                cdConnectionState = state.cdConnectionState,
-                cdDeviceName = state.cdDeviceName,
-                onPrevious = { viewModel.previousTrack() },
-                onNext = { viewModel.nextTrack() },
-                onTogglePlay = { viewModel.toggleCompanionPlay() },
-                onSeek = { viewModel.seekCompanion(it) },
-                onAdjustOffset = { viewModel.adjustCompanionOffset(it) },
-                onResetOffset = { viewModel.resetCompanionOffset() },
-                onToggleCalibration = { viewModel.toggleCalibrationBar() },
-                onOpenCdSheet = { viewModel.openCdSheet(true) },
-                onOpenCdTracklist = { viewModel.openCdTracklist(true) },
+            // 沉浸式模式下极简浮动退出胶囊 (Minimalist Immersive Pill)
+            AnimatedVisibility(
+                visible = state.isImmersiveMode,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter)
-            )
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                    shadowElevation = 10.dp,
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .padding(bottom = 20.dp)
+                        .clip(CircleShape)
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.setImmersiveMode(false)
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.toggleCompanionPlay()
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (state.isCompanionPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Text(
+                            text = if (state.isTraditionalMode) "沉浸模式 · 點擊退出" else "沉浸模式 · 点击退出",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Icon(
+                            imageVector = Icons.Default.FullscreenExit,
+                            contentDescription = "Exit immersive",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            // Gemini 风格悬浮胶囊伴侣控制岛 (Floating Pill Island)
+            AnimatedVisibility(
+                visible = !state.isImmersiveMode,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                FloatingCompanionCapsule(
+                    trackNumber = currentTrack?.trackNumber ?: (state.currentTrackIndex + 1),
+                    totalTracks = totalTracks,
+                    trackTitle = currentTrack?.title?.takeIf { it.isNotBlank() } ?: if (state.cdConnectionState == CdConnectionState.CONNECTED && totalTracks > 0) "${strings.cdTrackFallback} ${String.format(java.util.Locale.getDefault(), "%02d", state.currentTrackIndex + 1)}" else "",
+                    translatedTitle = currentTrack?.translatedTitle,
+                    currentPosMs = state.currentPositionMs,
+                    durationMs = state.trackDurationMs,
+                    isPlaying = state.isCompanionPlaying,
+                    hasPrevious = state.currentTrackIndex > 0,
+                    hasNext = state.currentTrackIndex < totalTracks - 1,
+                    showCalibration = state.showCalibrationBar,
+                    currentOffsetMs = state.lyricOffsetMs,
+                    cdConnectionState = state.cdConnectionState,
+                    cdDeviceName = state.cdDeviceName,
+                    onPrevious = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.previousTrack()
+                    },
+                    onNext = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.nextTrack()
+                    },
+                    onTogglePlay = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.toggleCompanionPlay()
+                    },
+                    onSeek = { viewModel.seekCompanion(it) },
+                    onAdjustOffset = { viewModel.adjustCompanionOffset(it) },
+                    onResetOffset = { viewModel.resetCompanionOffset() },
+                    onToggleCalibration = { viewModel.toggleCalibrationBar() },
+                    onOpenCdSheet = { viewModel.openCdSheet(true) },
+                    onOpenCdTracklist = { viewModel.openCdTracklist(true) }
+                )
+            }
         }
     }
 }
@@ -1691,7 +1867,12 @@ private fun LyricLineItem(
     isCompanionPlaying: Boolean,
     furiganaMode: FuriganaMode = FuriganaMode.OFF,
     annotation: com.linernotes.app.data.local.entity.LyricAnnotationEntity? = null,
+    isAnnotationExpanded: Boolean = false,
+    isTranslatingAnnotation: Boolean = false,
     isTraditional: Boolean = false,
+    onToggleAnnotation: () -> Unit = {},
+    onTranslateAnnotation: (com.linernotes.app.data.local.entity.LyricAnnotationEntity) -> Unit = {},
+    onOpenFullAnnotation: () -> Unit = {},
     onClick: () -> Unit
 ) {
     if (line.isStanzaBreak) {
@@ -1734,31 +1915,50 @@ private fun LyricLineItem(
             },
         horizontalAlignment = Alignment.Start
     ) {
-        if (hasAnnotation) {
-            Row(
-                modifier = Modifier.padding(bottom = 3.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+        if (hasAnnotation && annotation != null) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (isAnnotationExpanded) Color(0xFFFFD54F).copy(alpha = 0.22f) else Color(0xFFFFD54F).copy(alpha = 0.12f),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (isAnnotationExpanded) Color(0xFFFFD54F).copy(alpha = 0.65f) else Color(0xFFFFD54F).copy(alpha = 0.30f)
+                ),
+                modifier = Modifier
+                    .padding(bottom = 6.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onToggleAnnotation() }
             ) {
-                Icon(
-                    imageVector = if (annotation.isVerified) Icons.Default.Verified else Icons.Default.AutoAwesome,
-                    contentDescription = null,
-                    tint = Color(0xFFFFD54F).copy(alpha = 0.9f),
-                    modifier = Modifier.size(11.dp)
-                )
-                Text(
-                    text = if (annotation.isVerified) {
-                        if (isTraditional) "認證典故" else "认证典故"
-                    } else {
-                        if (isTraditional) "典故" else "典故"
-                    },
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = 0.5.sp,
-                        color = Color(0xFFFFD54F).copy(alpha = 0.85f)
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = if (annotation.isVerified) Icons.Default.Verified else Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD54F).copy(alpha = 0.95f),
+                        modifier = Modifier.size(11.dp)
                     )
-                )
+                    Text(
+                        text = if (annotation.isVerified) {
+                            if (isTraditional) "認證典故" else "认证典故"
+                        } else {
+                            if (isTraditional) "典故" else "典故"
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.3.sp,
+                            color = Color(0xFFFFD54F)
+                        )
+                    )
+                    Icon(
+                        imageVector = if (isAnnotationExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD54F).copy(alpha = 0.85f),
+                        modifier = Modifier.size(13.dp)
+                    )
+                }
             }
         }
         val displayTranslation = remember(line.translation, isTraditional) {
@@ -1827,6 +2027,24 @@ private fun LyricLineItem(
                         textAlign = TextAlign.Start
                     )
                 }
+            }
+        }
+
+        if (hasAnnotation && annotation != null) {
+            AnimatedVisibility(
+                visible = isAnnotationExpanded,
+                enter = expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+                exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
+            ) {
+                InlineLyricAnnotationCard(
+                    annotation = annotation,
+                    isTranslating = isTranslatingAnnotation,
+                    isTraditional = isTraditional,
+                    onTranslate = onTranslateAnnotation,
+                    onOpenFullSheet = onOpenFullAnnotation,
+                    onCollapse = onToggleAnnotation,
+                    modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
+                )
             }
         }
     }
