@@ -1,6 +1,7 @@
 package com.linernotes.app.core.lyric
 
 import com.linernotes.app.core.util.ChineseConverter
+import com.linernotes.app.core.util.HtmlUtils
 import com.linernotes.app.data.local.entity.LyricAnnotationEntity
 import com.linernotes.app.domain.model.BilingualLyricLine
 
@@ -8,6 +9,7 @@ object LyricFragmentMatcher {
 
     private val PUNCTUATION_REGEX = Regex("""[,\.\?!\-\'\"“”‘’\(\)\[\]{}，。？！、“”‘’…—~：；:;·]+""")
     private val SECTION_HEADER_REGEX = Regex("""^\[(?:verse|chorus|hook|bridge|intro|outro|pre-chorus|break|interlude).*?\]$""", RegexOption.IGNORE_CASE)
+    private val WHITESPACE_REGEX = Regex("""\s+""")
 
     /**
      * 将典故注释列表精确或模糊锚定至当前歌词行列表。
@@ -51,7 +53,7 @@ object LyricFragmentMatcher {
                     val line2 = normalizedLines[i + 1]
                     if (line1.isBlank() || line2.isBlank()) continue
                     val combined = "$line1 $line2"
-                    if (fullNormFrag.contains(combined)) {
+                    if (fullNormFrag.contains(combined) || combined.contains(fullNormFrag)) {
                         if (result[i] == null || result[i]!!.lyricFragment.length < annotation.lyricFragment.length) {
                             result[i] = annotation
                         }
@@ -89,8 +91,8 @@ object LyricFragmentMatcher {
             }
 
             // 2. 单词词元交集匹配 (Word Token Overlap)
-            val lineWords = normLine.split(Regex("""\s+""")).filter { it.length >= 2 }
-            val fragWords = normFrag.split(Regex("""\s+""")).filter { it.length >= 2 }
+            val lineWords = normLine.split(WHITESPACE_REGEX).filter { it.length >= 2 }
+            val fragWords = normFrag.split(WHITESPACE_REGEX).filter { it.length >= 2 }
 
             if (lineWords.size >= 3 && fragWords.size >= 3) {
                 val matchedWords = lineWords.count { fragWords.contains(it) }
@@ -105,31 +107,7 @@ object LyricFragmentMatcher {
         }
     }
 
-    fun unescapeHtml(text: String): String {
-        if (text.isBlank()) return text
-        var res = text
-            .replace("&amp;#39;", "'")
-            .replace("&#39;", "'")
-            .replace("&#x27;", "'")
-            .replace("&apos;", "'")
-            .replace("&rsquo;", "'")
-            .replace("&lsquo;", "'")
-            .replace("&quot;", "\"")
-            .replace("&ldquo;", "\"")
-            .replace("&rdquo;", "\"")
-            .replace("&amp;", "&")
-            .replace("&nbsp;", " ")
-            .replace("&mdash;", "—")
-            .replace("&ndash;", "–")
-            .replace("&hellip;", "…")
-        if (res.contains("&#")) {
-            res = Regex("""&#(\d+);""").replace(res) { match ->
-                val code = match.groupValues[1].toIntOrNull()
-                if (code != null) code.toChar().toString() else match.value
-            }
-        }
-        return res
-    }
+    fun unescapeHtml(text: String): String = HtmlUtils.unescapeHtml(text)
 
     fun normalizeText(text: String): String {
         val unescaped = unescapeHtml(text)

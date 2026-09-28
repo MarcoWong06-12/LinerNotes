@@ -152,6 +152,7 @@ class LyricBookletViewModel @Inject constructor(
     private var loadBookletJob: kotlinx.coroutines.Job? = null
     private var prefetchedAlbumId: String? = null
     private var loadAnnotationsJob: kotlinx.coroutines.Job? = null
+    private var trackSelectionJob: kotlinx.coroutines.Job? = null
     private var lastLoadedAnnotationTrackId: Long? = null
     @Volatile
     private var currentTrackRawAnnotations: List<LyricAnnotationEntity> = emptyList()
@@ -313,7 +314,8 @@ class LyricBookletViewModel @Inject constructor(
                     annotationLoadState = com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADING
                 )
             }
-            viewModelScope.launch {
+            trackSelectionJob?.cancel()
+            trackSelectionJob = viewModelScope.launch {
                 val cachedStory = annotationRepository.getSongStory(track.id)
                 val cachedAnnotations = annotationRepository.getAnnotations(track.id)
                 if ((cachedStory != null || cachedAnnotations.isNotEmpty()) && _uiState.value.currentTrackIndex == index) {
@@ -581,7 +583,6 @@ class LyricBookletViewModel @Inject constructor(
 
         loadAnnotationsJob?.cancel()
         loadAnnotationsJob = viewModelScope.launch {
-            lastLoadedAnnotationTrackId = track.id
             val hasExisting = _uiState.value.songStory != null || _uiState.value.lineAnnotations.isNotEmpty()
             _uiState.update { 
                 it.copy(
@@ -593,6 +594,7 @@ class LyricBookletViewModel @Inject constructor(
             val result = annotationRepository.fetchAndCacheAnnotations(track, artist, lyricTexts, forceRefresh)
             if (_uiState.value.currentTrackIndex != index) return@launch
             result.onSuccess { (story, annotations) ->
+                lastLoadedAnnotationTrackId = track.id
                 currentTrackRawAnnotations = annotations
                 val currentAligned = _uiState.value.alignedLyrics
                 val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(
@@ -614,6 +616,7 @@ class LyricBookletViewModel @Inject constructor(
                     )
                 }
             }.onFailure {
+                lastLoadedAnnotationTrackId = null
                 val hasContent = (_uiState.value.songStory != null || _uiState.value.lineAnnotations.isNotEmpty())
                 _uiState.update { 
                     it.copy(

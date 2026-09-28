@@ -3,6 +3,7 @@ package com.linernotes.app.data.remote
 import com.linernotes.app.core.i18n.TranslationTargetLanguage
 import com.linernotes.app.core.lyric.LyricAligner
 import com.linernotes.app.core.preference.AiPreferences
+import com.linernotes.app.core.util.HtmlUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -230,22 +231,11 @@ class TranslationService(
             val html = response.body?.string() ?: return null
             val match = YOUDAO_RESULT_REGEX.find(html) ?: return null
             val rawResult = match.groupValues[1].trim()
-            val unescaped = unescapeHtml(rawResult)
+            val unescaped = HtmlUtils.unescapeHtml(rawResult)
             unescaped.lines()
         } catch (e: Exception) {
             null
         }
-    }
-
-    private fun unescapeHtml(text: String): String {
-        return text
-            .replace("&amp;", "&")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&#39;", "'")
-            .replace("&apos;", "'")
-            .replace("&nbsp;", " ")
     }
 
     private fun translateViaGoogle(text: String, targetIso: String, endpoint: String): String? {

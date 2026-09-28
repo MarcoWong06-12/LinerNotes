@@ -120,4 +120,28 @@ class LyricFragmentMatcherTest {
         assertEquals(1, matchMap.size)
         assertEquals(55L, matchMap[0]?.id)
     }
+
+    @Test
+    fun testSlidingWindowMatching() {
+        val lines = listOf(
+            BilingualLyricLine(1, "First line of the verse", ""),
+            BilingualLyricLine(2, "Second line connecting here", ""),
+            BilingualLyricLine(3, "Third line continuing forward", "")
+        )
+
+        val annotations = listOf(
+            LyricAnnotationEntity(
+                id = 88,
+                trackId = 400L,
+                lyricFragment = "First line of the verse\nSecond line connecting here\nThird line continuing forward",
+                explanationText = "Story spanning multiple lines..."
+            )
+        )
+
+        val matchMap = LyricFragmentMatcher.matchAnnotationsToLines(lines, annotations)
+        assertEquals(3, matchMap.size)
+        assertEquals(88L, matchMap[0]?.id)
+        assertEquals(88L, matchMap[1]?.id)
+        assertEquals(88L, matchMap[2]?.id)
+    }
 }

@@ -2,6 +2,7 @@ package com.linernotes.app.data.remote
 
 import com.linernotes.app.core.network.LinerNotesHttpClient
 import com.linernotes.app.core.util.ChineseConverter
+import com.linernotes.app.core.util.HtmlUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -87,31 +88,7 @@ object GeniusService {
             .trim()
     }
 
-    fun unescapeHtml(text: String): String {
-        if (text.isBlank()) return text
-        var res = text
-            .replace("&amp;#39;", "'")
-            .replace("&#39;", "'")
-            .replace("&#x27;", "'")
-            .replace("&apos;", "'")
-            .replace("&rsquo;", "'")
-            .replace("&lsquo;", "'")
-            .replace("&quot;", "\"")
-            .replace("&ldquo;", "\"")
-            .replace("&rdquo;", "\"")
-            .replace("&amp;", "&")
-            .replace("&nbsp;", " ")
-            .replace("&mdash;", "—")
-            .replace("&ndash;", "–")
-            .replace("&hellip;", "…")
-        if (res.contains("&#")) {
-            res = Regex("""&#(\d+);""").replace(res) { match ->
-                val code = match.groupValues[1].toIntOrNull()
-                if (code != null) code.toChar().toString() else match.value
-            }
-        }
-        return res
-    }
+    fun unescapeHtml(text: String): String = HtmlUtils.unescapeHtml(text)
 
     fun sanitizeArtist(artist: String): String {
         return artist
@@ -402,89 +379,101 @@ object GeniusService {
         customToken: String? = null
     ): List<GeniusReferentItem> = withContext(Dispatchers.IO) {
         val baseUrl = if (!customToken.isNullOrBlank()) GENIUS_PROD_API else GENIUS_WEB_API
-        val url = "$baseUrl/referents?song_id=$songId&text_format=plain,html&per_page=50"
+        val resultList = mutableListOf<GeniusReferentItem>()
+        var page = 1
+        val maxPages = 4 // 至多获取 4 页（最多 200 条典故注释），全面覆盖大型叙事曲目
 
-        try {
-            val jsonStr = LinerNotesHttpClient.get(url, buildHeaders(customToken)) ?: return@withContext emptyList()
-            val root = JSONObject(jsonStr)
-            val referentsArr = root.optJSONObject("response")?.optJSONArray("referents") ?: return@withContext emptyList()
+        while (page <= maxPages) {
+            val url = "$baseUrl/referents?song_id=$songId&text_format=plain,html&per_page=50&page=$page"
+            try {
+                val jsonStr = LinerNotesHttpClient.get(url, buildHeaders(customToken)) ?: break
+                val root = JSONObject(jsonStr)
+                val responseObj = root.optJSONObject("response") ?: break
+                val referentsArr = responseObj.optJSONArray("referents") ?: break
+                if (referentsArr.length() == 0) break
 
-            val resultList = mutableListOf<GeniusReferentItem>()
-            for (i in 0 until referentsArr.length()) {
-                val refObj = referentsArr.optJSONObject(i) ?: continue
-                val refId = refObj.optLong("id", 0L)
-                val fragment = unescapeHtml(refObj.optString("fragment").trim())
-                if (fragment.isBlank()) continue
+                for (i in 0 until referentsArr.length()) {
+                    val refObj = referentsArr.optJSONObject(i) ?: continue
+                    val refId = refObj.optLong("id", 0L)
+                    val fragment = unescapeHtml(refObj.optString("fragment").trim())
+                    if (fragment.isBlank()) continue
 
-                val annotationsArr = refObj.optJSONArray("annotations") ?: continue
-                val annotationItems = mutableListOf<GeniusAnnotationItem>()
+                    val annotationsArr = refObj.optJSONArray("annotations") ?: continue
+                    val annotationItems = mutableListOf<GeniusAnnotationItem>()
 
-                for (j in 0 until annotationsArr.length()) {
-                    val annotObj = annotationsArr.optJSONObject(j) ?: continue
-                    val annotId = annotObj.optLong("id", 0L)
-                    val bodyObj = annotObj.optJSONObject("body")
-                    val bodyPlain = unescapeHtml(bodyObj?.optString("plain")?.trim() ?: "")
-                    val bodyHtml = bodyObj?.optString("html")
-                    if (bodyPlain.isBlank() && bodyHtml.isNullOrBlank()) continue
+                    for (j in 0 until annotationsArr.length()) {
+                        val annotObj = annotationsArr.optJSONObject(j) ?: continue
+                        val annotId = annotObj.optLong("id", 0L)
+                        val bodyObj = annotObj.optJSONObject("body")
+                        val bodyPlain = unescapeHtml(bodyObj?.optString("plain")?.trim() ?: "")
+                        val bodyHtml = bodyObj?.optString("html")
+                        if (bodyPlain.isBlank() && bodyHtml.isNullOrBlank()) continue
 
-                    val isVerified = annotObj.optBoolean("verified", false) || annotObj.optJSONObject("verified_by") != null
-                    val votesTotal = annotObj.optInt("votes_total", 0)
-                    val shareUrl = annotObj.optString("share_url").takeIf { it.isNotBlank() } ?: annotObj.optString("url").takeIf { it.isNotBlank() }
+                        val isVerified = annotObj.optBoolean("verified", false) || annotObj.optJSONObject("verified_by") != null
+                        val votesTotal = annotObj.optInt("votes_total", 0)
+                        val shareUrl = annotObj.optString("share_url").takeIf { it.isNotBlank() } ?: annotObj.optString("url").takeIf { it.isNotBlank() }
 
-                    // 作者/贡献者信息
-                    var authorName: String? = null
-                    var authorAvatarUrl: String? = null
-                    val authorsArr = annotObj.optJSONArray("authors")
-                    if (authorsArr != null && authorsArr.length() > 0) {
-                        val authorUser = authorsArr.optJSONObject(0)?.optJSONObject("user")
-                        authorName = authorUser?.optString("name")
-                        authorAvatarUrl = authorUser?.optJSONObject("avatar")?.optJSONObject("thumb")?.optString("url")
-                    }
-                    if (authorName.isNullOrBlank()) {
-                        val createdBy = annotObj.optJSONObject("created_by")
-                        authorName = createdBy?.optString("name")
-                        authorAvatarUrl = createdBy?.optJSONObject("avatar")?.optJSONObject("thumb")?.optString("url")
-                    }
+                        // 作者/贡献者信息
+                        var authorName: String? = null
+                        var authorAvatarUrl: String? = null
+                        val authorsArr = annotObj.optJSONArray("authors")
+                        if (authorsArr != null && authorsArr.length() > 0) {
+                            val authorUser = authorsArr.optJSONObject(0)?.optJSONObject("user")
+                            authorName = authorUser?.optString("name")
+                            authorAvatarUrl = authorUser?.optJSONObject("avatar")?.optJSONObject("thumb")?.optString("url")
+                        }
+                        if (authorName.isNullOrBlank()) {
+                            val createdBy = annotObj.optJSONObject("created_by")
+                            authorName = createdBy?.optString("name")
+                            authorAvatarUrl = createdBy?.optJSONObject("avatar")?.optJSONObject("thumb")?.optString("url")
+                        }
 
-                    // 提取图片 URLs (从 HTML 中抓取历史相片、录音室照片)
-                    val imageUrls = mutableListOf<String>()
-                    if (!bodyHtml.isNullOrBlank()) {
-                        IMG_REGEX.findAll(bodyHtml).forEach { match ->
-                            val src = match.groupValues.getOrNull(1)
-                            if (!src.isNullOrBlank() && (src.startsWith("http://") || src.startsWith("https://")) && !src.contains("avatar", ignoreCase = true)) {
-                                imageUrls.add(src)
+                        // 提取图片 URLs (从 HTML 中抓取历史相片、录音室照片)
+                        val imageUrls = mutableListOf<String>()
+                        if (!bodyHtml.isNullOrBlank()) {
+                            IMG_REGEX.findAll(bodyHtml).forEach { match ->
+                                val src = match.groupValues.getOrNull(1)
+                                if (!src.isNullOrBlank() && (src.startsWith("http://") || src.startsWith("https://")) && !src.contains("avatar", ignoreCase = true)) {
+                                    imageUrls.add(src)
+                                }
                             }
                         }
+
+                        annotationItems.add(
+                            GeniusAnnotationItem(
+                                id = annotId,
+                                bodyPlain = bodyPlain,
+                                bodyHtml = bodyHtml,
+                                verified = isVerified,
+                                authorName = authorName,
+                                authorAvatarUrl = authorAvatarUrl,
+                                votesTotal = votesTotal,
+                                url = shareUrl,
+                                imageUrls = imageUrls.distinct()
+                            )
+                        )
                     }
 
-                    annotationItems.add(
-                        GeniusAnnotationItem(
-                            id = annotId,
-                            bodyPlain = bodyPlain,
-                            bodyHtml = bodyHtml,
-                            verified = isVerified,
-                            authorName = authorName,
-                            authorAvatarUrl = authorAvatarUrl,
-                            votesTotal = votesTotal,
-                            url = shareUrl,
-                            imageUrls = imageUrls.distinct()
+                    if (annotationItems.isNotEmpty()) {
+                        resultList.add(
+                            GeniusReferentItem(
+                                id = refId,
+                                fragment = fragment,
+                                annotations = annotationItems
+                            )
                         )
-                    )
+                    }
                 }
 
-                if (annotationItems.isNotEmpty()) {
-                    resultList.add(
-                        GeniusReferentItem(
-                            id = refId,
-                            fragment = fragment,
-                            annotations = annotationItems
-                        )
-                    )
+                val nextPage = responseObj.opt("next_page")
+                if (nextPage == null || nextPage == JSONObject.NULL || referentsArr.length() < 50) {
+                    break
                 }
+                page++
+            } catch (e: Exception) {
+                break
             }
-            resultList
-        } catch (e: Exception) {
-            emptyList()
         }
+        resultList
     }
 }

@@ -190,12 +190,13 @@ class AnnotationRepository @Inject constructor(
         val cleanTitle = GeniusService.sanitizeTitle(track.title)
         val customToken = aiPreferences.geniusToken.takeIf { it.isNotBlank() }
 
+        var searchHit: com.linernotes.app.data.remote.GeniusSongSearchResult? = null
         var geniusRequestSucceeded = false
         var storyEntity: SongStoryEntity? = null
         val annotationEntities = mutableListOf<LyricAnnotationEntity>()
 
         try {
-            val searchHit = GeniusService.searchSong(
+            searchHit = GeniusService.searchSong(
                 title = cleanTitle,
                 artist = artist,
                 customToken = customToken
@@ -254,20 +255,21 @@ class AnnotationRepository @Inject constructor(
 
         // 3. 本地持久化与缓存更新：
         if (geniusRequestSucceeded) {
-            if (storyEntity != null) {
-                if (AiAnnotationCurator.isAlreadyChinese(storyEntity.descriptionPlain)) {
-                    storyEntity = storyEntity.copy(descriptionTranslation = null)
+            val hasNewData = (storyEntity != null && storyEntity.descriptionPlain.isNotBlank()) || annotationEntities.isNotEmpty()
+
+            if (hasNewData) {
+                if (storyEntity != null) {
+                    if (AiAnnotationCurator.isAlreadyChinese(storyEntity.descriptionPlain)) {
+                        storyEntity = storyEntity.copy(descriptionTranslation = null)
+                    }
+                    lyricAnnotationDao.insertSongStory(storyEntity)
                 }
-                lyricAnnotationDao.insertSongStory(storyEntity)
-            } else if (forceRefresh) {
-                lyricAnnotationDao.deleteSongStoryForTrack(trackId)
-            }
 
-            // 原子替换该曲目的所有注释（删除旧的并插入新的）
-            lyricAnnotationDao.replaceAnnotationsForTrack(trackId, annotationEntities)
+                // 原子替换该曲目的所有注释（删除旧的并插入新的）
+                lyricAnnotationDao.replaceAnnotationsForTrack(trackId, annotationEntities)
+                negativeCache.remove(trackId)
 
-            // 4. 在统一受管的 repositoryScope 中执行后台异步中文对照翻译
-            if (annotationEntities.isNotEmpty() || (storyEntity != null && !storyEntity.descriptionPlain.isBlank())) {
+                // 4. 在统一受管的 repositoryScope 中执行后台异步中文对照翻译
                 translationJobs[trackId]?.cancel()
                 val job = repositoryScope.launch {
                     try {
@@ -311,20 +313,31 @@ class AnnotationRepository @Inject constructor(
                             } catch (e: Exception) { /* ignore */ }
                         }
                     } finally {
-                        translationJobs.remove(trackId)
+                        coroutineContext[kotlinx.coroutines.Job]?.let { thisJob ->
+                            translationJobs.remove(trackId, thisJob)
+                        }
                     }
                 }
                 translationJobs[trackId] = job
-            }
 
-            if (storyEntity == null && annotationEntities.isEmpty()) {
-                // 仅当网络请求顺利完成但曲目确实没有典故时，缓存 15 分钟
-                negativeCache[trackId] = System.currentTimeMillis()
+                return@withContext Result.success(Pair(storyEntity, annotationEntities))
             } else {
-                negativeCache.remove(trackId)
-            }
+                // 网络已请求但未获取到新数据（搜索无结果、远端曲目无典故、或接口返回空）
+                val existingStory = lyricAnnotationDao.getSongStory(trackId)
+                val existingAnnots = lyricAnnotationDao.getAnnotations(trackId).filter { it.source == "GENIUS" }
+                if (existingStory != null || existingAnnots.isNotEmpty()) {
+                    // 保留本地既有缓存，绝不抹除用户已有典故
+                    return@withContext Result.success(Pair(existingStory, existingAnnots))
+                }
 
-            return@withContext Result.success(Pair(storyEntity, annotationEntities))
+                if (searchHit != null) {
+                    // 仅当远端确实命中曲目条目但没有任何典故时，缓存 15 分钟
+                    negativeCache[trackId] = System.currentTimeMillis()
+                } else {
+                    negativeCache.remove(trackId)
+                }
+                return@withContext Result.success(Pair(null, emptyList()))
+            }
         } else {
             // 请求失败（网络断开或 Genius 超时）：绝不删除本地已有缓存！
             val existingStory = lyricAnnotationDao.getSongStory(trackId)
