@@ -42,6 +42,22 @@ object LyricFragmentMatcher {
                     matchSingleSegment(normFragLine, normalizedLines, annotation, result)
                 }
             }
+
+            // 支持跨行滑动窗口比对 (2行连续歌词对齐)
+            val fullNormFrag = normalizeText(frag)
+            if (fullNormFrag.length >= 10 && normalizedLines.size >= 2) {
+                for (i in 0 until normalizedLines.size - 1) {
+                    val line1 = normalizedLines[i]
+                    val line2 = normalizedLines[i + 1]
+                    if (line1.isBlank() || line2.isBlank()) continue
+                    val combined = "$line1 $line2"
+                    if (fullNormFrag.contains(combined) || combined.contains(fullNormFrag)) {
+                        if (result[i] == null || result[i]!!.lyricFragment.length < annotation.lyricFragment.length) {
+                            result[i] = annotation
+                        }
+                    }
+                }
+            }
         }
 
         return result
@@ -79,7 +95,7 @@ object LyricFragmentMatcher {
             if (lineWords.size >= 3 && fragWords.size >= 3) {
                 val matchedWords = lineWords.count { fragWords.contains(it) }
                 val ratio = matchedWords.toFloat() / lineWords.size.toFloat()
-                if (ratio >= 0.70f) {
+                if (ratio >= 0.60f) {
                     val existing = result[i]
                     if (existing == null || existing.lyricFragment.length < annotation.lyricFragment.length) {
                         result[i] = annotation
@@ -89,10 +105,41 @@ object LyricFragmentMatcher {
         }
     }
 
+    fun unescapeHtml(text: String): String {
+        if (text.isBlank()) return text
+        var res = text
+            .replace("&amp;#39;", "'")
+            .replace("&#39;", "'")
+            .replace("&#x27;", "'")
+            .replace("&apos;", "'")
+            .replace("&rsquo;", "'")
+            .replace("&lsquo;", "'")
+            .replace("&quot;", "\"")
+            .replace("&ldquo;", "\"")
+            .replace("&rdquo;", "\"")
+            .replace("&amp;", "&")
+            .replace("&nbsp;", " ")
+            .replace("&mdash;", "—")
+            .replace("&ndash;", "–")
+            .replace("&hellip;", "…")
+        if (res.contains("&#")) {
+            res = Regex("""&#(\d+);""").replace(res) { match ->
+                val code = match.groupValues[1].toIntOrNull()
+                if (code != null) code.toChar().toString() else match.value
+            }
+        }
+        return res
+    }
+
     fun normalizeText(text: String): String {
-        val simplified = ChineseConverter.toSimplified(text)
+        val unescaped = unescapeHtml(text)
+        val simplified = ChineseConverter.toSimplified(unescaped)
         return simplified
             .replace(Regex("""\[.*?\]"""), " ") // 移除 [Verse 1]
+            .replace('’', '\'')
+            .replace('‘', '\'')
+            .replace('“', '"')
+            .replace('”', '"')
             .replace(PUNCTUATION_REGEX, " ")
             .lowercase()
             .replace(Regex("""\s+"""), " ")

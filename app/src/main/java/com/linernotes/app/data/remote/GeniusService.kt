@@ -77,14 +77,40 @@ object GeniusService {
     }
 
     /**
-     * 清理曲目名称中的干扰前缀与后缀（如音轨编号 "01. ", "1 - ", feat., Live, Remastered 等）以便提高 Genius 检索召回率
+     * 清理曲目名称中的干扰前缀与后缀（如音轨编号 "01. ", "01 ", "1 - ", feat., Live, Remastered 等）以便提高 Genius 检索召回率
      */
     fun sanitizeTitle(title: String): String {
         return title
-            .replace(Regex("""^\d+[\.\s\-_、]+\s*"""), "") // 剥离前导音轨编号如 "01. ", "1 - "
+            .replace(Regex("""^(?:track|cd\s*\d+)?\s*(?:\d+[\.\-_、]|0\d\s+)\s*""", RegexOption.IGNORE_CASE), "") // 仅剥离有效音轨编号，避免误伤如 "21 Guns", "7 Rings"
             .replace(Regex("""\s*[\(\[\{](?:feat|ft|radio\s*mix|club\s*mix|extended\s*mix|original\s*mix|mix|remix|edit|radio\s*edit|single\s*version|album\s*version|acoustic|live|remaster(?:ed)?|version|deluxe|bonus|mono|stereo|anniversary|ost|soundtrack|explicit|clean).*?[\)\]\}]""", RegexOption.IGNORE_CASE), "")
             .replace(Regex("""\s*-\s*(?:feat|radio\s*mix|club\s*mix|mix|remix|edit|radio\s*edit|single\s*version|live|remaster(?:ed)?|version|deluxe|bonus|explicit|clean).*$""", RegexOption.IGNORE_CASE), "")
             .trim()
+    }
+
+    fun unescapeHtml(text: String): String {
+        if (text.isBlank()) return text
+        var res = text
+            .replace("&amp;#39;", "'")
+            .replace("&#39;", "'")
+            .replace("&#x27;", "'")
+            .replace("&apos;", "'")
+            .replace("&rsquo;", "'")
+            .replace("&lsquo;", "'")
+            .replace("&quot;", "\"")
+            .replace("&ldquo;", "\"")
+            .replace("&rdquo;", "\"")
+            .replace("&amp;", "&")
+            .replace("&nbsp;", " ")
+            .replace("&mdash;", "—")
+            .replace("&ndash;", "–")
+            .replace("&hellip;", "…")
+        if (res.contains("&#")) {
+            res = Regex("""&#(\d+);""").replace(res) { match ->
+                val code = match.groupValues[1].toIntOrNull()
+                if (code != null) code.toChar().toString() else match.value
+            }
+        }
+        return res
     }
 
     fun sanitizeArtist(artist: String): String {
@@ -153,10 +179,15 @@ object GeniusService {
         val artistCandidates = extractArtistCandidates(artist)
 
         val candidates = mutableListOf<String>()
+        val punctFreeTitle = cleanTitle.replace(Regex("""[.,/#!$%\^&\*;:{}=\-_`~()?]"""), " ").trim().replace(Regex("""\s+"""), " ")
+
         // 1. 优先组合每个艺术家候选与清理后歌名
         for (a in artistCandidates) {
             if (cleanTitle.isNotBlank()) {
                 candidates.add("$cleanTitle $a")
+            }
+            if (punctFreeTitle.isNotBlank() && punctFreeTitle != cleanTitle) {
+                candidates.add("$punctFreeTitle $a")
             }
         }
 
@@ -173,6 +204,9 @@ object GeniusService {
         // 3. 纯歌名候选 (针对知名经典歌曲，单凭歌名即可在 Genius 首屏直接命中)
         if (cleanTitle.isNotBlank() && cleanTitle !in candidates) {
             candidates.add(cleanTitle)
+        }
+        if (punctFreeTitle.isNotBlank() && punctFreeTitle !in candidates) {
+            candidates.add(punctFreeTitle)
         }
 
         // 4. 原始未清洗字符串候选
@@ -197,10 +231,7 @@ object GeniusService {
         val urls = if (hasCustomToken) {
             listOf("$GENIUS_PROD_API/search?q=$encodedQuery")
         } else {
-            listOf(
-                "$GENIUS_WEB_API/search/multi?q=$encodedQuery",
-                "$GENIUS_WEB_API/search/song?q=$encodedQuery"
-            )
+            listOf("$GENIUS_WEB_API/search/multi?q=$encodedQuery")
         }
 
         for (url in urls) {
@@ -321,7 +352,12 @@ object GeniusService {
 
             val title = song.optString("title")
             val primaryArtist = song.optJSONObject("primary_artist")?.optString("name") ?: ""
-            val rawDesc = song.optJSONObject("description")?.optString("plain")?.trim() ?: ""
+            val rawDesc = unescapeHtml(
+                song.optJSONObject("description")?.optString("plain")?.trim()
+                    ?: song.optJSONObject("description_annotation")?.optJSONArray("annotations")?.optJSONObject(0)?.optJSONObject("body")?.optString("plain")?.trim()
+                    ?: song.optString("description").takeIf { it.isNotBlank() && !it.startsWith("{") }?.trim()
+                    ?: ""
+            )
             val validDesc = if (isValidStoryDescription(rawDesc)) rawDesc else ""
             val releaseDate = song.optString("release_date_for_display").takeIf { it.isNotBlank() }
             val headerImage = song.optString("header_image_url").takeIf { it.isNotBlank() }
@@ -377,7 +413,7 @@ object GeniusService {
             for (i in 0 until referentsArr.length()) {
                 val refObj = referentsArr.optJSONObject(i) ?: continue
                 val refId = refObj.optLong("id", 0L)
-                val fragment = refObj.optString("fragment").trim()
+                val fragment = unescapeHtml(refObj.optString("fragment").trim())
                 if (fragment.isBlank()) continue
 
                 val annotationsArr = refObj.optJSONArray("annotations") ?: continue
@@ -387,7 +423,7 @@ object GeniusService {
                     val annotObj = annotationsArr.optJSONObject(j) ?: continue
                     val annotId = annotObj.optLong("id", 0L)
                     val bodyObj = annotObj.optJSONObject("body")
-                    val bodyPlain = bodyObj?.optString("plain")?.trim() ?: ""
+                    val bodyPlain = unescapeHtml(bodyObj?.optString("plain")?.trim() ?: "")
                     val bodyHtml = bodyObj?.optString("html")
                     if (bodyPlain.isBlank() && bodyHtml.isNullOrBlank()) continue
 

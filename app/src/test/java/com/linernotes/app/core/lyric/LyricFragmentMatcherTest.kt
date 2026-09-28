@@ -99,4 +99,25 @@ class LyricFragmentMatcherTest {
         assertTrue(LyricFragmentMatcher.matchAnnotationsToLines(emptyList(), emptyList()).isEmpty())
         assertTrue(LyricFragmentMatcher.matchAnnotationsToLines(listOf(BilingualLyricLine(1, "test", "")), emptyList()).isEmpty())
     }
+
+    @Test
+    fun testHtmlEntitiesMatching() {
+        val lines = listOf(
+            BilingualLyricLine(1, "Tell me who you're loyal to", "告诉我你对谁忠诚"),
+            BilingualLyricLine(2, "Is it love for the streets when the lights get dark?", "当黑夜降临，你对街头依然怀揣热爱吗？")
+        )
+
+        val annotations = listOf(
+            LyricAnnotationEntity(
+                id = 55,
+                trackId = 300L,
+                lyricFragment = "Tell me who you&#39;re loyal to",
+                explanationText = "Kendrick explores the boundaries of loyalty..."
+            )
+        )
+
+        val matchMap = LyricFragmentMatcher.matchAnnotationsToLines(lines, annotations)
+        assertEquals(1, matchMap.size)
+        assertEquals(55L, matchMap[0]?.id)
+    }
 }

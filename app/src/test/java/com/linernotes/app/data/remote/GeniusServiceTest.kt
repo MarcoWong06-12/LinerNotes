@@ -49,4 +49,28 @@ class GeniusServiceTest {
         assertEquals(1, annotation.imageUrls.size)
         assertEquals("Andre 3000", annotation.authorName)
     }
+
+    @Test
+    fun testSanitizeTitle() {
+        // 音轨号剥离
+        assertEquals("LOYALTY.", GeniusService.sanitizeTitle("01. LOYALTY."))
+        assertEquals("DNA.", GeniusService.sanitizeTitle("1 - DNA."))
+        assertEquals("HUMBLE.", GeniusService.sanitizeTitle("02 HUMBLE."))
+        assertEquals("Intro", GeniusService.sanitizeTitle("Track 01 - Intro"))
+
+        // 以数字开头的歌曲名称必须完整保留，不能被误伤
+        assertEquals("21 Guns", GeniusService.sanitizeTitle("21 Guns"))
+        assertEquals("7 Rings", GeniusService.sanitizeTitle("7 Rings"))
+        assertEquals("1999", GeniusService.sanitizeTitle("1999"))
+        assertEquals("505", GeniusService.sanitizeTitle("505"))
+        assertEquals("24K Magic", GeniusService.sanitizeTitle("24K Magic"))
+    }
+
+    @Test
+    fun testUnescapeHtml() {
+        assertEquals("I'm so sorry", GeniusService.unescapeHtml("I&#39;m so sorry"))
+        assertEquals("you're", GeniusService.unescapeHtml("you&rsquo;re"))
+        assertEquals("\"Hello\"", GeniusService.unescapeHtml("&quot;Hello&quot;"))
+        assertEquals("Rock & Roll", GeniusService.unescapeHtml("Rock &amp; Roll"))
+    }
 }
