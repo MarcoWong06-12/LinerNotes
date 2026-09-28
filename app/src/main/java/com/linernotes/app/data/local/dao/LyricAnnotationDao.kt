@@ -27,6 +27,14 @@ interface LyricAnnotationDao {
     @Query("DELETE FROM lyric_annotations WHERE trackId = :trackId")
     suspend fun deleteAnnotationsForTrack(trackId: Long)
 
+    @androidx.room.Transaction
+    suspend fun replaceAnnotationsForTrack(trackId: Long, annotations: List<LyricAnnotationEntity>) {
+        deleteAnnotationsForTrack(trackId)
+        if (annotations.isNotEmpty()) {
+            insertAnnotations(annotations)
+        }
+    }
+
     @Query("SELECT * FROM song_stories WHERE trackId = :trackId LIMIT 1")
     fun getSongStoryFlow(trackId: Long): Flow<SongStoryEntity?>
 

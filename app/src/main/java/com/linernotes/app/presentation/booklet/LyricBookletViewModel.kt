@@ -157,7 +157,10 @@ class LyricBookletViewModel @Inject constructor(
     private var prefetchedAlbumId: String? = null
     private var loadAnnotationsJob: kotlinx.coroutines.Job? = null
     private var lastLoadedAnnotationTrackId: Long? = null
+    @Volatile
     private var currentTrackRawAnnotations: List<LyricAnnotationEntity> = emptyList()
+    private var companionAnchorTime = 0L
+    private var companionAnchorPositionMs = 0L
 
     private fun rematchAnnotations(aligned: List<BilingualLyricLine>): Map<Int, LyricAnnotationEntity> {
         if (aligned.isEmpty() || currentTrackRawAnnotations.isEmpty()) return emptyMap()
@@ -175,6 +178,7 @@ class LyricBookletViewModel @Inject constructor(
         loadBookletJob?.cancel()
         loadBookletJob = viewModelScope.launch {
             repository.getAlbumBookletStream(id).collect { albumWithTracks ->
+                if (id != currentAlbumId) return@collect
                 if (albumWithTracks != null) {
                     val rawTracks = albumWithTracks.tracks.sortedBy { it.trackNumber }
                     val tracks = rawTracks.map { t ->
@@ -215,16 +219,18 @@ class LyricBookletViewModel @Inject constructor(
                     }
                     val trackId = currentTrack?.id
                     if (trackId != null) {
-                        val initialStory = annotationRepository.getSongStory(trackId)
-                        val initialAnnots = annotationRepository.getAnnotations(trackId)
-                        if (initialStory != null || initialAnnots.isNotEmpty()) {
-                            currentTrackRawAnnotations = initialAnnots
-                            val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(alignedWithOffset, initialAnnots)
-                            _uiState.update {
-                                it.copy(
-                                    songStory = initialStory,
-                                    lineAnnotations = lineMap
-                                )
+                        if (_uiState.value.lineAnnotations.isEmpty() && _uiState.value.songStory == null) {
+                            val initialStory = annotationRepository.getSongStory(trackId)
+                            val initialAnnots = annotationRepository.getAnnotations(trackId)
+                            if (initialStory != null || initialAnnots.isNotEmpty()) {
+                                currentTrackRawAnnotations = initialAnnots
+                                val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(alignedWithOffset, initialAnnots)
+                                _uiState.update {
+                                    it.copy(
+                                        songStory = initialStory,
+                                        lineAnnotations = lineMap
+                                    )
+                                }
                             }
                         }
                         if (trackId != lastLoadedAnnotationTrackId) {
@@ -387,13 +393,16 @@ class LyricBookletViewModel @Inject constructor(
     private fun startCompanionInternal() {
         companionJob?.cancel()
         _uiState.update { it.copy(isCompanionPlaying = true) }
+        companionAnchorTime = android.os.SystemClock.elapsedRealtime()
+        companionAnchorPositionMs = _uiState.value.currentPositionMs
         companionJob = viewModelScope.launch {
             while (true) {
                 kotlinx.coroutines.delay(100L)
                 val currentState = _uiState.value
                 if (!currentState.isCompanionPlaying) break
 
-                val currentPos = currentState.currentPositionMs + 100L
+                val elapsed = android.os.SystemClock.elapsedRealtime() - companionAnchorTime
+                val currentPos = companionAnchorPositionMs + elapsed
                 val duration = currentState.trackDurationMs.coerceAtLeast(10_000L)
 
                 if (currentPos >= duration) {
@@ -445,6 +454,8 @@ class LyricBookletViewModel @Inject constructor(
         }
         val duration = _uiState.value.trackDurationMs.coerceAtLeast(1000L)
         val clamped = targetMs.coerceIn(0L, duration)
+        companionAnchorTime = android.os.SystemClock.elapsedRealtime()
+        companionAnchorPositionMs = clamped
         val activeIdx = findActiveLineIndex(_uiState.value.alignedLyrics, clamped)
         _uiState.update {
             it.copy(

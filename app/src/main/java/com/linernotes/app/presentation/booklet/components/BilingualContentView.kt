@@ -99,7 +99,7 @@ fun BilingualContentView(
     val hasTranslation = !effectiveTranslation.isNullOrBlank()
 
     // 默认展示中英对照模式（若原文已是中文则直接展示）
-    var selectedTab by remember(hasTranslation) {
+    var selectedTab by remember(originalText, hasTranslation) {
         mutableStateOf(if (hasTranslation) BilingualDisplayTab.PARALLEL else BilingualDisplayTab.ORIGINAL)
     }
 
