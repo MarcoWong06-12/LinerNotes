@@ -214,9 +214,7 @@ class LyricBookletViewModel @Inject constructor(
                     val otherTracks = albumWithTracks.tracks.filter { it.id != currentTrack?.id }
                     if (prefetchedAlbumId != id && otherTracks.isNotEmpty()) {
                         prefetchedAlbumId = id
-                        viewModelScope.launch(Dispatchers.IO) {
-                            annotationRepository.prefetchAlbumAnnotations(albumWithTracks.album.artist, otherTracks)
-                        }
+                        annotationRepository.enqueueAlbumPrefetch(id, albumWithTracks.album.artist, otherTracks)
                     }
                 } else {
                     _uiState.update { it.copy(isLoading = false) }
@@ -745,6 +743,7 @@ class LyricBookletViewModel @Inject constructor(
                 )
             }
             batchFetchOfficialLyricsAlbum()
+            annotationRepository.enqueueAlbumPrefetch(album.id, album.artist, tracks)
         }
     }
 

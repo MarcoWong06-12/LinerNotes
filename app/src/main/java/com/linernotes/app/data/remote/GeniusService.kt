@@ -1,6 +1,7 @@
 package com.linernotes.app.data.remote
 
 import com.linernotes.app.core.network.LinerNotesHttpClient
+import com.linernotes.app.core.util.ChineseConverter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -52,16 +53,22 @@ object GeniusService {
     private const val GENIUS_WEB_API = "https://genius.com/api"
     private const val GENIUS_PROD_API = "https://api.genius.com"
     private const val USER_AGENT =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
     private val IMG_REGEX = Regex("""<img[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
 
     private fun buildHeaders(customToken: String?): Map<String, String> {
         val headers = mutableMapOf(
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent" to USER_AGENT,
             "Accept" to "application/json, text/plain, */*",
             "Accept-Language" to "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
-            "Referer" to "https://genius.com/"
+            "Referer" to "https://genius.com/",
+            "Sec-Ch-Ua" to "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\"",
+            "Sec-Ch-Ua-Mobile" to "?0",
+            "Sec-Ch-Ua-Platform" to "\"Windows\"",
+            "Sec-Fetch-Dest" to "empty",
+            "Sec-Fetch-Mode" to "cors",
+            "Sec-Fetch-Site" to "same-origin"
         )
         if (!customToken.isNullOrBlank()) {
             headers["Authorization"] = "Bearer ${customToken.trim()}"
@@ -101,6 +108,15 @@ object GeniusService {
         val candidates = mutableListOf<String>()
         if (cleanTitle.isNotBlank() && cleanArtist.isNotBlank()) {
             candidates.add("$cleanTitle $cleanArtist")
+        }
+        // 繁简体互转候选，提升华语流行乐在 Genius 上的命中率
+        val tradTitle = ChineseConverter.toTraditional(cleanTitle)
+        val tradArtist = ChineseConverter.toTraditional(cleanArtist)
+        if (tradTitle != cleanTitle || tradArtist != cleanArtist) {
+            val tradCandidate = "$tradTitle $tradArtist".trim()
+            if (tradCandidate.isNotBlank() && tradCandidate !in candidates) {
+                candidates.add(tradCandidate)
+            }
         }
         if (cleanTitle.isNotBlank()) {
             candidates.add(cleanTitle)
@@ -215,6 +231,23 @@ object GeniusService {
         )
     }
 
+    fun isValidStoryDescription(desc: String?): Boolean {
+        if (desc.isNullOrBlank()) return false
+        val clean = desc.trim()
+        if (clean.length < 10) return false
+        val lower = clean.lowercase()
+        if (lower == "?" || lower == "[?]" || lower == "tba" || lower == "tbd" || lower == "n/a" || lower == "none" || lower == "nil") {
+            return false
+        }
+        if (lower.contains("lyrics for this song have not yet been released") ||
+            lower.contains("this song is an instrumental") ||
+            lower.contains("this song is instrumental")
+        ) {
+            return false
+        }
+        return true
+    }
+
     /**
      * 获取歌曲背景故事总览 (About this song / Description)
      */
@@ -232,11 +265,16 @@ object GeniusService {
 
             val title = song.optString("title")
             val primaryArtist = song.optJSONObject("primary_artist")?.optString("name") ?: ""
-            val descPlain = song.optJSONObject("description")?.optString("plain")?.trim() ?: ""
+            val rawDesc = song.optJSONObject("description")?.optString("plain")?.trim() ?: ""
+            val validDesc = if (isValidStoryDescription(rawDesc)) rawDesc else ""
             val releaseDate = song.optString("release_date_for_display").takeIf { it.isNotBlank() }
             val headerImage = song.optString("header_image_url").takeIf { it.isNotBlank() }
             val songArtImage = song.optString("song_art_image_url").takeIf { it.isNotBlank() }
             val songUrl = song.optString("url").takeIf { it.isNotBlank() }
+
+            if (validDesc.isBlank() && headerImage.isNullOrBlank() && songArtImage.isNullOrBlank()) {
+                return@withContext null
+            }
 
             // 提取制作人 credits
             val producersArr = song.optJSONArray("producer_artists")
@@ -252,7 +290,7 @@ object GeniusService {
                 id = songId,
                 title = title,
                 artist = primaryArtist,
-                descriptionPlain = descPlain,
+                descriptionPlain = validDesc,
                 releaseDate = releaseDate,
                 headerImageUrl = headerImage,
                 songArtImageUrl = songArtImage,

@@ -1,5 +1,6 @@
 package com.linernotes.app.core.lyric
 
+import com.linernotes.app.core.util.ChineseConverter
 import com.linernotes.app.data.local.entity.LyricAnnotationEntity
 import com.linernotes.app.domain.model.BilingualLyricLine
 
@@ -89,7 +90,8 @@ object LyricFragmentMatcher {
     }
 
     fun normalizeText(text: String): String {
-        return text
+        val simplified = ChineseConverter.toSimplified(text)
+        return simplified
             .replace(Regex("""\[.*?\]"""), " ") // 移除 [Verse 1]
             .replace(PUNCTUATION_REGEX, " ")
             .lowercase()
