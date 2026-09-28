@@ -177,19 +177,6 @@ fun LyricBookletScreen(
         listState.scrollToItem(0)
     }
 
-    val basePaperColor = Color(0xFF121215)
-    val backgroundGradient = remember(state.ambientCoverColor) {
-        Brush.verticalGradient(
-            colors = listOf(
-                state.ambientCoverColor.copy(alpha = 0.45f),
-                basePaperColor.copy(alpha = 0.88f),
-                basePaperColor
-            ),
-            startY = 0f,
-            endY = 1200f
-        )
-    }
-
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -220,14 +207,14 @@ fun LyricBookletScreen(
                             Text(
                                 text = currentTrack?.title ?: (state.albumWithTracks?.album?.title ?: ""),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onBackground,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = state.albumWithTracks?.album?.artist ?: "",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.68f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -239,8 +226,8 @@ fun LyricBookletScreen(
                         onClick = onNavigateBack,
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = Color.White.copy(alpha = 0.12f),
-                            contentColor = Color.White
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            contentColor = MaterialTheme.colorScheme.onBackground
                         ),
                         modifier = Modifier.padding(start = 8.dp).size(38.dp)
                     ) {
@@ -259,10 +246,10 @@ fun LyricBookletScreen(
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = if (state.cdConnectionState == CdConnectionState.CONNECTED)
                                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
-                            else Color.White.copy(alpha = 0.12f),
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                             contentColor = if (state.cdConnectionState == CdConnectionState.CONNECTED)
                                 MaterialTheme.colorScheme.primary
-                            else Color.White.copy(alpha = 0.85f)
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         modifier = Modifier.size(38.dp)
                     ) {
@@ -291,8 +278,8 @@ fun LyricBookletScreen(
                             onClick = { viewModel.setTranslateMenuOpen(!state.isTranslateMenuOpen) },
                             shape = CircleShape,
                             colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = Color.White.copy(alpha = 0.15f),
-                                contentColor = Color.White
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                contentColor = MaterialTheme.colorScheme.onBackground
                             ),
                             modifier = Modifier.padding(end = 8.dp).size(38.dp)
                         ) {
@@ -943,7 +930,7 @@ fun LyricBookletScreen(
                                     Text(
                                         text = strings.noLyrics,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.White.copy(alpha = 0.5f),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                         modifier = Modifier.padding(top = 64.dp)
                                     )
                                 }
@@ -1072,8 +1059,8 @@ fun LyricBookletScreen(
         Dialog(onDismissRequest = { isCoverViewerOpen = false }) {
             Surface(
                 shape = RoundedCornerShape(24.dp),
-                color = Color(0xFF1B1B20),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                 modifier = Modifier
                     .fillMaxWidth(0.92f)
                     .shadow(elevation = 24.dp, shape = RoundedCornerShape(24.dp))
@@ -1094,7 +1081,7 @@ fun LyricBookletScreen(
                     Text(
                         text = state.albumWithTracks?.album?.title ?: "",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -1103,7 +1090,7 @@ fun LyricBookletScreen(
                     Text(
                         text = state.albumWithTracks?.album?.artist ?: "",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.70f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1172,8 +1159,8 @@ fun LyricBookletScreen(
         Dialog(onDismissRequest = { viewModel.closeDiscogsReleaseDetail() }) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = Color(0xFF1B1B20),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                 modifier = Modifier.padding(16.dp)
             ) {
                 Row(
@@ -1189,7 +1176,7 @@ fun LyricBookletScreen(
                     Text(
                         text = "正在拉取 Discogs 压盘详细档案...",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -1283,7 +1270,7 @@ private fun FloatingCompanionCapsule(
             border = BorderStroke(
                 1.dp,
                 if (cdConnectionState == CdConnectionState.CONNECTED) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                else Color.White.copy(alpha = 0.10f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
             ),
             shadowElevation = 6.dp,
             modifier = Modifier
@@ -1345,7 +1332,7 @@ private fun FloatingCompanionCapsule(
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
                 tonalElevation = 6.dp,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                 modifier = Modifier
                     .padding(bottom = 10.dp)
                     .shadow(10.dp, RoundedCornerShape(20.dp))
@@ -1423,8 +1410,8 @@ private fun FloatingCompanionCapsule(
                 1.dp,
                 androidx.compose.ui.graphics.Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.22f),
-                        Color.White.copy(alpha = 0.05f)
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f)
                     )
                 )
             ),
@@ -1789,7 +1776,7 @@ private fun LyricLineItem(
                             lineHeight = 36.sp,
                             letterSpacing = (-0.3).sp
                         ),
-                        color = if (isActive) Color.White else Color.White.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
+                        color = if (isActive) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
                         furiganaMode = furiganaMode,
                         isActive = isActive
                     )
@@ -1804,7 +1791,7 @@ private fun LyricLineItem(
                             lineHeight = 24.sp,
                             letterSpacing = 0.2.sp
                         ),
-                        color = if (isActive) Color(0xFFEDE8E3).copy(alpha = 0.88f) else Color.White.copy(alpha = if (isCompanionPlaying) 0.28f else 0.45f),
+                        color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isCompanionPlaying) 0.45f else 0.70f),
                         textAlign = TextAlign.Start
                     )
                 }
@@ -1820,7 +1807,7 @@ private fun LyricLineItem(
                             lineHeight = 38.sp,
                             letterSpacing = (-0.3).sp
                         ),
-                        color = if (isActive) Color.White else Color.White.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
+                        color = if (isActive) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
                         furiganaMode = furiganaMode,
                         isActive = isActive
                     )
@@ -1836,7 +1823,7 @@ private fun LyricLineItem(
                             fontWeight = FontWeight.Bold,
                             lineHeight = 32.sp
                         ),
-                        color = if (isActive) Color.White else Color.White.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
+                        color = if (isActive) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
                         textAlign = TextAlign.Start
                     )
                 }
@@ -1883,11 +1870,11 @@ private fun CapsuleFeatureChip(
     tint: Color? = null,
     onClick: () -> Unit
 ) {
-    val activeBg = Color.White.copy(alpha = 0.18f)
-    val inactiveBg = Color.White.copy(alpha = 0.07f)
-    val activeBorder = Color.White.copy(alpha = 0.32f)
-    val inactiveBorder = Color.White.copy(alpha = 0.12f)
-    val contentColor = tint ?: if (isActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.88f)
+    val activeBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+    val inactiveBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val activeBorder = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+    val inactiveBorder = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+    val contentColor = tint ?: if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
 
     Surface(
         shape = CircleShape,
@@ -1918,7 +1905,7 @@ private fun CapsuleFeatureChip(
                     fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
                     letterSpacing = 0.2.sp
                 ),
-                color = if (isActive) Color.White else Color.White.copy(alpha = 0.80f),
+                color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1
             )
         }

@@ -155,6 +155,8 @@ class LyricBookletViewModel @Inject constructor(
 
     private var loadBookletJob: kotlinx.coroutines.Job? = null
     private var prefetchedAlbumId: String? = null
+    private var loadAnnotationsJob: kotlinx.coroutines.Job? = null
+    private var lastLoadedAnnotationTrackId: Long? = null
 
     fun setAlbumId(id: String) {
         if (currentAlbumId != id) {
@@ -205,7 +207,10 @@ class LyricBookletViewModel @Inject constructor(
                             trackDurationMs = duration
                         )
                     }
-                    loadAnnotationsForCurrentTrack()
+                    val trackId = currentTrack?.id
+                    if (trackId != null && trackId != lastLoadedAnnotationTrackId) {
+                        loadAnnotationsForCurrentTrack()
+                    }
                     val otherTracks = albumWithTracks.tracks.filter { it.id != currentTrack?.id }
                     if (prefetchedAlbumId != id && otherTracks.isNotEmpty()) {
                         prefetchedAlbumId = id
@@ -513,6 +518,10 @@ class LyricBookletViewModel @Inject constructor(
         val track = tracks.getOrNull(index) ?: return
         val artist = _uiState.value.albumWithTracks?.album?.artist ?: ""
 
+        if (!forceRefresh && track.id == lastLoadedAnnotationTrackId && _uiState.value.lineAnnotations.isNotEmpty()) {
+            return
+        }
+
         val lyricTexts = _uiState.value.alignedLyrics.map { it.original }.ifEmpty {
             track.originalLyrics?.lines()
                 ?.map { it.replace(Regex("""^\[\d+:\d+(?:\.\d+)?\]"""), "").trim() }
@@ -525,7 +534,9 @@ class LyricBookletViewModel @Inject constructor(
             ChineseConverter.isTraditional(track.translatedLyrics) ||
             ChineseConverter.isTraditional(track.translatedTitle)
 
-        viewModelScope.launch {
+        loadAnnotationsJob?.cancel()
+        loadAnnotationsJob = viewModelScope.launch {
+            lastLoadedAnnotationTrackId = track.id
             _uiState.update { it.copy(isLoadingAnnotations = true, isTraditionalMode = isTrad) }
             val result = annotationRepository.fetchAndCacheAnnotations(track, artist, lyricTexts, forceRefresh)
             if (_uiState.value.currentTrackIndex != index) return@launch
