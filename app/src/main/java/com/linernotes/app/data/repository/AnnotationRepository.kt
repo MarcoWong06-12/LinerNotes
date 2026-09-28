@@ -35,6 +35,10 @@ class AnnotationRepository @Inject constructor(
     private val translationService: TranslationService
 ) {
 
+    companion object {
+        private const val NEGATIVE_CACHE_DURATION_MS = 15 * 60 * 1000L // 15 分钟短效负向缓存，防止无典故歌曲频繁重复查询，同时避免网络波动造成长久死锁
+    }
+
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val activePrefetchAlbums = ConcurrentHashMap.newKeySet<String>()
     private val negativeCache = ConcurrentHashMap<Long, Long>()
@@ -117,19 +121,13 @@ class AnnotationRepository @Inject constructor(
                         val cachedAnnotations = lyricAnnotationDao.getAnnotations(track.id)
                         val isGeniusData = cachedStory?.source == "GENIUS" || cachedAnnotations.any { it.source == "GENIUS" }
                         val checkedTime = negativeCache[track.id]
-                        val isNegCached = checkedTime != null && (System.currentTimeMillis() - checkedTime < 7 * 24 * 3600 * 1000L)
+                        val isNegCached = checkedTime != null && (System.currentTimeMillis() - checkedTime < NEGATIVE_CACHE_DURATION_MS)
 
                         if (isGeniusData || isNegCached) {
                             return@withPermit
                         }
 
-                        val res = fetchAndCacheAnnotations(track = track, artist = artist)
-                        if (res.isSuccess) {
-                            val (story, annots) = res.getOrThrow()
-                            if (story == null && annots.isEmpty()) {
-                                negativeCache[track.id] = System.currentTimeMillis()
-                            }
-                        }
+                        fetchAndCacheAnnotations(track = track, artist = artist)
                     } catch (e: Exception) {
                         // 静默处理，避免干扰前台正常交互
                     }
@@ -154,9 +152,11 @@ class AnnotationRepository @Inject constructor(
             TranslationTargetLanguage.fromCode(aiPreferences.targetLanguage) == TranslationTargetLanguage.ZH_TW
 
         // 1. 本地 Room 缓存与负向缓存检查：
-        if (!forceRefresh) {
+        if (forceRefresh) {
+            negativeCache.remove(trackId)
+        } else {
             val checkedTime = negativeCache[trackId]
-            if (checkedTime != null && System.currentTimeMillis() - checkedTime < 7 * 24 * 3600 * 1000L) {
+            if (checkedTime != null && System.currentTimeMillis() - checkedTime < NEGATIVE_CACHE_DURATION_MS) {
                 return@withContext Result.success(Pair(null, emptyList()))
             }
 
@@ -189,6 +189,7 @@ class AnnotationRepository @Inject constructor(
         val cleanTitle = GeniusService.sanitizeTitle(track.title)
         val customToken = aiPreferences.geniusToken.takeIf { it.isNotBlank() }
 
+        var geniusRequestSucceeded = false
         var storyEntity: SongStoryEntity? = null
         val annotationEntities = mutableListOf<LyricAnnotationEntity>()
 
@@ -198,6 +199,7 @@ class AnnotationRepository @Inject constructor(
                 artist = artist,
                 customToken = customToken
             )
+            geniusRequestSucceeded = true
 
             if (searchHit != null) {
                 val songId = searchHit.id
@@ -246,7 +248,7 @@ class AnnotationRepository @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            // 网络受限或 Genius 超时
+            // 网络受限或 Genius 超时，不标记请求成功
         }
 
         // 3. 立即本地持久化原生 Genius 数据（不等翻译！让界面毫秒级秒开展示！）
@@ -308,9 +310,16 @@ class AnnotationRepository @Inject constructor(
         }
 
         if (storyEntity == null && annotationEntities.isEmpty()) {
-            negativeCache[trackId] = System.currentTimeMillis()
+            if (geniusRequestSucceeded) {
+                // 仅当网络请求顺利完成但曲目确实没有典故时，缓存 15 分钟
+                negativeCache[trackId] = System.currentTimeMillis()
+            }
         } else {
             negativeCache.remove(trackId)
+        }
+
+        if (!geniusRequestSucceeded && storyEntity == null && annotationEntities.isEmpty()) {
+            return@withContext Result.failure(Exception("Genius request failed due to network exception or timeout"))
         }
 
         return@withContext Result.success(Pair(storyEntity, annotationEntities))

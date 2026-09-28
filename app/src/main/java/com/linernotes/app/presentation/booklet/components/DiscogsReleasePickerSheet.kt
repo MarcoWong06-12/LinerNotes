@@ -166,9 +166,9 @@ fun DiscogsReleasePickerSheet(
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = Color.White.copy(alpha = 0.12f),
-                    focusedContainerColor = VaultSurface,
-                    unfocusedContainerColor = VaultSurface
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                 )
             )
 
@@ -216,7 +216,7 @@ fun DiscogsReleasePickerSheet(
                         Text(
                             text = "正在从 Discogs 检索全球实体 CD 版本...",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -234,20 +234,20 @@ fun DiscogsReleasePickerSheet(
                         Icon(
                             Icons.Default.Album,
                             contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.3f),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier.size(56.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = if (results.isEmpty()) "未找到相关实体 CD 版本" else "在当前筛选条件下无版本",
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = "尝试修改搜索词或清空筛选条件重新检索",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.5f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         BouncyTonalButton(onClick = { onSearch(searchQuery) }) {
@@ -288,8 +288,8 @@ private fun DiscogsReleaseCard(
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = VaultSurface,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = Modifier
             .fillMaxWidth()
             .bouncyClickable { onViewDetail() }
@@ -320,20 +320,20 @@ private fun DiscogsReleaseCard(
                     modifier = Modifier
                         .size(68.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color.White.copy(alpha = 0.05f))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 )
             } else {
                 Box(
                     modifier = Modifier
                         .size(68.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color.White.copy(alpha = 0.08f)),
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Default.Album,
                         contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.4f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                         modifier = Modifier.size(28.dp)
                     )
                 }
@@ -353,7 +353,7 @@ private fun DiscogsReleaseCard(
                         color = when (release.primaryFormat) {
                             "SHM-CD", "SACD", "XRCD", "BSCD2" -> MaterialTheme.colorScheme.primaryContainer
                             "Digipak CD", "Mini-LP 纸套 CD" -> MaterialTheme.colorScheme.secondaryContainer
-                            else -> Color.White.copy(alpha = 0.12f)
+                            else -> MaterialTheme.colorScheme.surfaceContainerHighest
                         }
                     ) {
                         Text(
@@ -362,7 +362,7 @@ private fun DiscogsReleaseCard(
                             color = when (release.primaryFormat) {
                                 "SHM-CD", "SACD", "XRCD", "BSCD2" -> MaterialTheme.colorScheme.primary
                                 "Digipak CD", "Mini-LP 纸套 CD" -> MaterialTheme.colorScheme.secondary
-                                else -> Color.White.copy(alpha = 0.85f)
+                                else -> MaterialTheme.colorScheme.onSurface
                             },
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
@@ -383,7 +383,7 @@ private fun DiscogsReleaseCard(
                         Text(
                             text = countryFlag,
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -391,7 +391,7 @@ private fun DiscogsReleaseCard(
                         Text(
                             text = "· ${release.year}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                         )
                     }
                 }
@@ -402,7 +402,7 @@ private fun DiscogsReleaseCard(
                 Text(
                     text = release.title,
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -411,7 +411,7 @@ private fun DiscogsReleaseCard(
                     Text(
                         text = release.artist,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -439,7 +439,7 @@ private fun DiscogsReleaseCard(
                         Text(
                             text = release.label,
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.5f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )

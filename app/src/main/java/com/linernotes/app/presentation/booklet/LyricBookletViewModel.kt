@@ -157,6 +157,12 @@ class LyricBookletViewModel @Inject constructor(
     private var prefetchedAlbumId: String? = null
     private var loadAnnotationsJob: kotlinx.coroutines.Job? = null
     private var lastLoadedAnnotationTrackId: Long? = null
+    private var currentTrackRawAnnotations: List<LyricAnnotationEntity> = emptyList()
+
+    private fun rematchAnnotations(aligned: List<BilingualLyricLine>): Map<Int, LyricAnnotationEntity> {
+        if (aligned.isEmpty() || currentTrackRawAnnotations.isEmpty()) return emptyMap()
+        return LyricFragmentMatcher.matchAnnotationsToLines(aligned, currentTrackRawAnnotations)
+    }
 
     fun setAlbumId(id: String) {
         if (currentAlbumId != id) {
@@ -208,8 +214,22 @@ class LyricBookletViewModel @Inject constructor(
                         )
                     }
                     val trackId = currentTrack?.id
-                    if (trackId != null && trackId != lastLoadedAnnotationTrackId) {
-                        loadAnnotationsForCurrentTrack()
+                    if (trackId != null) {
+                        val initialStory = annotationRepository.getSongStory(trackId)
+                        val initialAnnots = annotationRepository.getAnnotations(trackId)
+                        if (initialStory != null || initialAnnots.isNotEmpty()) {
+                            currentTrackRawAnnotations = initialAnnots
+                            val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(alignedWithOffset, initialAnnots)
+                            _uiState.update {
+                                it.copy(
+                                    songStory = initialStory,
+                                    lineAnnotations = lineMap
+                                )
+                            }
+                        }
+                        if (trackId != lastLoadedAnnotationTrackId) {
+                            loadAnnotationsForCurrentTrack()
+                        }
                     }
                     val otherTracks = albumWithTracks.tracks.filter { it.id != currentTrack?.id }
                     if (prefetchedAlbumId != id && otherTracks.isNotEmpty()) {
@@ -274,6 +294,8 @@ class LyricBookletViewModel @Inject constructor(
             val cleanLyrics = if (LyricSanitizer.hasCensorship(track.originalLyrics)) LyricSanitizer.decensorLyrics(track.originalLyrics ?: "") else track.originalLyrics
             val aligned = LyricAligner.align(cleanLyrics, track.translatedLyrics)
             val duration = computeTrackDuration(track, aligned)
+            currentTrackRawAnnotations = emptyList()
+            lastLoadedAnnotationTrackId = null
             _uiState.update {
                 it.copy(
                     currentTrackIndex = index,
@@ -289,6 +311,19 @@ class LyricBookletViewModel @Inject constructor(
                 )
             }
             viewModelScope.launch {
+                val cachedStory = annotationRepository.getSongStory(track.id)
+                val cachedAnnotations = annotationRepository.getAnnotations(track.id)
+                if ((cachedStory != null || cachedAnnotations.isNotEmpty()) && _uiState.value.currentTrackIndex == index) {
+                    currentTrackRawAnnotations = cachedAnnotations
+                    val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(_uiState.value.alignedLyrics, cachedAnnotations)
+                    _uiState.update {
+                        it.copy(
+                            songStory = cachedStory,
+                            lineAnnotations = lineMap
+                        )
+                    }
+                }
+
                 val offset = lyricOffsetDao.getOffset(track.id)?.offsetMs ?: 0L
                 if (offset != 0L && _uiState.value.currentTrackIndex == index) {
                     val withOffset = aligned.map { line ->
@@ -297,11 +332,13 @@ class LyricBookletViewModel @Inject constructor(
                         } else line
                     }
                     val durationWithOffset = computeTrackDuration(track, withOffset)
+                    val rematched = rematchAnnotations(withOffset)
                     _uiState.update {
                         it.copy(
                             alignedLyrics = withOffset,
                             lyricOffsetMs = offset,
-                            trackDurationMs = durationWithOffset
+                            trackDurationMs = durationWithOffset,
+                            lineAnnotations = if (rematched.isNotEmpty()) rematched else it.lineAnnotations
                         )
                     }
                 }
@@ -540,14 +577,16 @@ class LyricBookletViewModel @Inject constructor(
             val result = annotationRepository.fetchAndCacheAnnotations(track, artist, lyricTexts, forceRefresh)
             if (_uiState.value.currentTrackIndex != index) return@launch
             result.onSuccess { (story, annotations) ->
+                currentTrackRawAnnotations = annotations
+                val currentAligned = _uiState.value.alignedLyrics
                 val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(
-                    _uiState.value.alignedLyrics,
+                    currentAligned,
                     annotations
                 )
                 _uiState.update {
                     it.copy(
-                        songStory = story,
-                        lineAnnotations = lineMap,
+                        songStory = story ?: it.songStory,
+                        lineAnnotations = if (lineMap.isNotEmpty()) lineMap else it.lineAnnotations,
                         isLoadingAnnotations = false,
                         isTraditionalMode = isTrad
                     )
@@ -1040,6 +1079,7 @@ class LyricBookletViewModel @Inject constructor(
             }
 
             val aligned = LyricAligner.align(currentTrack.originalLyrics, newLyrics)
+            currentTrackRawAnnotations = newAnnotations.values.toList()
             _uiState.update { state ->
                 state.copy(
                     alignedLyrics = aligned,
@@ -1111,6 +1151,7 @@ class LyricBookletViewModel @Inject constructor(
 
             val updatedStory = annotationRepository.getSongStory(currentTrack?.id ?: 0L)
             val updatedAnnots = annotationRepository.getAnnotations(currentTrack?.id ?: 0L)
+            currentTrackRawAnnotations = updatedAnnots
             val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(newAligned, updatedAnnots)
 
             val targetType = if (toTraditional) "繁体中文" else "简体中文"

@@ -166,7 +166,7 @@ fun InlineLyricAnnotationCard(
                     if (annotation.votesTotal > 0) {
                         Surface(
                             shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.10f)
+                            color = MaterialTheme.colorScheme.surfaceVariant
                         ) {
                             Text(
                                 text = "+${annotation.votesTotal}",
@@ -196,7 +196,7 @@ fun InlineLyricAnnotationCard(
                         } else {
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = Color.White.copy(alpha = 0.08f),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
                                     .clickable {
@@ -240,7 +240,7 @@ fun InlineLyricAnnotationCard(
                         onClick = onOpenFullSheet,
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = Color.White.copy(alpha = 0.08f),
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         modifier = Modifier.size(28.dp)
@@ -257,7 +257,7 @@ fun InlineLyricAnnotationCard(
                         onClick = onCollapse,
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = Color.White.copy(alpha = 0.08f),
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         modifier = Modifier.size(28.dp)

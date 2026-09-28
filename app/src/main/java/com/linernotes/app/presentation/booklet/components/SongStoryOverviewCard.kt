@@ -50,15 +50,7 @@ fun SongStoryOverviewCard(
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f),
-        border = BorderStroke(
-            1.dp,
-            androidx.compose.ui.graphics.Brush.verticalGradient(
-                listOf(
-                    Color.White.copy(alpha = 0.20f),
-                    Color.White.copy(alpha = 0.05f)
-                )
-            )
-        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(animationSpec = spring())

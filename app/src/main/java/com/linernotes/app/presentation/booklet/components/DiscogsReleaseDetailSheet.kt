@@ -155,7 +155,7 @@ fun DiscogsReleaseDetailSheet(
                         modifier = Modifier
                             .size(96.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White.copy(alpha = 0.06f))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
                             .bouncyClickable {
                                 if (!cover.isNullOrBlank()) previewImageUrl = cover
                             }
@@ -189,7 +189,7 @@ fun DiscogsReleaseDetailSheet(
                             Icon(
                                 Icons.Default.Album,
                                 contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.3f),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                 modifier = Modifier
                                     .size(40.dp)
                                     .align(Alignment.Center)
@@ -210,7 +210,7 @@ fun DiscogsReleaseDetailSheet(
                                 color = when (detail.mediaType) {
                                     "SHM-CD", "SACD", "XRCD", "BSCD2" -> MaterialTheme.colorScheme.primaryContainer
                                     "Digipak CD", "Mini-LP 纸套 CD" -> MaterialTheme.colorScheme.secondaryContainer
-                                    else -> Color.White.copy(alpha = 0.12f)
+                                    else -> MaterialTheme.colorScheme.surfaceVariant
                                 }
                             ) {
                                 Text(
@@ -219,7 +219,7 @@ fun DiscogsReleaseDetailSheet(
                                     color = when (detail.mediaType) {
                                         "SHM-CD", "SACD", "XRCD", "BSCD2" -> MaterialTheme.colorScheme.primary
                                         "Digipak CD", "Mini-LP 纸套 CD" -> MaterialTheme.colorScheme.secondary
-                                        else -> Color.White.copy(alpha = 0.9f)
+                                        else -> MaterialTheme.colorScheme.onSurface
                                     },
                                     modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                 )
@@ -237,7 +237,7 @@ fun DiscogsReleaseDetailSheet(
                                 Text(
                                     text = countryText,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.75f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
@@ -245,7 +245,7 @@ fun DiscogsReleaseDetailSheet(
                                 Text(
                                     text = "· ${detail.year}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.6f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                                 )
                             }
                         }
@@ -255,7 +255,7 @@ fun DiscogsReleaseDetailSheet(
                         Text(
                             text = detail.title,
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -263,7 +263,7 @@ fun DiscogsReleaseDetailSheet(
                         Text(
                             text = detail.artist,
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -299,7 +299,7 @@ fun DiscogsReleaseDetailSheet(
                                     Text(
                                         text = "${detail.haveCount} 人收藏",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White.copy(alpha = 0.45f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                                     )
                                 }
                             }
@@ -323,7 +323,7 @@ fun DiscogsReleaseDetailSheet(
                 containerColor = Color.Transparent,
                 contentColor = MaterialTheme.colorScheme.primary,
                 edgePadding = 0.dp,
-                divider = { HorizontalDivider(color = Color.White.copy(alpha = 0.08f)) }
+                divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)) }
             ) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
@@ -334,7 +334,7 @@ fun DiscogsReleaseDetailSheet(
                                 text = title,
                                 fontSize = 13.sp,
                                 fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedTab == index) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
+                                color = if (selectedTab == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     )
@@ -443,7 +443,7 @@ fun DiscogsReleaseDetailSheet(
 private fun TracklistTab(detail: DiscogsReleaseDetail) {
     if (detail.tracklist.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("该版本暂无曲目清单数据", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
+            Text("该版本暂无曲目清单数据", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
         }
         return
     }
@@ -456,7 +456,7 @@ private fun TracklistTab(detail: DiscogsReleaseDetail) {
         itemsIndexed(detail.tracklist) { index, track ->
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = if (index % 2 == 0) Color.White.copy(alpha = 0.03f) else Color.Transparent,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (index % 2 == 0) 0.04f else 0.015f),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -475,7 +475,7 @@ private fun TracklistTab(detail: DiscogsReleaseDetail) {
                     Text(
                         text = track.title,
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -486,7 +486,7 @@ private fun TracklistTab(detail: DiscogsReleaseDetail) {
                         Text(
                             text = track.duration,
                             style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                            color = Color.White.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                         )
                     }
                 }
@@ -502,7 +502,7 @@ private fun TracklistTab(detail: DiscogsReleaseDetail) {
 private fun CreditsTab(credits: List<com.linernotes.app.data.remote.DiscogsCreditItem>) {
     if (credits.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("该版本暂无详细演职名单数据", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
+            Text("该版本暂无详细演职名单数据", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
         }
         return
     }
@@ -512,10 +512,10 @@ private fun CreditsTab(credits: List<com.linernotes.app.data.remote.DiscogsCredi
         verticalArrangement = Arrangement.spacedBy(6.dp),
         contentPadding = PaddingValues(vertical = 6.dp)
     ) {
-        itemsIndexed(credits) { _, item ->
+        itemsIndexed(credits) { index, item ->
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = Color.White.copy(alpha = 0.03f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (index % 2 == 0) 0.04f else 0.015f),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -535,7 +535,7 @@ private fun CreditsTab(credits: List<com.linernotes.app.data.remote.DiscogsCredi
                     Text(
                         text = item.name,
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.End,
                         modifier = Modifier.weight(0.55f)
                     )
@@ -561,8 +561,8 @@ private fun NotesAndCompaniesTab(detail: DiscogsReleaseDetail) {
         // 规格与条码明细
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = VaultSurface,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
             modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
@@ -596,8 +596,8 @@ private fun NotesAndCompaniesTab(detail: DiscogsReleaseDetail) {
         if (detail.companies.isNotEmpty()) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = VaultSurface,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                 modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
@@ -615,7 +615,7 @@ private fun NotesAndCompaniesTab(detail: DiscogsReleaseDetail) {
                         Text(
                             text = "• $comp",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.8f),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
                             modifier = Modifier.padding(vertical = 2.dp)
                         )
                     }
@@ -627,8 +627,8 @@ private fun NotesAndCompaniesTab(detail: DiscogsReleaseDetail) {
         if (!detail.notes.isNullOrBlank()) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = VaultSurface,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
@@ -645,7 +645,7 @@ private fun NotesAndCompaniesTab(detail: DiscogsReleaseDetail) {
                     Text(
                         text = detail.notes,
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
-                        color = Color.White.copy(alpha = 0.85f)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -659,11 +659,11 @@ private fun SpecItem(label: String, value: String) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f))
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             text = value,
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.End,
             modifier = Modifier.padding(start = 12.dp)
         )
@@ -681,7 +681,7 @@ private fun ScansGalleryTab(
 ) {
     if (images.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("该版本暂未上传扫描切片图", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
+            Text("该版本暂未上传扫描切片图", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
         }
         return
     }
@@ -698,8 +698,8 @@ private fun ScansGalleryTab(
         itemsIndexed(images) { index, imgUrl ->
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = VaultSurface,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)

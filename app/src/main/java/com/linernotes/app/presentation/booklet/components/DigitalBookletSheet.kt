@@ -207,13 +207,13 @@ private fun BookletPagesViewer(
                 Text(
                     text = "暂无实体画册扫描件",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "导入 CD 内页展开折页、写真集或封底扫描件",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.5f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 Button(
@@ -245,8 +245,8 @@ private fun BookletPagesViewer(
                 val page = displayPages[pageIndex]
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = VaultSurface,
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                     shadowElevation = 12.dp,
                     modifier = Modifier.fillMaxSize()
                 ) {
@@ -308,12 +308,12 @@ private fun BookletPagesViewer(
                 // 页码胶囊
                 Surface(
                     shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.12f)
+                    color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     Text(
                         text = "${pagerState.currentPage + 1} / ${displayPages.size}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
                     )
                 }
@@ -353,8 +353,8 @@ private fun BookletCreditsRoll(
         // 实体唱片规格与厂牌卡片
         Surface(
             shape = RoundedCornerShape(16.dp),
-            color = VaultSurface,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -406,8 +406,8 @@ private fun BookletCreditsRoll(
         if (!album?.notes.isNullOrBlank()) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = VaultSurface,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -424,7 +424,7 @@ private fun BookletCreditsRoll(
                     Text(
                         text = album.notes!!,
                         style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
-                        color = Color.White.copy(alpha = 0.85f)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -445,7 +445,7 @@ private fun BookletCreditsRoll(
         tracks.forEachIndexed { index, track ->
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = Color.White.copy(alpha = 0.03f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (index % 2 == 0) 0.04f else 0.015f),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
@@ -457,20 +457,20 @@ private fun BookletCreditsRoll(
                     Text(
                         text = String.format(java.util.Locale.US, "%02d", track.trackNumber.takeIf { it > 0 } ?: (index + 1)),
                         style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                         modifier = Modifier.width(32.dp)
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = track.title,
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         if (!track.translatedTitle.isNullOrBlank()) {
                             Text(
                                 text = track.translatedTitle!!,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.5f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -479,7 +479,7 @@ private fun BookletCreditsRoll(
                         Text(
                             text = String.format(java.util.Locale.US, "%02d:%02d", totalSec / 60, totalSec % 60),
                             style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                            color = Color.White.copy(alpha = 0.4f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                         )
                     }
                 }
@@ -494,12 +494,12 @@ private fun CreditRow(label: String, value: String) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.45f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            color = Color.White
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

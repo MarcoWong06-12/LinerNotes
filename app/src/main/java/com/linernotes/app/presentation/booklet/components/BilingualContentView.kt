@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -106,6 +107,9 @@ fun BilingualContentView(
         ParagraphAligner.align(originalText, effectiveTranslation)
     }
 
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val translationColor = if (isDark) Color(0xFFFFD54F).copy(alpha = 0.92f) else MaterialTheme.colorScheme.secondary
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -118,7 +122,7 @@ fun BilingualContentView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color.White.copy(alpha = 0.06f))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
                     .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -147,7 +151,7 @@ fun BilingualContentView(
         AnimatedVisibility(visible = isTranslating) {
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -181,7 +185,7 @@ fun BilingualContentView(
                             lineHeight = 24.sp,
                             letterSpacing = 0.2.sp
                         ),
-                        color = Color(0xFFEDEDED)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -201,7 +205,7 @@ fun BilingualContentView(
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontSize = 15.sp,
                                     lineHeight = 23.sp,
-                                    color = Color.White.copy(alpha = 0.90f)
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.90f)
                                 )
                             )
 
@@ -212,7 +216,7 @@ fun BilingualContentView(
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontSize = 14.5.sp,
                                         lineHeight = 23.sp,
-                                        color = Color(0xFFFFE082).copy(alpha = 0.90f)
+                                        color = translationColor
                                     )
                                 )
                             }
@@ -232,7 +236,7 @@ fun BilingualContentView(
                                 fontSize = 15.sp,
                                 lineHeight = 24.sp
                             ),
-                            color = Color(0xFFF0F0F0)
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -248,7 +252,7 @@ fun BilingualContentView(
                                 fontSize = 15.sp,
                                 lineHeight = 23.sp
                             ),
-                            color = Color.White.copy(alpha = 0.88f)
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f)
                         )
                     }
                 }
@@ -267,7 +271,7 @@ private fun TabItem(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(8.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f) else Color.Transparent,
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
         modifier = modifier
     ) {
         Box(
@@ -279,7 +283,7 @@ private fun TabItem(
                 style = MaterialTheme.typography.labelMedium.copy(
                     fontSize = 12.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.60f)
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             )
         }

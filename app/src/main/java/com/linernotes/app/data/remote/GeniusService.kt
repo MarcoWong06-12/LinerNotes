@@ -89,9 +89,56 @@ object GeniusService {
 
     fun sanitizeArtist(artist: String): String {
         return artist
-            .replace(Regex("""\s*[\(\[\{].*?[\)\]\}]"""), "")
+            .replace(Regex("""\s*[\(\[\{（【].*?[\)\]\}）】]"""), "")
             .replace(Regex("""\s*feat\..*$""", RegexOption.IGNORE_CASE), "")
             .trim()
+    }
+
+    /**
+     * 智能提取艺人名称多重候选（包括括号中的外文原名/中文译名、合作艺人分割、以及中英混合字段）
+     * 例如输入 "艾薇儿 (Avril Lavigne)" -> ["Avril Lavigne", "艾薇儿"]
+     * 例如输入 "周杰伦 (Jay Chou)" -> ["Jay Chou", "周杰伦"]
+     */
+    fun extractArtistCandidates(artist: String): List<String> {
+        if (artist.isBlank()) return emptyList()
+        val results = mutableListOf<String>()
+
+        // 1. 提取括号中包含的名称 (如 "艾薇儿 (Avril Lavigne)" 提取出 "Avril Lavigne")
+        val parenMatches = Regex("""[\(\[\{（【](.*?)[\)\]\}）】]""").findAll(artist)
+            .map { it.groupValues[1].trim() }
+            .filter { it.isNotBlank() }
+            .toList()
+
+        // 2. 剥离括号后的基础名称
+        val baseArtist = sanitizeArtist(artist)
+
+        // 3. 针对多艺术家合作进行分割 (如 "/", ",", "&", "feat.")
+        val splitParts = artist.split(Regex("""[/,、&]|\bfeat\.\b|\bft\.\b""", RegexOption.IGNORE_CASE))
+            .map { sanitizeArtist(it) }
+            .filter { it.isNotBlank() }
+
+        // 4. 提取纯拉丁/英文字段 (针对如 "艾薇儿·拉维尼 Avril Lavigne")
+        val latinOnly = Regex("""[A-Za-z0-9\s'\.\-]+""").findAll(artist)
+            .map { it.value.trim() }
+            .filter { it.length >= 2 }
+            .toList()
+
+        val all = mutableListOf<String>()
+        // Genius 上的西洋音乐条目绝大多数以英文/拉丁名建立，如果包含英文候选名，优先置顶放入
+        val latinCandidates = (parenMatches + splitParts + latinOnly).filter { it.matches(Regex(""".*[A-Za-z].*""")) }
+        all.addAll(latinCandidates)
+
+        if (baseArtist.isNotBlank()) all.add(baseArtist)
+        all.addAll(parenMatches)
+        all.addAll(splitParts)
+
+        for (item in all) {
+            val clean = item.trim()
+            if (clean.isNotBlank() && clean !in results) {
+                results.add(clean)
+            }
+        }
+        return results
     }
 
     /**
@@ -103,28 +150,37 @@ object GeniusService {
         customToken: String? = null
     ): GeniusSongSearchResult? = withContext(Dispatchers.IO) {
         val cleanTitle = sanitizeTitle(title)
-        val cleanArtist = sanitizeArtist(artist)
+        val artistCandidates = extractArtistCandidates(artist)
 
         val candidates = mutableListOf<String>()
-        if (cleanTitle.isNotBlank() && cleanArtist.isNotBlank()) {
-            candidates.add("$cleanTitle $cleanArtist")
-        }
-        // 繁简体互转候选，提升华语流行乐在 Genius 上的命中率
-        val tradTitle = ChineseConverter.toTraditional(cleanTitle)
-        val tradArtist = ChineseConverter.toTraditional(cleanArtist)
-        if (tradTitle != cleanTitle || tradArtist != cleanArtist) {
-            val tradCandidate = "$tradTitle $tradArtist".trim()
-            if (tradCandidate.isNotBlank() && tradCandidate !in candidates) {
-                candidates.add(tradCandidate)
+        // 1. 优先组合每个艺术家候选与清理后歌名
+        for (a in artistCandidates) {
+            if (cleanTitle.isNotBlank()) {
+                candidates.add("$cleanTitle $a")
             }
         }
-        if (cleanTitle.isNotBlank()) {
+
+        // 2. 繁简体互转候选，提升华语流行乐在 Genius 上的命中率
+        val tradTitle = ChineseConverter.toTraditional(cleanTitle)
+        for (a in artistCandidates) {
+            val tradArtist = ChineseConverter.toTraditional(a)
+            val tradCand = "$tradTitle $tradArtist".trim()
+            if (tradCand.isNotBlank() && tradCand !in candidates) {
+                candidates.add(tradCand)
+            }
+        }
+
+        // 3. 纯歌名候选 (针对知名经典歌曲，单凭歌名即可在 Genius 首屏直接命中)
+        if (cleanTitle.isNotBlank() && cleanTitle !in candidates) {
             candidates.add(cleanTitle)
         }
+
+        // 4. 原始未清洗字符串候选
         val rawTitle = title.trim()
         val rawArtist = artist.trim()
-        if (rawTitle.isNotBlank() && rawArtist.isNotBlank() && "$rawTitle $rawArtist" !in candidates) {
-            candidates.add("$rawTitle $rawArtist")
+        if (rawTitle.isNotBlank() && rawArtist.isNotBlank()) {
+            val rawCandidate = "$rawTitle $rawArtist"
+            if (rawCandidate !in candidates) candidates.add(rawCandidate)
         }
 
         for (query in candidates) {

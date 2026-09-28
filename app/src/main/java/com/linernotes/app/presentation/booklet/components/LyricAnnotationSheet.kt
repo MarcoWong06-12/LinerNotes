@@ -121,7 +121,7 @@ fun LyricAnnotationSheet(
                     Text(
                         text = "Genius 歌词典故与故事",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
@@ -129,8 +129,8 @@ fun LyricAnnotationSheet(
                     onClick = onDismiss,
                     shape = CircleShape,
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = Color.White.copy(alpha = 0.12f),
-                        contentColor = Color.White
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier.size(36.dp)
                 ) {
@@ -138,7 +138,7 @@ fun LyricAnnotationSheet(
                 }
             }
 
-            HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -208,14 +208,14 @@ fun LyricAnnotationSheet(
                         } else {
                             Surface(
                                 shape = CircleShape,
-                                color = Color.White.copy(alpha = 0.12f),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
                                 modifier = Modifier.size(28.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Text(
                                         text = (annotation.authorName ?: "G").take(1).uppercase(),
                                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = Color.White
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
@@ -226,7 +226,7 @@ fun LyricAnnotationSheet(
                                 Text(
                                     text = annotation.authorName ?: "Genius 社区贡献者",
                                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 if (annotation.isVerified) {
                                     Icon(
@@ -240,7 +240,7 @@ fun LyricAnnotationSheet(
                             Text(
                                 text = if (annotation.isVerified) "艺术家亲自认证解析" else "全球乐迷共同编辑考据",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = if (annotation.isVerified) Color(0xFFFFD54F).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.5f)
+                                color = if (annotation.isVerified) Color(0xFFFFD54F).copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -283,8 +283,8 @@ fun LyricAnnotationSheet(
                         imageUrls.forEach { imgUrl ->
                             Surface(
                                 shape = RoundedCornerShape(14.dp),
-                                color = Color.Black,
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 160.dp, max = 260.dp)
@@ -349,12 +349,12 @@ fun LyricAnnotationSheet(
                         },
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
-                        Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "在 Genius 社区查看原帖讨论 ↗",
                             style = MaterialTheme.typography.labelMedium,
-                            color = Color.White.copy(alpha = 0.65f)
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
