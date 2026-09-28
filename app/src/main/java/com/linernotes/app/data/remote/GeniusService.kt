@@ -81,7 +81,7 @@ object GeniusService {
      */
     fun sanitizeTitle(title: String): String {
         return title
-            .replace(Regex("""^(?:track|cd\s*\d+)?\s*(?:\d+[\.\-_、]|0\d\s+)\s*""", RegexOption.IGNORE_CASE), "") // 仅剥离有效音轨编号，避免误伤如 "21 Guns", "7 Rings"
+            .replace(Regex("""^(?:(?:track|cd\s*\d*)\s*[-_.:\s]*)?(?:\d+\s*[\.\-_、:]\s*|0\d\s+)\s*""", RegexOption.IGNORE_CASE), "") // 仅剥离有效音轨编号，避免误伤如 "21 Guns", "7 Rings"
             .replace(Regex("""\s*[\(\[\{](?:feat|ft|radio\s*mix|club\s*mix|extended\s*mix|original\s*mix|mix|remix|edit|radio\s*edit|single\s*version|album\s*version|acoustic|live|remaster(?:ed)?|version|deluxe|bonus|mono|stereo|anniversary|ost|soundtrack|explicit|clean).*?[\)\]\}]""", RegexOption.IGNORE_CASE), "")
             .replace(Regex("""\s*-\s*(?:feat|radio\s*mix|club\s*mix|mix|remix|edit|radio\s*edit|single\s*version|live|remaster(?:ed)?|version|deluxe|bonus|explicit|clean).*$""", RegexOption.IGNORE_CASE), "")
             .trim()

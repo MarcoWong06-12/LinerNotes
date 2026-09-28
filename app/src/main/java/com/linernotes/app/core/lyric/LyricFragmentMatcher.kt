@@ -43,15 +43,15 @@ object LyricFragmentMatcher {
                 }
             }
 
-            // 支持跨行滑动窗口比对 (2行连续歌词对齐)
+            // 支持多行片段跨行滑动窗口比对 (2行连续歌词对齐)
             val fullNormFrag = normalizeText(frag)
-            if (fullNormFrag.length >= 10 && normalizedLines.size >= 2) {
+            if (fragLines.size > 1 && fullNormFrag.length >= 10 && normalizedLines.size >= 2) {
                 for (i in 0 until normalizedLines.size - 1) {
                     val line1 = normalizedLines[i]
                     val line2 = normalizedLines[i + 1]
                     if (line1.isBlank() || line2.isBlank()) continue
                     val combined = "$line1 $line2"
-                    if (fullNormFrag.contains(combined) || combined.contains(fullNormFrag)) {
+                    if (fullNormFrag.contains(combined)) {
                         if (result[i] == null || result[i]!!.lyricFragment.length < annotation.lyricFragment.length) {
                             result[i] = annotation
                         }
