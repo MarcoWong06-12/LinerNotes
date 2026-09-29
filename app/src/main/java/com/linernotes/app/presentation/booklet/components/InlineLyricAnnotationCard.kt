@@ -17,8 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,6 +50,7 @@ fun InlineLyricAnnotationCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var showOriginalText by remember { mutableStateOf(false) }
 
     val isChinese = remember(annotation.explanationText) {
@@ -207,6 +210,7 @@ fun InlineLyricAnnotationCard(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
                                     .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         if (hasTranslation) {
                                             showOriginalText = !showOriginalText
                                         } else {
@@ -244,7 +248,10 @@ fun InlineLyricAnnotationCard(
 
                     // 展开完整 BottomSheet 详情按钮
                     BouncyIconButton(
-                        onClick = onOpenFullSheet,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onOpenFullSheet()
+                        },
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -261,7 +268,10 @@ fun InlineLyricAnnotationCard(
 
                     // 收起按钮
                     BouncyIconButton(
-                        onClick = onCollapse,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onCollapse()
+                        },
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,

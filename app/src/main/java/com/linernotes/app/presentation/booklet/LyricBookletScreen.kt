@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Spellcheck
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.linernotes.app.core.util.ChineseConverter
+import com.linernotes.app.presentation.booklet.components.AmbientGlowBackground
 import com.linernotes.app.presentation.booklet.components.InlineLyricAnnotationCard
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -628,53 +629,12 @@ fun LyricBookletScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             val coverUrl = state.albumWithTracks?.album?.coverUrl
-
-            // 沉浸式唱片封面高斯模糊底图 (Apple Music 风格动态流光背景)
-            if (!coverUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(coverUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            alpha = 0.38f
-                            scaleX = 1.4f
-                            scaleY = 1.4f
-                        }
-                        .then(
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                Modifier.blur(80.dp)
-                            } else Modifier
-                        )
-                )
-            }
-
-            // 纵深渐变遮罩 (随主题明暗自适应)
             val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            if (isDark) {
-                                listOf(
-                                    Color(0xFF1E1E22).copy(alpha = 0.70f),
-                                    Color(0xFF141417).copy(alpha = 0.88f),
-                                    MaterialTheme.colorScheme.background
-                                )
-                            } else {
-                                listOf(
-                                    MaterialTheme.colorScheme.background.copy(alpha = 0.65f),
-                                    MaterialTheme.colorScheme.background.copy(alpha = 0.88f),
-                                    MaterialTheme.colorScheme.background
-                                )
-                            }
-                        )
-                    )
+
+            // 现代流光弥散动态呼吸背景 (Apple Music 风格双光斑流体呼吸场)
+            AmbientGlowBackground(
+                coverUrl = coverUrl,
+                isDark = isDark
             )
 
             Box(
@@ -1150,6 +1110,7 @@ fun LyricBookletScreen(
                                         mode = state.displayMode,
                                         isActive = isActive,
                                         isCompanionPlaying = state.isCompanionPlaying,
+                                        isImmersive = state.isImmersiveMode,
                                         furiganaMode = state.furiganaMode,
                                         annotation = lineAnnotation,
                                         isAnnotationExpanded = isExpanded,
@@ -1969,6 +1930,7 @@ private fun LyricLineItem(
     mode: LyricDisplayMode,
     isActive: Boolean,
     isCompanionPlaying: Boolean,
+    isImmersive: Boolean = false,
     furiganaMode: FuriganaMode = FuriganaMode.OFF,
     annotation: com.linernotes.app.data.local.entity.LyricAnnotationEntity? = null,
     isAnnotationExpanded: Boolean = false,
@@ -1990,13 +1952,13 @@ private fun LyricLineItem(
     val isLinePressed by lineInteractionSource.collectIsPressedAsState()
 
     val alphaAnim by animateFloatAsState(
-        targetValue = if (isLinePressed) 0.65f else if (isActive) 1.0f else if (isCompanionPlaying) 0.38f else 0.80f,
+        targetValue = if (isLinePressed) 0.65f else if (isActive) 1.0f else if (isCompanionPlaying) 0.38f else 0.85f,
         animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "lyricAlpha"
     )
 
     val scaleAnim by animateFloatAsState(
-        targetValue = if (isLinePressed) 0.97f else if (isActive) 1.03f else 1.0f,
+        targetValue = if (isLinePressed) 0.97f else if (isActive) (if (isImmersive) 1.04f else 1.025f) else 1.0f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
         label = "lyricScale"
     )
@@ -2005,7 +1967,7 @@ private fun LyricLineItem(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .padding(horizontal = 4.dp, vertical = if (mode == LyricDisplayMode.BILINGUAL) 10.dp else 6.dp)
+            .padding(horizontal = 4.dp, vertical = if (mode == LyricDisplayMode.BILINGUAL) (if (isImmersive) 12.dp else 10.dp) else (if (isImmersive) 8.dp else 6.dp))
             .clickable(
                 interactionSource = lineInteractionSource,
                 indication = null,
@@ -2080,67 +2042,97 @@ private fun LyricLineItem(
             if (isTraditional) ChineseConverter.toTraditional(line.translation) else line.translation
         }
 
-        when (mode) {
-            LyricDisplayMode.BILINGUAL -> {
-                if (line.original.isNotBlank()) {
-                    OriginalLyricText(
-                        text = line.original,
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 36.sp,
-                            letterSpacing = (-0.3).sp
-                        ),
-                        color = if (isActive) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
-                        furiganaMode = furiganaMode,
-                        isActive = isActive
-                    )
-                }
-                if (displayTranslation.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(5.dp))
-                    Text(
-                        text = displayTranslation,
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            lineHeight = 24.sp,
-                            letterSpacing = 0.2.sp
-                        ),
-                        color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isCompanionPlaying) 0.45f else 0.70f),
-                        textAlign = TextAlign.Start
-                    )
-                }
+        // 播放焦点行高亮流光指示器 + 歌词主文本
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top
+        ) {
+            AnimatedVisibility(
+                visible = isActive && isCompanionPlaying,
+                enter = expandHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+                exit = shrinkHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(end = 10.dp, top = 6.dp)
+                        .width(4.dp)
+                        .height(if (isImmersive) 32.dp else 26.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    Color(0xFFFFD54F)
+                                )
+                            )
+                        )
+                )
             }
 
-            LyricDisplayMode.ORIGINAL_ONLY -> {
-                if (line.original.isNotBlank()) {
-                    OriginalLyricText(
-                        text = line.original,
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 38.sp,
-                            letterSpacing = (-0.3).sp
-                        ),
-                        color = if (isActive) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
-                        furiganaMode = furiganaMode,
-                        isActive = isActive
-                    )
-                }
-            }
+            Column(modifier = Modifier.weight(1f)) {
+                when (mode) {
+                    LyricDisplayMode.BILINGUAL -> {
+                        if (line.original.isNotBlank()) {
+                            OriginalLyricText(
+                                text = line.original,
+                                style = MaterialTheme.typography.headlineSmall.copy(
+                                    fontSize = if (isImmersive) 32.sp else 28.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = if (isImmersive) 42.sp else 36.sp,
+                                    letterSpacing = (-0.3).sp
+                                ),
+                                color = MaterialTheme.colorScheme.onBackground,
+                                furiganaMode = furiganaMode,
+                                isActive = isActive
+                            )
+                        }
+                        if (displayTranslation.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(if (isImmersive) 6.dp else 5.dp))
+                            Text(
+                                text = displayTranslation,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontSize = if (isImmersive) 20.sp else 17.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    lineHeight = if (isImmersive) 28.sp else 24.sp,
+                                    letterSpacing = 0.2.sp
+                                ),
+                                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Start
+                            )
+                        }
+                    }
 
-            LyricDisplayMode.TRANSLATED_ONLY -> {
-                if (displayTranslation.isNotBlank()) {
-                    Text(
-                        text = displayTranslation,
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 32.sp
-                        ),
-                        color = if (isActive) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground.copy(alpha = if (isCompanionPlaying) 0.40f else 0.65f),
-                        textAlign = TextAlign.Start
-                    )
+                    LyricDisplayMode.ORIGINAL_ONLY -> {
+                        if (line.original.isNotBlank()) {
+                            OriginalLyricText(
+                                text = line.original,
+                                style = MaterialTheme.typography.headlineSmall.copy(
+                                    fontSize = if (isImmersive) 34.sp else 30.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = if (isImmersive) 44.sp else 38.sp,
+                                    letterSpacing = (-0.3).sp
+                                ),
+                                color = MaterialTheme.colorScheme.onBackground,
+                                furiganaMode = furiganaMode,
+                                isActive = isActive
+                            )
+                        }
+                    }
+
+                    LyricDisplayMode.TRANSLATED_ONLY -> {
+                        if (displayTranslation.isNotBlank()) {
+                            Text(
+                                text = displayTranslation,
+                                style = MaterialTheme.typography.headlineSmall.copy(
+                                    fontSize = if (isImmersive) 28.sp else 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = if (isImmersive) 36.sp else 32.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onBackground,
+                                textAlign = TextAlign.Start
+                            )
+                        }
+                    }
                 }
             }
         }
