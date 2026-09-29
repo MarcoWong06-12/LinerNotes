@@ -92,4 +92,15 @@ class LyricSanitizerTest {
         assertTrue(cleaned.contains("motherfuckers"))
         assertTrue(cleaned.contains("nigga"))
     }
+
+    @Test
+    fun `test zero asterisks guarantee on unknown masked words`() {
+        val testLine = "You ********** better watch out, he is ******* crazy"
+        val cleaned = LyricSanitizer.decensorLine(testLine)
+        assertFalse(cleaned.contains("*"))
+
+        val testZh = "你这个************快给我***闭***嘴"
+        val cleanZh = LyricSanitizer.decensorChineseLine(testZh)
+        assertFalse(cleanZh.contains("*"))
+    }
 }

@@ -229,9 +229,7 @@ class LyricBookletViewModel @Inject constructor(
                         val hasTitleCensor = LyricSanitizer.hasCensorship(t.title)
 
                         if (hasOrigCensor || hasTransCensor || hasTitleCensor) {
-                            val cachedAnnots = annotationRepository.getAnnotations(t.id)
-                            val refLines = cachedAnnots.map { it.lyricFragment }
-                            val cleanLyrics = if (hasOrigCensor) LyricSanitizer.decensorLyrics(t.originalLyrics ?: "", refLines) else (t.originalLyrics ?: "")
+                            val cleanLyrics = if (hasOrigCensor) LyricSanitizer.decensorLyrics(t.originalLyrics ?: "") else (t.originalLyrics ?: "")
                             val cleanChinese = if (hasTransCensor) LyricSanitizer.decensorChineseLyrics(t.translatedLyrics, cleanLyrics) else t.translatedLyrics
                             val cleanTitle = if (hasTitleCensor) LyricSanitizer.decensorTitle(t.title) else t.title
 
@@ -362,10 +360,8 @@ class LyricBookletViewModel @Inject constructor(
             companionAnchorTime = android.os.SystemClock.elapsedRealtime()
             companionAnchorPositionMs = 0L
 
-            val earlyAnnots = annotationRepository.getAnnotations(track.id)
-            val earlyRefLines = earlyAnnots.map { it.lyricFragment }
             val cleanLyrics = if (LyricSanitizer.hasCensorship(track.originalLyrics)) {
-                LyricSanitizer.decensorLyrics(track.originalLyrics ?: "", earlyRefLines)
+                LyricSanitizer.decensorLyrics(track.originalLyrics ?: "")
             } else (track.originalLyrics ?: "")
             val cleanChinese = if (LyricSanitizer.hasCensorship(track.translatedLyrics)) {
                 LyricSanitizer.decensorChineseLyrics(track.translatedLyrics, cleanLyrics)
@@ -431,7 +427,8 @@ class LyricBookletViewModel @Inject constructor(
 
                 val offset = lyricOffsetDao.getOffset(track.id)?.offsetMs ?: 0L
                 if (offset != 0L && _uiState.value.currentTrackIndex == index) {
-                    val withOffset = aligned.map { line ->
+                    val baseAligned = _uiState.value.alignedLyrics
+                    val withOffset = baseAligned.map { line ->
                         if (line.startTimeMs != null) {
                             line.copy(startTimeMs = (line.startTimeMs + offset).coerceAtLeast(0L))
                         } else line

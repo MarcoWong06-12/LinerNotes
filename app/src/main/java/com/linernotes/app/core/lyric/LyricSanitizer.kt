@@ -48,12 +48,12 @@ object LyricSanitizer {
      */
     private val COMMON_PHRASE_RULES = listOf(
         // King Kunta / Kendrick Lamar 及西海岸经典搭配
-        Regex("""(?i)\bmonkey\s+mouth\s+\*{5,15}""") to "monkey-mouth motherfuckers",
-        Regex("""(?i)\bwhats\s+happenin['’]?\s+\*{4,6}""") to "whats happenin' nigga",
-        Regex("""(?i)\bin\s+the\s+hood\s+\*{4,6}""") to "in the hood nigga",
-        Regex("""(?i)\bAye\s+aye\s+\*{4,6}""") to "Aye aye nigga",
-        Regex("""(?i)\bK\s*Dot\s+back\s+in\s+the\s+hood\s+\*{4,6}""") to "K Dot back in the hood nigga",
-        Regex("""(?i)\bwhere\s+you\s+when\s+I\s+was\s+walkin['’]?\s+\*{4,6}""") to "where you when I was walkin' bitch",
+        Regex("""(?i)\bmonkey[\s-]+mouth[\s-]*\*{5,15}""") to "monkey-mouth motherfuckers",
+        Regex("""(?i)\bwhats?\s+happenin['’]?[\s,]*\*{4,6}""") to "whats happenin' nigga",
+        Regex("""(?i)\bin\s+the\s+hood[\s,]*\*{4,6}""") to "in the hood nigga",
+        Regex("""(?i)\bAye[\s,]+aye[\s,]*\*{4,6}""") to "Aye aye nigga",
+        Regex("""(?i)\bK\s*Dot\s+back\s+in\s+the\s+hood[\s,]*\*{4,6}""") to "K Dot back in the hood nigga",
+        Regex("""(?i)\bwhere\s+you\s+when\s+I\s+was\s+walkin['’]?[\s,]*\*{4,6}""") to "where you when I was walkin' bitch",
 
         // 通用英语俗语与 Hip-Hop 惯用短语
         Regex("""(?i)\blife['’]?s\s+a\s+\*{4,6}""") to "life's a bitch",
@@ -216,6 +216,19 @@ object LyricSanitizer {
             matchFromDictionary(tok) ?: tok
         }
 
+        if (!text.contains('*')) return text
+
+        // 阶段 4：纯星号长度兜底替换（杜绝任何星号遗漏）
+        text = text
+            .replace(Regex("""\*{12,}"""), "motherfuckers")
+            .replace(Regex("""\*{10,11}"""), "motherfucker")
+            .replace(Regex("""\*{7,9}"""), "fucking")
+            .replace(Regex("""\*{6}"""), "niggas")
+            .replace(Regex("""\*{5}"""), "nigga")
+            .replace(Regex("""\*{4}"""), "fuck")
+            .replace(Regex("""\*{3}"""), "ass")
+            .replace(Regex("""\*{1,2}"""), "")
+
         return text
     }
 
@@ -224,68 +237,54 @@ object LyricSanitizer {
      * 解决国内平台翻译中充斥的如 “猴嘴*************”、“是啊是啊*****” 等星号遗留
      */
     fun decensorChineseLine(chineseLine: String, uncensoredEnglishLine: String? = null): String {
-        if (!chineseLine.contains('*')) return chineseLine
         var result = chineseLine
 
-        // 1. 若有对应的无审查英文行，精准按英文词汇语义替换中文星号
-        if (!uncensoredEnglishLine.isNullOrBlank()) {
-            val engLower = uncensoredEnglishLine.lowercase()
-            when {
-                engLower.contains("motherfuckers") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "混蛋们")
-                }
-                engLower.contains("motherfucker") || engLower.contains("motherfucking") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "混蛋")
-                }
-                engLower.contains("niggas") || engLower.contains("niggers") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "兄弟们")
-                }
-                engLower.contains("nigga") || engLower.contains("nigger") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "兄弟")
-                }
-                engLower.contains("bitches") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "婊子们")
-                }
-                engLower.contains("bitch") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "婊子")
-                }
-                engLower.contains("fucking") || engLower.contains("fuck") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "他妈的")
-                }
-                engLower.contains("shit") || engLower.contains("bullshit") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "狗屎")
-                }
-                engLower.contains("asshole") || engLower.contains("ass") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "混蛋")
-                }
-                engLower.contains("dick") || engLower.contains("cock") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "混球")
-                }
-                engLower.contains("pussy") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "怂包")
-                }
-                engLower.contains("damn") -> {
-                    result = result.replace(Regex("""\*{3,}"""), "该死")
-                }
-            }
-        }
-
-        // 2. 中文语境常见屏蔽词兜底替换
+        // 1. 中文常见特定搭配与俚语还原（如 猴嘴混蛋们、回到街头兄弟、闭嘴等）
         result = result
             .replace(Regex("""猴嘴\s*\*{3,}"""), "猴嘴混蛋们")
             .replace(Regex("""是啊\s*是啊\s*\*{3,}"""), "是啊是啊兄弟")
             .replace(Regex("""發生了什麼事\s*\*{3,}"""), "發生了什麼事兄弟")
             .replace(Regex("""发生了什么事\s*\*{3,}"""), "发生了什么事兄弟")
-            .replace(Regex("""回到引擎蓋\s*\*{3,}"""), "回到街头兄弟")
-            .replace(Regex("""回到引擎盖\s*\*{3,}"""), "回到街头兄弟")
+            .replace(Regex("""回到引擎[蓋盖]\s*(\*{3,}|兄弟)?"""), "回到街头兄弟")
             .replace(Regex("""他\s*\*{2,4}\s*的"""), "他妈的")
             .replace(Regex("""真\s*\*{2,4}\s*的"""), "真他妈的")
             .replace(Regex("""去\s*\*{2,4}\s*的"""), "去他妈的")
             .replace(Regex("""狗\s*\*{2,4}"""), "狗屎")
             .replace(Regex("""闭\s*\*{2,4}\s*嘴"""), "闭嘴")
+
+        if (!result.contains('*')) return result
+
+        // 2. 若有对应的无审查英文行，精准按英文词汇语义替换中文星号
+        if (!uncensoredEnglishLine.isNullOrBlank()) {
+            val engLower = uncensoredEnglishLine.lowercase()
+            val replacement = when {
+                engLower.contains("motherfuckers") -> "混蛋们"
+                engLower.contains("motherfucker") || engLower.contains("motherfucking") -> "混蛋"
+                engLower.contains("niggas") || engLower.contains("niggers") -> "兄弟们"
+                engLower.contains("nigga") || engLower.contains("nigger") -> "兄弟"
+                engLower.contains("bitches") -> "婊子们"
+                engLower.contains("bitch") -> "婊子"
+                engLower.contains("fucking") || engLower.contains("fuck") -> "他妈的"
+                engLower.contains("shit") || engLower.contains("bullshit") -> "狗屎"
+                engLower.contains("asshole") || engLower.contains("ass") -> "混蛋"
+                engLower.contains("dick") || engLower.contains("cock") -> "混球"
+                engLower.contains("pussy") -> "怂包"
+                engLower.contains("damn") -> "该死"
+                else -> null
+            }
+            if (replacement != null) {
+                result = result.replace(Regex("""\*{2,}"""), replacement)
+            }
+        }
+
+        if (!result.contains('*')) return result
+
+        // 3. 中文语境常见屏蔽词兜底替换
+        result = result
             .replace(Regex("""\*{10,}"""), "混蛋们")
             .replace(Regex("""\*{5,9}"""), "兄弟")
             .replace(Regex("""\*{2,4}"""), "他妈的")
+            .replace(Regex("""\*+"""), "")
 
         return result
     }
