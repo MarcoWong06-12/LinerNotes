@@ -90,6 +90,7 @@ import com.linernotes.app.core.lyric.FuriganaEngine
 import com.linernotes.app.domain.model.BilingualLyricLine
 import com.linernotes.app.domain.model.LyricDisplayMode
 import com.linernotes.app.presentation.booklet.components.*
+import com.linernotes.app.presentation.booklet.model.AnnotationLoadState
 import com.linernotes.app.presentation.common.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1072,11 +1073,12 @@ fun LyricBookletScreen(
                                     }
                                 }
                             } else if (!state.isLoadingAnnotations && state.lineAnnotations.isEmpty() && state.alignedLyrics.isNotEmpty()) {
-                                // 2. 检索完成但确实未收录典故时的轻量状态栏 (支持一键重新检索)
+                                val isFailed = state.annotationLoadState == AnnotationLoadState.FAILED
+                                // 2. 检索完成但确实未收录典故 或 网络连接受阻时的状态栏 (支持一键重新检索)
                                 item {
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                        color = if (isFailed) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(bottom = 14.dp)
@@ -1093,13 +1095,17 @@ fun LyricBookletScreen(
                                                 Icon(
                                                     Icons.Default.MenuBook,
                                                     contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                    tint = if (isFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                                     modifier = Modifier.size(15.dp)
                                                 )
                                                 Text(
-                                                    text = if (state.isTraditionalMode) "當前曲目在 Genius 暫無樂迷考據記錄" else "当前曲目在 Genius 暂无乐迷考据记录",
+                                                    text = if (isFailed) {
+                                                        if (state.isTraditionalMode) "網路連線受阻，未能同步 Genius 典故" else "网络连接受阻，未能同步 Genius 典故"
+                                                    } else {
+                                                        if (state.isTraditionalMode) "當前曲目在 Genius 暫無樂迷考據記錄" else "当前曲目在 Genius 暂无乐迷考据记录"
+                                                    },
                                                     style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                                    color = if (isFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                                                 )
                                             }
                                             TextButton(

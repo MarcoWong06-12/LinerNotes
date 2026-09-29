@@ -201,7 +201,7 @@ class AnnotationRepository @Inject constructor(
                 artist = artist,
                 customToken = customToken
             )
-            geniusRequestSucceeded = true
+            geniusRequestSucceeded = GeniusService.lastRequestConnected
 
             if (searchHit != null) {
                 val songId = searchHit.id

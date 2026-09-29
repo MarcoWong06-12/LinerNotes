@@ -54,7 +54,7 @@ object GeniusService {
     private const val GENIUS_WEB_API = "https://genius.com/api"
     private const val GENIUS_PROD_API = "https://api.genius.com"
     private const val USER_AGENT =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
 
     private val IMG_REGEX = Regex("""<img[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
 
@@ -63,18 +63,35 @@ object GeniusService {
             "User-Agent" to USER_AGENT,
             "Accept" to "application/json, text/plain, */*",
             "Accept-Language" to "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
-            "Referer" to "https://genius.com/",
-            "Sec-Ch-Ua" to "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\"",
-            "Sec-Ch-Ua-Mobile" to "?0",
-            "Sec-Ch-Ua-Platform" to "\"Windows\"",
-            "Sec-Fetch-Dest" to "empty",
-            "Sec-Fetch-Mode" to "cors",
-            "Sec-Fetch-Site" to "same-origin"
+            "Referer" to "https://genius.com/"
         )
         if (!customToken.isNullOrBlank()) {
             headers["Authorization"] = "Bearer ${customToken.trim()}"
         }
         return headers
+    }
+
+    @Volatile
+    var lastRequestConnected: Boolean = false
+        private set
+
+    /**
+     * 网络请求包装，精准记录连通性状态以支持 UI 区分“网络连接受阻”与“真无考据”
+     */
+    private fun fetchJson(url: String, customToken: String?): String? {
+        return try {
+            val response = LinerNotesHttpClient.get(url, buildHeaders(customToken))
+            if (!response.isNullOrBlank()) {
+                lastRequestConnected = true
+                response
+            } else {
+                lastRequestConnected = false
+                null
+            }
+        } catch (e: Exception) {
+            lastRequestConnected = false
+            null
+        }
     }
 
     /**
@@ -158,43 +175,37 @@ object GeniusService {
         val candidates = mutableListOf<String>()
         val punctFreeTitle = cleanTitle.replace(Regex("""[.,/#!$%\^&\*;:{}=\-_`~()?]"""), " ").trim().replace(Regex("""\s+"""), " ")
 
-        // 1. 优先组合每个艺术家候选与清理后歌名
-        for (a in artistCandidates) {
+        // 1. 优先主组合：清理后歌名 + 主艺人候选
+        val primaryArtist = artistCandidates.firstOrNull() ?: sanitizeArtist(artist)
+        if (cleanTitle.isNotBlank() && primaryArtist.isNotBlank()) {
+            candidates.add("$cleanTitle $primaryArtist")
+        }
+
+        // 2. 其它艺人候选（包含外文原名/合作艺人分割）
+        for (a in artistCandidates.drop(1)) {
             if (cleanTitle.isNotBlank()) {
-                candidates.add("$cleanTitle $a")
-            }
-            if (punctFreeTitle.isNotBlank() && punctFreeTitle != cleanTitle) {
-                candidates.add("$punctFreeTitle $a")
+                val cand = "$cleanTitle $a"
+                if (cand !in candidates) candidates.add(cand)
             }
         }
 
-        // 2. 繁简体互转候选，提升华语流行乐在 Genius 上的命中率
+        // 3. 繁简体互转候选，提升华语流行乐在 Genius 上的命中率
         val tradTitle = ChineseConverter.toTraditional(cleanTitle)
-        for (a in artistCandidates) {
-            val tradArtist = ChineseConverter.toTraditional(a)
+        if (tradTitle != cleanTitle && primaryArtist.isNotBlank()) {
+            val tradArtist = ChineseConverter.toTraditional(primaryArtist)
             val tradCand = "$tradTitle $tradArtist".trim()
-            if (tradCand.isNotBlank() && tradCand !in candidates) {
+            if (tradCand !in candidates) {
                 candidates.add(tradCand)
             }
         }
 
-        // 3. 纯歌名候选 (针对知名经典歌曲，单凭歌名即可在 Genius 首屏直接命中)
+        // 4. 纯歌名候选 (针对知名经典歌曲，单凭歌名即可在 Genius 首屏直接命中)
         if (cleanTitle.isNotBlank() && cleanTitle !in candidates) {
             candidates.add(cleanTitle)
         }
-        if (punctFreeTitle.isNotBlank() && punctFreeTitle !in candidates) {
-            candidates.add(punctFreeTitle)
-        }
 
-        // 4. 原始未清洗字符串候选
-        val rawTitle = title.trim()
-        val rawArtist = artist.trim()
-        if (rawTitle.isNotBlank() && rawArtist.isNotBlank()) {
-            val rawCandidate = "$rawTitle $rawArtist"
-            if (rawCandidate !in candidates) candidates.add(rawCandidate)
-        }
-
-        for (query in candidates) {
+        // 严格控制在最多 3 个精准候选，避免多次连续超时等待
+        for (query in candidates.take(3)) {
             val result = executeSearch(query, customToken)
             if (result != null) return@withContext result
         }
@@ -213,7 +224,7 @@ object GeniusService {
 
         for (url in urls) {
             try {
-                val jsonStr = LinerNotesHttpClient.get(url, buildHeaders(customToken)) ?: continue
+                val jsonStr = fetchJson(url, customToken) ?: continue
                 val root = JSONObject(jsonStr)
                 val responseObj = root.optJSONObject("response") ?: continue
 
@@ -228,21 +239,7 @@ object GeniusService {
                 } else {
                     val sections = responseObj.optJSONArray("sections") ?: continue
 
-                    // 1. 优先从 type == "song" 专用段中查找精准曲目
-                    for (i in 0 until sections.length()) {
-                        val sec = sections.optJSONObject(i) ?: continue
-                        if (sec.optString("type").equals("song", ignoreCase = true)) {
-                            val hits = sec.optJSONArray("hits") ?: continue
-                            for (j in 0 until hits.length()) {
-                                val hit = hits.optJSONObject(j) ?: continue
-                                val result = hit.optJSONObject("result") ?: continue
-                                val song = parseSongResult(result)
-                                if (song != null) return song
-                            }
-                        }
-                    }
-
-                    // 2. 其次从 top_hit 段中查找类型为 song 的条目
+                    // 1. 优先从 top_hit 段中查找精准曲目 (Genius 官方推荐度最高的最优条目)
                     for (i in 0 until sections.length()) {
                         val sec = sections.optJSONObject(i) ?: continue
                         if (sec.optString("type").equals("top_hit", ignoreCase = true)) {
@@ -257,12 +254,61 @@ object GeniusService {
                             }
                         }
                     }
+
+                    // 2. 其次从 type == "song" 专用段中查找
+                    for (i in 0 until sections.length()) {
+                        val sec = sections.optJSONObject(i) ?: continue
+                        if (sec.optString("type").equals("song", ignoreCase = true)) {
+                            val hits = sec.optJSONArray("hits") ?: continue
+                            for (j in 0 until hits.length()) {
+                                val hit = hits.optJSONObject(j) ?: continue
+                                val result = hit.optJSONObject("result") ?: continue
+                                val song = parseSongResult(result)
+                                if (song != null) return song
+                            }
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 // 尝试下一个候选 URL
             }
         }
         return null
+    }
+
+    internal fun isTranslationSpam(title: String, fullTitle: String, artist: String): Boolean {
+        val lowerArtist = artist.lowercase()
+        if (lowerArtist.contains("genius traduccion") ||
+            lowerArtist.contains("genius translation") ||
+            lowerArtist.contains("genius brasil") ||
+            lowerArtist.contains("genius romaniz") ||
+            lowerArtist.contains("genius english translations") ||
+            lowerArtist.contains("genius deutsche") ||
+            lowerArtist.contains("genius traduzion") ||
+            lowerArtist.contains("genius french") ||
+            lowerArtist.contains("genius turkce") ||
+            lowerArtist.contains("genius polska") ||
+            lowerArtist.contains("genius russian") ||
+            lowerArtist.contains("genius chinese") ||
+            lowerArtist.contains("genius 中文")
+        ) {
+            return true
+        }
+        val combined = "$title $fullTitle".lowercase()
+        if (combined.contains("traducción al español") ||
+            combined.contains("tradução em português") ||
+            combined.contains("deutsche übersetzung") ||
+            combined.contains("traduzione italiana") ||
+            combined.contains("english translation") ||
+            combined.contains("traduction française") ||
+            combined.contains("romanized") ||
+            combined.contains("中文翻译") ||
+            combined.contains("中文翻譯") ||
+            combined.contains("chinese translation")
+        ) {
+            return true
+        }
+        return false
     }
 
     private fun parseSongResult(result: JSONObject): GeniusSongSearchResult? {
@@ -278,6 +324,12 @@ object GeniusService {
         val primaryArtist = result.optJSONObject("primary_artist")
         val artistName = primaryArtist?.optString("name")?.takeIf { it.isNotBlank() }
             ?: result.optString("artist_names")
+
+        // 严厉过滤翻译页等无考据占位条目
+        if (isTranslationSpam(title, fullTitle, artistName)) {
+            return null
+        }
+
         val thumbUrl = result.optString("song_art_image_thumbnail_url").takeIf { it.isNotBlank() }
             ?: result.optString("header_image_thumbnail_url").takeIf { it.isNotBlank() }
         val coverUrl = result.optString("song_art_image_url").takeIf { it.isNotBlank() }
@@ -323,7 +375,7 @@ object GeniusService {
         val url = "$baseUrl/songs/$songId?text_format=plain"
 
         try {
-            val jsonStr = LinerNotesHttpClient.get(url, buildHeaders(customToken)) ?: return@withContext null
+            val jsonStr = fetchJson(url, customToken) ?: return@withContext null
             val root = JSONObject(jsonStr)
             val song = root.optJSONObject("response")?.optJSONObject("song") ?: return@withContext null
 
@@ -386,7 +438,7 @@ object GeniusService {
         while (page <= maxPages) {
             val url = "$baseUrl/referents?song_id=$songId&text_format=plain,html&per_page=50&page=$page"
             try {
-                val jsonStr = LinerNotesHttpClient.get(url, buildHeaders(customToken)) ?: break
+                val jsonStr = fetchJson(url, customToken) ?: break
                 val root = JSONObject(jsonStr)
                 val responseObj = root.optJSONObject("response") ?: break
                 val referentsArr = responseObj.optJSONArray("referents") ?: break

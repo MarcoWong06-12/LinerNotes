@@ -73,4 +73,19 @@ class GeniusServiceTest {
         assertEquals("\"Hello\"", GeniusService.unescapeHtml("&quot;Hello&quot;"))
         assertEquals("Rock & Roll", GeniusService.unescapeHtml("Rock &amp; Roll"))
     }
+
+    @Test
+    fun testIsTranslationSpam() {
+        // 典型翻译垃圾条目（应被拦截）
+        assertEquals(true, GeniusService.isTranslationSpam("Lilac Wine (Traducción al Español)", "Lilac Wine (Traducción al Español) by Genius Traducciones al Español", "Genius Traducciones al Español"))
+        assertEquals(true, GeniusService.isTranslationSpam("Lilac Wine", "Lilac Wine by Genius English Translations", "Genius English Translations"))
+        assertEquals(true, GeniusService.isTranslationSpam("晴天 (中文翻译)", "晴天 (中文翻译) by 网友", "周杰伦"))
+        assertEquals(true, GeniusService.isTranslationSpam("DNA (Romanized)", "DNA (Romanized) by BTS", "BTS"))
+
+        // 真实正版曲目（绝不误伤）
+        assertEquals(false, GeniusService.isTranslationSpam("Lilac Wine", "Lilac Wine by Jeff Buckley", "Jeff Buckley"))
+        assertEquals(false, GeniusService.isTranslationSpam("Manchild", "Manchild by Sabrina Carpenter", "Sabrina Carpenter"))
+        assertEquals(false, GeniusService.isTranslationSpam("Ms. Jackson", "Ms. Jackson by OutKast", "OutKast"))
+        assertEquals(false, GeniusService.isTranslationSpam("505", "505 by Arctic Monkeys", "Arctic Monkeys"))
+    }
 }
