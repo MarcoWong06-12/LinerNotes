@@ -124,11 +124,21 @@ object UnifiedLyricsService {
     }
 
     private fun sanitizeResult(result: OnlineLyricsResult, refResult: OnlineLyricsResult?): OnlineLyricsResult {
-        if (!LyricSanitizer.hasCensorship(result.originalLyrics) && !LyricSanitizer.hasCensorship(result.title)) {
+        val hasOrigCensor = LyricSanitizer.hasCensorship(result.originalLyrics)
+        val hasTransCensor = LyricSanitizer.hasCensorship(result.translatedLyrics)
+        val hasTitleCensor = LyricSanitizer.hasCensorship(result.title)
+        if (!hasOrigCensor && !hasTransCensor && !hasTitleCensor) {
             return result
         }
-        val cleanLyrics = LyricSanitizer.decensorLyrics(result.originalLyrics, refResult?.originalLyrics)
-        val cleanTitle = LyricSanitizer.decensorTitle(result.title, refResult?.title)
-        return result.copy(title = cleanTitle, originalLyrics = cleanLyrics)
+        val cleanLyrics = if (hasOrigCensor) {
+            LyricSanitizer.decensorLyrics(result.originalLyrics, refResult?.originalLyrics)
+        } else result.originalLyrics
+        val cleanChinese = if (hasTransCensor) {
+            LyricSanitizer.decensorChineseLyrics(result.translatedLyrics, cleanLyrics)
+        } else result.translatedLyrics
+        val cleanTitle = if (hasTitleCensor) {
+            LyricSanitizer.decensorTitle(result.title, refResult?.title)
+        } else result.title
+        return result.copy(title = cleanTitle, originalLyrics = cleanLyrics, translatedLyrics = cleanChinese)
     }
 }

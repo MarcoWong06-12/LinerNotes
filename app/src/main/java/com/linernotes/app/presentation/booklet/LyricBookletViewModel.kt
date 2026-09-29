@@ -224,10 +224,25 @@ class LyricBookletViewModel @Inject constructor(
                 if (albumWithTracks != null) {
                     val rawTracks = albumWithTracks.tracks.sortedBy { it.trackNumber }
                     val tracks = rawTracks.map { t ->
-                        val cleanTitle = if (LyricSanitizer.hasCensorship(t.title)) LyricSanitizer.decensorTitle(t.title) else t.title
-                        val cleanLyrics = if (LyricSanitizer.hasCensorship(t.originalLyrics)) LyricSanitizer.decensorLyrics(t.originalLyrics ?: "") else t.originalLyrics
-                        if (cleanTitle != t.title || cleanLyrics != t.originalLyrics) {
-                            t.copy(title = cleanTitle, originalLyrics = cleanLyrics)
+                        val hasOrigCensor = LyricSanitizer.hasCensorship(t.originalLyrics)
+                        val hasTransCensor = LyricSanitizer.hasCensorship(t.translatedLyrics)
+                        val hasTitleCensor = LyricSanitizer.hasCensorship(t.title)
+
+                        if (hasOrigCensor || hasTransCensor || hasTitleCensor) {
+                            val cachedAnnots = annotationRepository.getAnnotations(t.id)
+                            val refLines = cachedAnnots.map { it.lyricFragment }
+                            val cleanLyrics = if (hasOrigCensor) LyricSanitizer.decensorLyrics(t.originalLyrics ?: "", refLines) else (t.originalLyrics ?: "")
+                            val cleanChinese = if (hasTransCensor) LyricSanitizer.decensorChineseLyrics(t.translatedLyrics, cleanLyrics) else t.translatedLyrics
+                            val cleanTitle = if (hasTitleCensor) LyricSanitizer.decensorTitle(t.title) else t.title
+
+                            if (cleanTitle != t.title || cleanLyrics != t.originalLyrics || cleanChinese != t.translatedLyrics) {
+                                viewModelScope.launch(Dispatchers.IO) {
+                                    repository.updateTrackTranslation(t.id, t.translatedTitle, cleanLyrics, cleanChinese)
+                                }
+                                t.copy(title = cleanTitle, originalLyrics = cleanLyrics, translatedLyrics = cleanChinese)
+                            } else {
+                                t
+                            }
                         } else {
                             t
                         }
@@ -346,8 +361,23 @@ class LyricBookletViewModel @Inject constructor(
             val track = tracks[index]
             companionAnchorTime = android.os.SystemClock.elapsedRealtime()
             companionAnchorPositionMs = 0L
-            val cleanLyrics = if (LyricSanitizer.hasCensorship(track.originalLyrics)) LyricSanitizer.decensorLyrics(track.originalLyrics ?: "") else track.originalLyrics
-            val aligned = LyricAligner.align(cleanLyrics, track.translatedLyrics)
+
+            val earlyAnnots = annotationRepository.getAnnotations(track.id)
+            val earlyRefLines = earlyAnnots.map { it.lyricFragment }
+            val cleanLyrics = if (LyricSanitizer.hasCensorship(track.originalLyrics)) {
+                LyricSanitizer.decensorLyrics(track.originalLyrics ?: "", earlyRefLines)
+            } else (track.originalLyrics ?: "")
+            val cleanChinese = if (LyricSanitizer.hasCensorship(track.translatedLyrics)) {
+                LyricSanitizer.decensorChineseLyrics(track.translatedLyrics, cleanLyrics)
+            } else track.translatedLyrics
+
+            if (cleanLyrics != track.originalLyrics || cleanChinese != track.translatedLyrics) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    repository.updateTrackTranslation(track.id, track.translatedTitle, cleanLyrics, cleanChinese)
+                }
+            }
+
+            val aligned = LyricAligner.align(cleanLyrics, cleanChinese)
             val duration = computeTrackDuration(track, aligned)
             currentTrackRawAnnotations = emptyList()
             lastLoadedAnnotationTrackId = null
@@ -375,9 +405,20 @@ class LyricBookletViewModel @Inject constructor(
                 val cachedAnnotations = annotationRepository.getAnnotations(track.id)
                 if ((cachedStory != null || cachedAnnotations.isNotEmpty()) && _uiState.value.currentTrackIndex == index) {
                     currentTrackRawAnnotations = cachedAnnotations
-                    val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(_uiState.value.alignedLyrics, cachedAnnotations)
+                    val refLines = cachedAnnotations.map { it.lyricFragment }
+                    val currentAligned = _uiState.value.alignedLyrics
+                    val hasAsterisks = currentAligned.any { it.original.contains('*') || (it.translation?.contains('*') == true) }
+                    val finalAligned = if (hasAsterisks && refLines.isNotEmpty()) {
+                        val reOriginal = LyricSanitizer.decensorLyrics(track.originalLyrics ?: "", refLines)
+                        val reZh = LyricSanitizer.decensorChineseLyrics(track.translatedLyrics, reOriginal)
+                        repository.updateTrackTranslation(track.id, track.translatedTitle, reOriginal, reZh)
+                        LyricAligner.align(reOriginal, reZh)
+                    } else currentAligned
+
+                    val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(finalAligned, cachedAnnotations)
                     _uiState.update {
                         it.copy(
+                            alignedLyrics = finalAligned,
                             songStory = cachedStory,
                             lineAnnotations = lineMap,
                             annotationLoadState = com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADED
@@ -736,13 +777,27 @@ class LyricBookletViewModel @Inject constructor(
                 lastLoadedAnnotationTrackId = track.id
                 currentTrackRawAnnotations = annotations
                 val currentAligned = _uiState.value.alignedLyrics
+                val refFragments = annotations.map { it.lyricFragment }
+                val curTrack = getCurrentTrack()
+                val hasAsterisks = currentAligned.any { it.original.contains('*') || (it.translation?.contains('*') == true) }
+
+                val finalAligned = if (hasAsterisks && curTrack != null && refFragments.isNotEmpty()) {
+                    val decensoredOrig = LyricSanitizer.decensorLyrics(curTrack.originalLyrics ?: "", refFragments)
+                    val decensoredZh = LyricSanitizer.decensorChineseLyrics(curTrack.translatedLyrics, decensoredOrig)
+                    viewModelScope.launch(Dispatchers.IO) {
+                        repository.updateTrackTranslation(curTrack.id, curTrack.translatedTitle, decensoredOrig, decensoredZh)
+                    }
+                    LyricAligner.align(decensoredOrig, decensoredZh)
+                } else currentAligned
+
                 val lineMap = LyricFragmentMatcher.matchAnnotationsToLines(
-                    currentAligned,
+                    finalAligned,
                     annotations
                 )
                 val hasContent = (story != null || lineMap.isNotEmpty())
                 _uiState.update {
                     it.copy(
+                        alignedLyrics = finalAligned,
                         songStory = story ?: it.songStory,
                         lineAnnotations = lineMap,
                         isLoadingAnnotations = false,
