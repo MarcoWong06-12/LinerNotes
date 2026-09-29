@@ -183,10 +183,18 @@ object LyricSanitizer {
                     sb.append(stageText.substring(lastEnd, wordMatch.range.first))
                     val word = wordMatch.value
                     if (word.contains('*')) {
-                        val rep = if (wordIdx < refWords.size) {
+                        var rep = if (wordIdx < refWords.size) {
                             refWords[wordIdx]
                         } else {
                             refWords.firstOrNull { Math.abs(it.length - word.length) <= 1 } ?: word
+                        }
+                        val letters = word.filter { it.isLetter() }
+                        if (letters.isNotEmpty()) {
+                            if (letters.all { it.isUpperCase() }) {
+                                rep = rep.uppercase()
+                            } else if (letters.first().isUpperCase()) {
+                                rep = rep.replaceFirstChar { it.uppercase() }
+                            }
                         }
                         sb.append(rep)
                     } else {
