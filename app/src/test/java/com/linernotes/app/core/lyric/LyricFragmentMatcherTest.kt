@@ -4,6 +4,7 @@ import com.linernotes.app.data.local.entity.LyricAnnotationEntity
 import com.linernotes.app.domain.model.BilingualLyricLine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -40,7 +41,7 @@ class LyricFragmentMatcherTest {
     }
 
     @Test
-    fun testMultiLineFragmentMatching() {
+    fun testMultiLineFragmentMatching_anchorsOnlyAtStart() {
         val lines = listOf(
             BilingualLyricLine(1, "I hope we feel like this forever", "希望我们能一直像这样"),
             BilingualLyricLine(2, "Forever, forever ever? Forever ever?", "永远？永远永远？"),
@@ -65,14 +66,16 @@ class LyricFragmentMatcherTest {
         )
 
         val matchMap = LyricFragmentMatcher.matchAnnotationsToLines(lines, annotations)
-        assertEquals(4, matchMap.size)
-        for (i in 0..3) {
-            assertEquals(42L, matchMap[i]?.id)
-        }
+        // 多行段落典故仅锚定在起始行，严禁在后续每一行重复铺撒
+        assertEquals(1, matchMap.size)
+        assertEquals(42L, matchMap[0]?.id)
+        assertNull(matchMap[1])
+        assertNull(matchMap[2])
+        assertNull(matchMap[3])
     }
 
     @Test
-    fun testChineseFragmentMatching() {
+    fun testChineseFragmentMatching_anchorsOnlyAtStart() {
         val lines = listOf(
             BilingualLyricLine(1, "故事的小黄花 从出生那年就飘着", ""),
             BilingualLyricLine(2, "还要多久 我才能在妳身边？", ""),
@@ -89,9 +92,42 @@ class LyricFragmentMatcherTest {
         )
 
         val matchMap = LyricFragmentMatcher.matchAnnotationsToLines(lines, annotations)
-        assertEquals(2, matchMap.size)
+        assertEquals(1, matchMap.size)
         assertEquals(99L, matchMap[1]?.id)
-        assertEquals(99L, matchMap[2]?.id)
+        assertNull(matchMap[2])
+    }
+
+    @Test
+    fun testSpecificSingleLineTakesPrecedenceOverPassage() {
+        val lines = listOf(
+            BilingualLyricLine(1, "Hit me", ""),
+            BilingualLyricLine(2, "When the four corners of this cocoon collide", ""),
+            BilingualLyricLine(3, "You'll slip through the cracks hoping that you'll survive", ""),
+            BilingualLyricLine(4, "Gather your wind, take a deep look inside", "")
+        )
+
+        val passageAnnotation = LyricAnnotationEntity(
+            id = 10,
+            trackId = 1L,
+            lyricFragment = "Hit me\nWhen the four corners of this cocoon collide\nYou'll slip through the cracks hoping that you'll survive\nGather your wind, take a deep look inside",
+            explanationText = "Passage background on James Brown sample..."
+        )
+
+        val specificAnnotation = LyricAnnotationEntity(
+            id = 20,
+            trackId = 1L,
+            lyricFragment = "You'll slip through the cracks hoping that you'll survive",
+            explanationText = "Specific note about cracks..."
+        )
+
+        val matchMap = LyricFragmentMatcher.matchAnnotationsToLines(lines, listOf(passageAnnotation, specificAnnotation))
+        // 行 0 挂载大段落典故
+        assertEquals(10L, matchMap[0]?.id)
+        // 行 2 挂载单行精准典故
+        assertEquals(20L, matchMap[2]?.id)
+        // 行 1 与行 3 保持清爽干净，不重复显示行 0 的引言
+        assertNull(matchMap[1])
+        assertNull(matchMap[3])
     }
 
     @Test
@@ -139,9 +175,9 @@ class LyricFragmentMatcherTest {
         )
 
         val matchMap = LyricFragmentMatcher.matchAnnotationsToLines(lines, annotations)
-        assertEquals(3, matchMap.size)
+        assertEquals(1, matchMap.size)
         assertEquals(88L, matchMap[0]?.id)
-        assertEquals(88L, matchMap[1]?.id)
-        assertEquals(88L, matchMap[2]?.id)
+        assertNull(matchMap[1])
+        assertNull(matchMap[2])
     }
 }

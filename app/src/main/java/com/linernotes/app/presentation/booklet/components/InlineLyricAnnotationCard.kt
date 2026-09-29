@@ -85,7 +85,13 @@ fun InlineLyricAnnotationCard(
     }
 
     val lyricFragmentDisplay = remember(annotation.lyricFragment, isTraditional) {
-        if (isTraditional) ChineseConverter.toTraditional(annotation.lyricFragment) else annotation.lyricFragment
+        val converted = if (isTraditional) ChineseConverter.toTraditional(annotation.lyricFragment) else annotation.lyricFragment
+        val lines = converted.lines().map { it.trim() }.filter { it.isNotBlank() }
+        if (lines.size > 2) {
+            "${lines.take(2).joinToString(" / ")} … (${if (isTraditional) "共" else "共"} ${lines.size} ${if (isTraditional) "行" else "行"})"
+        } else {
+            lines.joinToString(" / ")
+        }
     }
 
     Surface(

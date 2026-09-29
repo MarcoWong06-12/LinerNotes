@@ -819,7 +819,7 @@ fun LyricBookletScreen(
                     // 2. Genius 歌词典故与考据 (状态透明与一键重检)
                     item {
                         val hasAnnotations = state.lineAnnotations.isNotEmpty() || state.songStory != null
-                        val annotCount = state.lineAnnotations.size + (if (state.songStory != null) 1 else 0)
+                        val annotCount = state.lineAnnotations.values.distinctBy { it.id }.size + (if (state.songStory != null) 1 else 0)
                         val annotLabel = when {
                             state.isLoadingAnnotations -> if (state.isTraditionalMode) "典故檢索中..." else "典故检索中..."
                             hasAnnotations -> if (state.isTraditionalMode) "典故 (${annotCount})" else "典故 (${annotCount})"
@@ -2041,11 +2041,22 @@ private fun LyricLineItem(
                         tint = Color(0xFFFFD54F).copy(alpha = 0.95f),
                         modifier = Modifier.size(11.dp)
                     )
+                    val isPassage = remember(annotation.lyricFragment) {
+                        annotation.lyricFragment.lines().count { it.isNotBlank() } > 1
+                    }
                     Text(
                         text = if (annotation.isVerified) {
-                            if (isTraditional) "認證典故" else "认证典故"
+                            if (isPassage) {
+                                if (isTraditional) "認證典故 (段落)" else "认证典故 (段落)"
+                            } else {
+                                if (isTraditional) "認證典故" else "认证典故"
+                            }
                         } else {
-                            if (isTraditional) "典故" else "典故"
+                            if (isPassage) {
+                                if (isTraditional) "典故 (段落)" else "典故 (段落)"
+                            } else {
+                                if (isTraditional) "典故" else "典故"
+                            }
                         },
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 11.sp,

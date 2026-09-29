@@ -4,16 +4,21 @@ import com.linernotes.app.core.util.ChineseConverter
 import com.linernotes.app.core.util.HtmlUtils
 import com.linernotes.app.data.local.entity.LyricAnnotationEntity
 import com.linernotes.app.domain.model.BilingualLyricLine
+import kotlin.math.max
 
 object LyricFragmentMatcher {
 
-    private val PUNCTUATION_REGEX = Regex("""[,\.\?!\-\'\"“”‘’\(\)\[\]{}，。？！、“”‘’…—~：；:;·]+""")
-    private val SECTION_HEADER_REGEX = Regex("""^\[(?:verse|chorus|hook|bridge|intro|outro|pre-chorus|break|interlude).*?\]$""", RegexOption.IGNORE_CASE)
+    private val PUNCTUATION_REGEX = Regex("""[,\.\?!\-\'\"“”‘’\(\)\[\]{}，。？！、“”‘’…—~：；:;·\*]+""")
+    private val SECTION_HEADER_REGEX = Regex("""^\[(?:verse|chorus|hook|bridge|intro|outro|pre-chorus|break|interlude|refrain|produced|part).*?\]$""", RegexOption.IGNORE_CASE)
     private val WHITESPACE_REGEX = Regex("""\s+""")
 
     /**
-     * 将典故注释列表精确或模糊锚定至当前歌词行列表。
-     * 返回以歌词行索引 (lineIndex) 为键、关联注释实体为值的映射表。
+     * 将典故注释列表精确锚定至歌词行。
+     * 核心原则：
+     * 1. 单行典故精确匹配对应的单条歌词行；
+     * 2. 多行段落典故（Passage/Stanza）精准识别其在歌词中出现的连续区间，并【仅锚定在起始行】，
+     *    严禁向下重复扩散至后续每一行，彻底杜绝“后行歌词显示前行无关引言/倒错”现象；
+     * 3. 单句高精度注释优先于大段落注释，避免具体金句被宽泛段落注释覆盖。
      */
     fun matchAnnotationsToLines(
         lines: List<BilingualLyricLine>,
@@ -21,43 +26,119 @@ object LyricFragmentMatcher {
     ): Map<Int, LyricAnnotationEntity> {
         if (lines.isEmpty() || annotations.isEmpty()) return emptyMap()
 
-        val result = mutableMapOf<Int, LyricAnnotationEntity>()
-        val normalizedLines = lines.map { line ->
-            normalizeText(line.original)
-        }
+        val normalizedLines = lines.map { normalizeText(it.original) }
+
+        // 区分单行与多行注释
+        val singleLineAnnotations = mutableListOf<LyricAnnotationEntity>()
+        val multiLineAnnotations = mutableListOf<Pair<LyricAnnotationEntity, List<String>>>()
 
         for (annotation in annotations) {
             val frag = annotation.lyricFragment.trim()
             if (frag.isBlank()) continue
 
-            // 检查是否为多行歌词片段
-            val fragLines = frag.lines()
+            val cleanedLines = frag.lines()
                 .map { normalizeText(it) }
                 .filter { it.isNotBlank() && !SECTION_HEADER_REGEX.matches(it) }
 
-            if (fragLines.isEmpty()) {
-                // 如果 fragment 本身是纯节标题（如 [Verse 3: Big Boi]），尝试直接对齐原词
-                val normSingle = normalizeText(frag)
-                matchSingleSegment(normSingle, normalizedLines, annotation, result)
-            } else {
-                for (normFragLine in fragLines) {
-                    matchSingleSegment(normFragLine, normalizedLines, annotation, result)
+            when {
+                cleanedLines.isEmpty() -> {
+                    val single = normalizeText(frag)
+                    if (single.isNotBlank() && !SECTION_HEADER_REGEX.matches(single)) {
+                        singleLineAnnotations.add(annotation)
+                    }
+                }
+                cleanedLines.size == 1 -> {
+                    singleLineAnnotations.add(annotation)
+                }
+                else -> {
+                    multiLineAnnotations.add(Pair(annotation, cleanedLines))
+                }
+            }
+        }
+
+        val result = mutableMapOf<Int, LyricAnnotationEntity>()
+        val lineScores = mutableMapOf<Int, Float>()
+
+        // 1. 第一阶段：匹配单行注释（最高精确度与特异性）
+        for (annotation in singleLineAnnotations) {
+            val normFrag = normalizeText(annotation.lyricFragment)
+            if (normFrag.length < 3) continue
+
+            var bestIdx = -1
+            var bestScore = 0.65f // 设定严格匹配阈值，杜绝 4 字符通用单词（如 baby, yeah, fuck）泛滥乱匹配
+
+            for (i in normalizedLines.indices) {
+                val normLine = normalizedLines[i]
+                if (normLine.isBlank()) continue
+
+                val score = calculateLineSimilarity(normLine, normFrag)
+                if (score > bestScore) {
+                    bestScore = score
+                    bestIdx = i
                 }
             }
 
-            // 支持多行片段跨行滑动窗口比对 (2行连续歌词对齐)
-            val fullNormFrag = normalizeText(frag)
-            if (fragLines.size > 1 && fullNormFrag.length >= 10 && normalizedLines.size >= 2) {
-                for (i in 0 until normalizedLines.size - 1) {
-                    val line1 = normalizedLines[i]
-                    val line2 = normalizedLines[i + 1]
-                    if (line1.isBlank() || line2.isBlank()) continue
-                    val combined = "$line1 $line2"
-                    if (fullNormFrag.contains(combined) || combined.contains(fullNormFrag)) {
-                        if (result[i] == null || result[i]!!.lyricFragment.length < annotation.lyricFragment.length) {
-                            result[i] = annotation
-                        }
+            if (bestIdx >= 0) {
+                val existingScore = lineScores[bestIdx] ?: 0f
+                val existing = result[bestIdx]
+                if (existing == null || isHigherPriority(annotation, bestScore, existing, existingScore)) {
+                    result[bestIdx] = annotation
+                    lineScores[bestIdx] = bestScore
+                }
+            }
+        }
+
+        // 2. 第二阶段：匹配多行段落注释（严控仅锚定在连续区间起始行）
+        // 按段落行数升序排序，使更具体的 2~4 行段落优先锚定，超长段落补充未覆盖区间
+        multiLineAnnotations.sortBy { it.second.size }
+
+        for ((annotation, fragLines) in multiLineAnnotations) {
+            val numFragLines = fragLines.size
+            if (numFragLines > normalizedLines.size) continue
+
+            var bestStartIdx = -1
+            var bestAvgScore = 0.55f
+
+            for (startIdx in 0..(normalizedLines.size - numFragLines)) {
+                var totalScore = 0f
+                var validLineMatches = 0
+
+                for (offset in 0 until numFragLines) {
+                    val line = normalizedLines[startIdx + offset]
+                    val fragLine = fragLines[offset]
+                    val sim = calculateLineSimilarity(line, fragLine)
+                    totalScore += sim
+                    if (sim >= 0.50f) {
+                        validLineMatches++
                     }
+                }
+
+                val avgScore = totalScore / numFragLines
+                val requiredMatches = max(2, (numFragLines * 0.5).toInt())
+                if (avgScore > bestAvgScore && validLineMatches >= requiredMatches) {
+                    bestAvgScore = avgScore
+                    bestStartIdx = startIdx
+                }
+            }
+
+            if (bestStartIdx >= 0) {
+                // 查找该连续区间内最适宜的挂载点（优先起始行；若起始行已有单行精确注释，则顺延至该区间首个空闲行）
+                var anchorIdx = -1
+                for (offset in 0 until numFragLines) {
+                    val idx = bestStartIdx + offset
+                    if (!result.containsKey(idx)) {
+                        anchorIdx = idx
+                        break
+                    }
+                }
+
+                if (!result.containsKey(bestStartIdx)) {
+                    anchorIdx = bestStartIdx
+                }
+
+                if (anchorIdx >= 0 && !result.containsKey(anchorIdx)) {
+                    result[anchorIdx] = annotation
+                    lineScores[anchorIdx] = bestAvgScore
                 }
             }
         }
@@ -65,46 +146,58 @@ object LyricFragmentMatcher {
         return result
     }
 
-    private fun matchSingleSegment(
-        normFrag: String,
-        normalizedLines: List<String>,
-        annotation: LyricAnnotationEntity,
-        result: MutableMap<Int, LyricAnnotationEntity>
-    ) {
-        if (normFrag.length < 3) return
+    /**
+     * 计算单行歌词与注释引文的高精度语义相似度 (0.0 ~ 1.0)
+     */
+    private fun calculateLineSimilarity(line: String, frag: String): Float {
+        if (line.isBlank() || frag.isBlank()) return 0f
+        if (line == frag) return 1.0f
 
-        for (i in normalizedLines.indices) {
-            val normLine = normalizedLines[i]
-            if (normLine.isBlank()) continue
+        // 相互包含：仅当引文具有足够长度（至少 6 字符且包含空格），避免单一常用词误伤
+        if (frag.length >= 6 && frag.contains(' ') && line.contains(frag)) {
+            val ratio = frag.length.toFloat() / line.length.toFloat()
+            return 0.85f + (ratio * 0.14f)
+        }
+        if (line.length >= 6 && line.contains(' ') && frag.contains(line)) {
+            val ratio = line.length.toFloat() / frag.length.toFloat()
+            return 0.80f + (ratio * 0.15f)
+        }
 
-            // 1. 完全或相互包含匹配
-            if (normLine == normFrag ||
-                (normLine.length >= 4 && normFrag.contains(normLine)) ||
-                (normFrag.length >= 4 && normLine.contains(normFrag))
-            ) {
-                // 仅当当前行未被更长的注释占用时填充
-                val existing = result[i]
-                if (existing == null || existing.lyricFragment.length < annotation.lyricFragment.length) {
-                    result[i] = annotation
-                }
-                continue
-            }
+        // 词元（Token）交集相似度计算
+        val lineWords = line.split(WHITESPACE_REGEX).filter { it.length >= 2 }
+        val fragWords = frag.split(WHITESPACE_REGEX).filter { it.length >= 2 }
+        if (lineWords.isEmpty() || fragWords.isEmpty()) return 0f
 
-            // 2. 单词词元交集匹配 (Word Token Overlap)
-            val lineWords = normLine.split(WHITESPACE_REGEX).filter { it.length >= 2 }
-            val fragWords = normFrag.split(WHITESPACE_REGEX).filter { it.length >= 2 }
-
-            if (lineWords.size >= 3 && fragWords.size >= 3) {
-                val matchedWords = lineWords.count { fragWords.contains(it) }
-                val ratio = matchedWords.toFloat() / lineWords.size.toFloat()
-                if (ratio >= 0.60f) {
-                    val existing = result[i]
-                    if (existing == null || existing.lyricFragment.length < annotation.lyricFragment.length) {
-                        result[i] = annotation
-                    }
-                }
+        var matchedCount = 0
+        for (lw in lineWords) {
+            if (fragWords.contains(lw)) {
+                matchedCount++
+            } else if (lw.endsWith("ing") && fragWords.contains(lw.removeSuffix("ing") + "in")) {
+                matchedCount++
+            } else if (lw.endsWith("in") && fragWords.contains(lw.removeSuffix("in") + "ing")) {
+                matchedCount++
             }
         }
+
+        val recall = matchedCount.toFloat() / lineWords.size.toFloat()
+        val precision = matchedCount.toFloat() / fragWords.size.toFloat()
+        if (recall + precision <= 0f) return 0f
+
+        val f1 = (2 * recall * precision) / (recall + precision)
+        return if (matchedCount >= 2) f1 else 0f
+    }
+
+    private fun isHigherPriority(
+        candidate: LyricAnnotationEntity,
+        candidateScore: Float,
+        current: LyricAnnotationEntity,
+        currentScore: Float
+    ): Boolean {
+        if (candidate.isVerified && !current.isVerified) return true
+        if (!candidate.isVerified && current.isVerified) return false
+        if (candidateScore > currentScore + 0.15f) return true
+        if (candidate.votesTotal > current.votesTotal + 10) return true
+        return candidateScore > currentScore
     }
 
     fun unescapeHtml(text: String): String = HtmlUtils.unescapeHtml(text)
