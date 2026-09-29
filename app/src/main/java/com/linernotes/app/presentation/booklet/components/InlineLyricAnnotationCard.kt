@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.linernotes.app.core.lyric.AiAnnotationCurator
+import com.linernotes.app.core.lyric.BilingualSentenceAligner
 import com.linernotes.app.core.util.ChineseConverter
 import com.linernotes.app.data.local.entity.LyricAnnotationEntity
 import com.linernotes.app.presentation.common.BouncyIconButton
@@ -309,17 +310,62 @@ fun InlineLyricAnnotationCard(
                 }
             }
 
-            // 3. 典故正文解析
-            Text(
-                text = displayText,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 13.5.sp,
-                    lineHeight = 20.sp,
-                    letterSpacing = 0.2.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
+            // 3. 典故正文解析 (中英对照：中文一句话下面紧跟着英文原文，小小的不要占太多空间)
+            if (!isChinese && hasTranslation && !showOriginalText) {
+                val alignedParagraphs = remember(annotation.explanationText, annotation.explanationTranslation, isTraditional) {
+                    val trans = if (isTraditional) ChineseConverter.toTraditional(annotation.explanationTranslation ?: "") else (annotation.explanationTranslation ?: "")
+                    BilingualSentenceAligner.align(annotation.explanationText, trans)
+                }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    alignedParagraphs.forEach { para ->
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            para.units.forEach { unit ->
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    val zhText = if (isTraditional) ChineseConverter.toTraditional(unit.chinese) else unit.chinese
+                                    if (zhText.isNotBlank()) {
+                                        Text(
+                                            text = zhText,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontSize = 13.5.sp,
+                                                lineHeight = 19.5.sp,
+                                                letterSpacing = 0.2.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    if (unit.original.isNotBlank()) {
+                                        Text(
+                                            text = unit.original,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontSize = 11.5.sp,
+                                                lineHeight = 16.sp,
+                                                letterSpacing = 0.1.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f)
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    text = displayText,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 13.5.sp,
+                        lineHeight = 20.sp,
+                        letterSpacing = 0.2.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             // 4. 配图横向微缩画廊 (如有)
             if (imageUrls.isNotEmpty()) {

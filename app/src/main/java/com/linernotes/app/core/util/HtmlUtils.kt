@@ -11,6 +11,11 @@ object HtmlUtils {
     fun unescapeHtml(text: String): String {
         if (text.isBlank()) return text
         var res = text
+            .replace("<br>", "\n")
+            .replace("<br/>", "\n")
+            .replace("<br />", "\n")
+            .replace("</p>", "\n")
+            .replace("<p>", "")
             .replace("&amp;#39;", "'")
             .replace("&#39;", "'")
             .replace("&#x27;", "'")

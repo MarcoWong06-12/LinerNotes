@@ -192,6 +192,13 @@ class AnnotationRepository @Inject constructor(
                     s
                 } else cachedStory
 
+                // 自动排查并自愈历史损坏/截断的翻译缓存（如旧版仅截取第一行导致的残缺翻译）
+                val hasTruncatedStory = fixedStory != null && isTruncatedTranslation(fixedStory.descriptionPlain, fixedStory.descriptionTranslation)
+                val hasTruncatedAnnots = validCachedAnnotations.any { isTruncatedTranslation(it.explanationText, it.explanationTranslation) }
+                if (hasTruncatedStory || hasTruncatedAnnots) {
+                    launchBackgroundTranslation(trackId, fixedStory, validCachedAnnotations, isTraditionalTarget)
+                }
+
                 return@withContext Result.success(Pair(fixedStory, validCachedAnnotations.filter { it.source == "GENIUS" }))
             }
         }
@@ -285,55 +292,7 @@ class AnnotationRepository @Inject constructor(
                 negativeCache.remove(trackId)
 
                 // 4. 在统一受管的 repositoryScope 中执行后台异步中文对照翻译
-                translationJobs[trackId]?.cancel()
-                val job = repositoryScope.launch {
-                    try {
-                        // 4.1 异步翻译背景故事
-                        if (storyEntity != null && !storyEntity.descriptionPlain.isBlank() &&
-                            !AiAnnotationCurator.isAlreadyChinese(storyEntity.descriptionPlain) &&
-                            storyEntity.descriptionTranslation.isNullOrBlank()
-                        ) {
-                            try {
-                                val transStory = translationService.translateText(storyEntity.descriptionPlain, "zh")
-                                if (!transStory.isNullOrBlank()) {
-                                    val finalStoryTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(transStory) else transStory
-                                    val updatedStory = storyEntity.copy(descriptionTranslation = finalStoryTrans)
-                                    lyricAnnotationDao.updateSongStory(updatedStory)
-                                }
-                            } catch (e: Exception) { /* ignore */ }
-                        }
-
-                        // 4.2 顺序/温和翻译各条歌词注释与片段 (带延时防限流)
-                        for (annot in savedAnnotations) {
-                            try {
-                                var updated = annot
-                                if (!AiAnnotationCurator.isAlreadyChinese(annot.lyricFragment) && annot.lyricTranslation.isNullOrBlank()) {
-                                    val lyricTrans = translationService.translateText(annot.lyricFragment, "zh")
-                                    if (!lyricTrans.isNullOrBlank()) {
-                                        val finalLyricTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(lyricTrans) else lyricTrans
-                                        updated = updated.copy(lyricTranslation = finalLyricTrans)
-                                    }
-                                }
-                                if (!AiAnnotationCurator.isAlreadyChinese(annot.explanationText) && annot.explanationTranslation.isNullOrBlank()) {
-                                    val trans = translationService.translateText(annot.explanationText, "zh")
-                                    if (!trans.isNullOrBlank()) {
-                                        val finalTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(trans) else trans
-                                        updated = updated.copy(explanationTranslation = finalTrans)
-                                    }
-                                }
-                                if (updated != annot && updated.id > 0L) {
-                                    lyricAnnotationDao.updateAnnotation(updated)
-                                }
-                                delay(100)
-                            } catch (e: Exception) { /* ignore */ }
-                        }
-                    } finally {
-                        coroutineContext[kotlinx.coroutines.Job]?.let { thisJob ->
-                            translationJobs.remove(trackId, thisJob)
-                        }
-                    }
-                }
-                translationJobs[trackId] = job
+                launchBackgroundTranslation(trackId, storyEntity, savedAnnotations, isTraditionalTarget)
 
                 return@withContext Result.success(Pair(storyEntity, savedAnnotations))
             } else {
@@ -375,7 +334,7 @@ class AnnotationRepository @Inject constructor(
         var updated = annotation
 
         // 翻译歌词片段
-        if (updated.lyricTranslation.isNullOrBlank() && !AiAnnotationCurator.isAlreadyChinese(updated.lyricFragment)) {
+        if (!AiAnnotationCurator.isAlreadyChinese(updated.lyricFragment)) {
             val transLyric = translationService.translateText(updated.lyricFragment, "zh")
             if (!transLyric.isNullOrBlank()) {
                 val finalLyric = if (isTraditionalTarget) ChineseConverter.toTraditional(transLyric) else transLyric
@@ -383,8 +342,8 @@ class AnnotationRepository @Inject constructor(
             }
         }
 
-        // 翻译典故解说
-        if (updated.explanationTranslation.isNullOrBlank() && !AiAnnotationCurator.isAlreadyChinese(updated.explanationText)) {
+        // 翻译典故解说 (无条件重新完整翻译，杜绝受历史截断数据阻塞)
+        if (!AiAnnotationCurator.isAlreadyChinese(updated.explanationText)) {
             val targetIso = TranslationTargetLanguage.fromCode(aiPreferences.targetLanguage).fallbackIso
             val translated = translationService.translateText(updated.explanationText, targetIso)
             val baseTrans = if (!translated.isNullOrBlank()) translated else updated.explanationText
@@ -400,10 +359,6 @@ class AnnotationRepository @Inject constructor(
      * 针对外文歌曲背景故事进行本地中文/目标语言机器翻译并持久化
      */
     suspend fun translateSongStory(story: SongStoryEntity): SongStoryEntity = withContext(Dispatchers.IO) {
-        if (!story.descriptionTranslation.isNullOrBlank()) {
-            return@withContext story
-        }
-
         if (AiAnnotationCurator.isAlreadyChinese(story.descriptionPlain)) {
             return@withContext story
         }
@@ -418,5 +373,74 @@ class AnnotationRepository @Inject constructor(
         val updated = story.copy(descriptionTranslation = finalTrans)
         lyricAnnotationDao.updateSongStory(updated)
         updated
+    }
+
+    private fun isTruncatedTranslation(original: String, translation: String?): Boolean {
+        if (translation.isNullOrBlank()) return true
+        val orig = original.trim()
+        val trans = translation.trim()
+        if (orig.length >= 35 && trans.length < 15) return true
+        if (orig.length >= 80 && trans.length < orig.length * 0.15) return true
+        return false
+    }
+
+    private fun launchBackgroundTranslation(
+        trackId: Long,
+        storyEntity: SongStoryEntity?,
+        savedAnnotations: List<LyricAnnotationEntity>,
+        isTraditionalTarget: Boolean
+    ) {
+        translationJobs[trackId]?.cancel()
+        val job = repositoryScope.launch {
+            try {
+                // 1. 异步翻译背景故事（针对空翻译或历史被截断的残缺翻译）
+                if (storyEntity != null && !storyEntity.descriptionPlain.isBlank() &&
+                    !AiAnnotationCurator.isAlreadyChinese(storyEntity.descriptionPlain) &&
+                    isTruncatedTranslation(storyEntity.descriptionPlain, storyEntity.descriptionTranslation)
+                ) {
+                    try {
+                        val transStory = translationService.translateText(storyEntity.descriptionPlain, "zh")
+                        if (!transStory.isNullOrBlank()) {
+                            val finalStoryTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(transStory) else transStory
+                            val updatedStory = storyEntity.copy(descriptionTranslation = finalStoryTrans)
+                            lyricAnnotationDao.updateSongStory(updatedStory)
+                        }
+                    } catch (e: Exception) { /* ignore */ }
+                }
+
+                // 2. 顺序/温和翻译各条歌词注释与片段 (带延时防限流)
+                for (annot in savedAnnotations) {
+                    try {
+                        var updated = annot
+                        if (!AiAnnotationCurator.isAlreadyChinese(annot.lyricFragment) &&
+                            (annot.lyricTranslation.isNullOrBlank() || isTruncatedTranslation(annot.lyricFragment, annot.lyricTranslation))
+                        ) {
+                            val lyricTrans = translationService.translateText(annot.lyricFragment, "zh")
+                            if (!lyricTrans.isNullOrBlank()) {
+                                val finalLyricTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(lyricTrans) else lyricTrans
+                                updated = updated.copy(lyricTranslation = finalLyricTrans)
+                            }
+                        }
+                        val needsExplanationTrans = isTruncatedTranslation(annot.explanationText, annot.explanationTranslation)
+                        if (!AiAnnotationCurator.isAlreadyChinese(annot.explanationText) && needsExplanationTrans) {
+                            val trans = translationService.translateText(annot.explanationText, "zh")
+                            if (!trans.isNullOrBlank()) {
+                                val finalTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(trans) else trans
+                                updated = updated.copy(explanationTranslation = finalTrans)
+                            }
+                        }
+                        if (updated != annot && updated.id > 0L) {
+                            lyricAnnotationDao.updateAnnotation(updated)
+                        }
+                        delay(100)
+                    } catch (e: Exception) { /* ignore */ }
+                }
+            } finally {
+                coroutineContext[kotlinx.coroutines.Job]?.let { thisJob ->
+                    translationJobs.remove(trackId, thisJob)
+                }
+            }
+        }
+        translationJobs[trackId] = job
     }
 }

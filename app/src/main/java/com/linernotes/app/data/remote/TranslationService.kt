@@ -157,55 +157,58 @@ class TranslationService(
     }
 
     /**
-     * 底层文本翻译逻辑：
-     * 针对多行歌词进行 15 行智能分块，并通过 supervisorScope 并发发起翻译，
-     * 既规避单次请求实体大小限制，又将 60 行歌词总耗时压缩至 400ms 以内。
+     * 底层文本翻译逻辑（支持标题、短语、长注释与整篇背景故事）：
+     * 1. 采用自然段落 (\n\s*\n) 语义切分，杜绝破坏句意和跨段截断。
+     * 2. 逐段通过有道移动端极速翻译，完整保留全部译文字符行 (杜绝 firstOrNull 截断)。
+     * 3. 自动多重容灾降级（有道 -> Google Translate -> MyMemory）。
      */
     suspend fun translateText(text: String, targetIso: String): String? = withContext(Dispatchers.IO) {
         if (text.isBlank()) return@withContext ""
 
-        val rawLines = text.lines()
-        if (rawLines.size <= 1) {
-            // 单行文本（如曲目标题）
-            val youdaoSingle = translateChunkViaYoudao(text)
-            if (!youdaoSingle.isNullOrEmpty()) {
-                val line = youdaoSingle.firstOrNull()?.trim()
-                if (!line.isNullOrBlank()) return@withContext line
-            }
-            val google = translateViaGoogle(text, targetIso, "https://translate.googleapis.com/translate_a/single")
-            if (!google.isNullOrBlank()) return@withContext google
-            return@withContext translateViaMyMemory(text, targetIso)
-        }
+        // 按段落 (\n\s*\n) 划分，保护段落上下文与双语对齐结构
+        val paragraphs = text.split(Regex("""\n\s*\n"""))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
 
-        // 多行歌词分块并发翻译 (每块 15 行)
-        val chunks = rawLines.chunked(CHUNK_LINE_COUNT)
+        if (paragraphs.isEmpty()) return@withContext text
+
         try {
-            val translatedChunks = supervisorScope {
-                chunks.map { chunk ->
+            val translatedParagraphs = supervisorScope {
+                paragraphs.map { para ->
                     async {
-                        val chunkText = chunk.joinToString("\n")
-                        val youdaoResult = translateChunkViaYoudao(chunkText)
-                        if (youdaoResult != null && youdaoResult.isNotEmpty()) {
-                            youdaoResult
-                        } else {
-                            // 单块容灾：回退 Google 或 MyMemory
-                            val googleFallback = translateViaGoogle(chunkText, targetIso, "https://translate.googleapis.com/translate_a/single")
-                            if (!googleFallback.isNullOrBlank()) {
-                                googleFallback.lines()
-                            } else {
-                                translateViaMyMemory(chunkText, targetIso)?.lines() ?: chunk
-                            }
-                        }
+                        translateSingleParagraph(para, targetIso)
                     }
                 }.awaitAll()
             }
-            translatedChunks.flatten().joinToString("\n")
+            translatedParagraphs.joinToString("\n\n")
         } catch (e: Exception) {
-            // 全量兜底
-            val googleResult = translateViaGoogle(text, targetIso, "https://translate.googleapis.com/translate_a/single")
-            if (!googleResult.isNullOrBlank()) return@withContext googleResult
-            translateViaMyMemory(text, targetIso)
+            // 全量容灾兜底
+            translateSingleParagraph(text, targetIso)
         }
+    }
+
+    /**
+     * 单段落高可靠完整翻译，绝不漏行、绝不截断
+     */
+    private suspend fun translateSingleParagraph(paragraph: String, targetIso: String): String {
+        if (paragraph.isBlank()) return ""
+
+        // 1. 优先使用有道移动端极速端点
+        val youdaoResult = translateChunkViaYoudao(paragraph)
+        if (!youdaoResult.isNullOrEmpty()) {
+            val fullTranslated = youdaoResult.joinToString("\n").trim()
+            if (fullTranslated.isNotBlank()) return fullTranslated
+        }
+
+        // 2. 容灾回退至 Google Translate 公共端点
+        val google = translateViaGoogle(paragraph, targetIso, "https://translate.googleapis.com/translate_a/single")
+        if (!google.isNullOrBlank()) return google.trim()
+
+        // 3. 容灾回退至 MyMemory
+        val myMemory = translateViaMyMemory(paragraph, targetIso)
+        if (!myMemory.isNullOrBlank()) return myMemory.trim()
+
+        return paragraph
     }
 
     /**

@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.linernotes.app.core.lyric.AiAnnotationCurator
+import com.linernotes.app.core.lyric.BilingualSentenceAligner
 import com.linernotes.app.core.util.ChineseConverter
 
 enum class BilingualDisplayTab {
@@ -103,12 +104,9 @@ fun BilingualContentView(
         mutableStateOf(if (hasTranslation) BilingualDisplayTab.PARALLEL else BilingualDisplayTab.ORIGINAL)
     }
 
-    val paragraphs = remember(originalText, effectiveTranslation) {
-        ParagraphAligner.align(originalText, effectiveTranslation)
+    val alignedParagraphs = remember(originalText, effectiveTranslation) {
+        BilingualSentenceAligner.align(originalText, effectiveTranslation)
     }
-
-    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val translationColor = if (isDark) Color(0xFFFFD54F).copy(alpha = 0.92f) else MaterialTheme.colorScheme.secondary
 
     Column(
         modifier = modifier
@@ -176,10 +174,11 @@ fun BilingualContentView(
         // 若原文已经是纯中文，直接以高雅内页版式渲染
         if (isAlreadyChinese) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                paragraphs.forEach { p ->
-                    val text = if (isTraditional) ChineseConverter.toTraditional(p.original) else p.original
+                alignedParagraphs.forEach { p ->
+                    val text = p.units.joinToString(" ") { it.original }
+                    val displayText = if (isTraditional) ChineseConverter.toTraditional(text) else text
                     Text(
-                        text = text,
+                        text = displayText,
                         style = MaterialTheme.typography.bodyLarge.copy(
                             fontSize = 15.sp,
                             lineHeight = 24.sp,
@@ -195,30 +194,37 @@ fun BilingualContentView(
         // 按照当前模式逐段展示
         when (selectedTab) {
             BilingualDisplayTab.PARALLEL -> {
-                // 1. 中英段落级精准并排对照：英文段落下方紧跟中文译文，去除了冗余卡片框，像歌词翻译一样自然优美
+                // 1. 中英逐句精准并排对照：中文一句话下面紧跟着英文原文，英文原文做小一点不占过多空间
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    paragraphs.forEach { item ->
-                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            // 英文原文段落
-                            Text(
-                                text = item.original,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontSize = 15.sp,
-                                    lineHeight = 23.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.90f)
-                                )
-                            )
+                    alignedParagraphs.forEach { para ->
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            para.units.forEach { unit ->
+                                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    // 1. 中文译文句子在上方 (主阅读字号)
+                                    val chineseText = if (isTraditional) ChineseConverter.toTraditional(unit.chinese) else unit.chinese
+                                    if (chineseText.isNotBlank()) {
+                                        Text(
+                                            text = chineseText,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontSize = 14.5.sp,
+                                                lineHeight = 22.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        )
+                                    }
 
-                            // 中文译文段落：英文下面直接跟着中文
-                            if (!item.translation.isNullOrBlank()) {
-                                Text(
-                                    text = item.translation,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 14.5.sp,
-                                        lineHeight = 23.sp,
-                                        color = translationColor
-                                    )
-                                )
+                                    // 2. 英文原文句子紧随其下 (字号偏小，不占过多空间)
+                                    if (unit.original.isNotBlank()) {
+                                        Text(
+                                            text = unit.original,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontSize = 12.sp,
+                                                lineHeight = 17.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f)
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -228,8 +234,9 @@ fun BilingualContentView(
             BilingualDisplayTab.CHINESE -> {
                 // 2. 纯中文流畅阅读视图
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    paragraphs.forEach { item ->
-                        val text = item.translation?.takeIf { it.isNotBlank() } ?: item.original
+                    alignedParagraphs.forEach { para ->
+                        val zhPara = para.units.map { it.chinese.ifBlank { it.original } }.joinToString(" ")
+                        val text = if (isTraditional) ChineseConverter.toTraditional(zhPara) else zhPara
                         Text(
                             text = text,
                             style = MaterialTheme.typography.bodyLarge.copy(
@@ -245,9 +252,10 @@ fun BilingualContentView(
             BilingualDisplayTab.ORIGINAL -> {
                 // 3. 纯英文原文视图
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    paragraphs.forEach { item ->
+                    alignedParagraphs.forEach { para ->
+                        val enPara = para.units.map { it.original }.joinToString(" ")
                         Text(
-                            text = item.original,
+                            text = enPara,
                             style = MaterialTheme.typography.bodyLarge.copy(
                                 fontSize = 15.sp,
                                 lineHeight = 23.sp
