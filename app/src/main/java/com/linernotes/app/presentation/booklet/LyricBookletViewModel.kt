@@ -31,6 +31,12 @@ import com.linernotes.app.core.lyric.LyricFragmentMatcher
 import com.linernotes.app.data.local.entity.LyricAnnotationEntity
 import com.linernotes.app.data.local.entity.SongStoryEntity
 import com.linernotes.app.data.repository.AnnotationRepository
+import android.content.Context
+import com.linernotes.app.core.media.CompanionPlaybackService
+import com.linernotes.app.core.media.MediaNotificationManager
+import com.linernotes.app.core.media.MediaPlaybackNotificationData
+import com.linernotes.app.core.media.PlaybackCommandHandler
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +55,7 @@ import javax.inject.Inject
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class LyricBookletViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val repository: AlbumRepository,
     val aiPreferences: AiPreferences,
     private val translationService: TranslationService,
@@ -56,10 +63,12 @@ class LyricBookletViewModel @Inject constructor(
     val shanlingBluetoothManager: ShanlingBluetoothManager,
     private val lyricOffsetDao: LyricOffsetDao,
     private val bookletDao: BookletDao,
-    private val annotationRepository: AnnotationRepository
+    private val annotationRepository: AnnotationRepository,
+    private val mediaNotificationManager: MediaNotificationManager
 ) : ViewModel() {
 
     private var currentAlbumId: String = ""
+    private var isNotificationActive: Boolean = false
     private var userTrackSelectionTimestamp = 0L
     private var userTrackSelectionLockoutMs = 3500L
     private var userSelectedTrackIndex = -1
@@ -154,6 +163,26 @@ class LyricBookletViewModel @Inject constructor(
                         it.copy(isAlbumPrewarming = false, prewarmProgress = null)
                     }
                 }
+            }
+        }
+        mediaNotificationManager.commandHandler = object : PlaybackCommandHandler {
+            override fun onPlay() {
+                startCompanion()
+            }
+            override fun onPause() {
+                pauseCompanion()
+            }
+            override fun onTogglePlay() {
+                toggleCompanionPlay()
+            }
+            override fun onNext() {
+                nextTrack()
+            }
+            override fun onPrevious() {
+                previousTrack()
+            }
+            override fun onSeekTo(posMs: Long) {
+                seekCompanion(posMs, notifyCdPlayer = true)
             }
         }
     }
@@ -315,6 +344,8 @@ class LyricBookletViewModel @Inject constructor(
                 userSelectedTrackIndex = index
             }
             val track = tracks[index]
+            companionAnchorTime = android.os.SystemClock.elapsedRealtime()
+            companionAnchorPositionMs = 0L
             val cleanLyrics = if (LyricSanitizer.hasCensorship(track.originalLyrics)) LyricSanitizer.decensorLyrics(track.originalLyrics ?: "") else track.originalLyrics
             val aligned = LyricAligner.align(cleanLyrics, track.translatedLyrics)
             val duration = computeTrackDuration(track, aligned)
@@ -335,6 +366,9 @@ class LyricBookletViewModel @Inject constructor(
                     annotationLoadState = com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADING
                 )
             }
+            if (isNotificationActive) {
+                updateMediaNotification()
+            }
             trackSelectionJob?.cancel()
             trackSelectionJob = viewModelScope.launch {
                 val cachedStory = annotationRepository.getSongStory(track.id)
@@ -348,6 +382,9 @@ class LyricBookletViewModel @Inject constructor(
                             lineAnnotations = lineMap,
                             annotationLoadState = com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADED
                         )
+                    }
+                    if (isNotificationActive) {
+                        updateMediaNotification()
                     }
                 }
 
@@ -367,6 +404,9 @@ class LyricBookletViewModel @Inject constructor(
                             trackDurationMs = durationWithOffset,
                             lineAnnotations = if (rematched.isNotEmpty()) rematched else it.lineAnnotations
                         )
+                    }
+                    if (isNotificationActive) {
+                        updateMediaNotification()
                     }
                 }
             }
@@ -422,11 +462,52 @@ class LyricBookletViewModel @Inject constructor(
         }
     }
 
+    private fun updateMediaNotification(forcePlayingState: Boolean? = null) {
+        if (!isNotificationActive && forcePlayingState != true) return
+        val state = _uiState.value
+        val tracks = state.albumWithTracks?.tracks ?: emptyList()
+        val track = tracks.getOrNull(state.currentTrackIndex)
+        val album = state.albumWithTracks?.album
+        val isPlaying = forcePlayingState ?: state.isCompanionPlaying
+
+        val activeLine = state.alignedLyrics.getOrNull(state.activeLineIndex)
+        val activeAnnot = state.lineAnnotations[state.activeLineIndex]
+
+        val lyricSnippet = activeLine?.let {
+            if (!it.translation.isNullOrBlank()) "${it.original} • ${it.translation}" else it.original
+        }
+        val annotSnippet = activeAnnot?.let {
+            (it.explanationTranslation ?: it.explanationText).replace("\n", " ").trim().take(60)
+        }
+
+        val trackTitle = track?.title ?: if (state.cdCurrentTrackNumber > 0) "Track ${state.cdCurrentTrackNumber}" else "Track ${state.currentTrackIndex + 1}"
+        val artist = album?.artist ?: state.cdDeviceName ?: "LinerNotes"
+        val albumTitle = album?.title ?: if (state.cdDeviceName != null) "CD 播放中" else ""
+
+        val data = MediaPlaybackNotificationData(
+            albumId = album?.id ?: "",
+            trackTitle = trackTitle,
+            artist = artist,
+            albumTitle = albumTitle,
+            coverUrl = album?.coverUrl,
+            isPlaying = isPlaying,
+            positionMs = state.currentPositionMs,
+            durationMs = state.trackDurationMs,
+            activeLyricSnippet = lyricSnippet,
+            activeAnnotationSnippet = annotSnippet,
+            hasPrevious = state.currentTrackIndex > 0,
+            hasNext = state.currentTrackIndex < (tracks.size - 1).coerceAtLeast(0)
+        )
+        CompanionPlaybackService.update(context, data)
+    }
+
     private fun startCompanionInternal() {
         companionJob?.cancel()
+        isNotificationActive = true
         _uiState.update { it.copy(isCompanionPlaying = true) }
         companionAnchorTime = android.os.SystemClock.elapsedRealtime()
         companionAnchorPositionMs = _uiState.value.currentPositionMs
+        updateMediaNotification(forcePlayingState = true)
         companionJob = viewModelScope.launch {
             while (true) {
                 kotlinx.coroutines.delay(100L)
@@ -451,15 +532,22 @@ class LyricBookletViewModel @Inject constructor(
                                 activeLineIndex = -1
                             )
                         }
+                        if (isNotificationActive) {
+                            updateMediaNotification(forcePlayingState = false)
+                        }
                         break
                     }
                 } else {
                     val activeIdx = findActiveLineIndex(currentState.alignedLyrics, currentPos)
+                    val lineChanged = activeIdx != currentState.activeLineIndex
                     _uiState.update {
                         it.copy(
                             currentPositionMs = currentPos,
                             activeLineIndex = activeIdx
                         )
+                    }
+                    if (lineChanged && isNotificationActive) {
+                        updateMediaNotification()
                     }
                 }
             }
@@ -478,6 +566,9 @@ class LyricBookletViewModel @Inject constructor(
         companionJob?.cancel()
         companionJob = null
         _uiState.update { it.copy(isCompanionPlaying = false) }
+        if (isNotificationActive) {
+            updateMediaNotification(forcePlayingState = false)
+        }
     }
 
     fun seekCompanion(targetMs: Long, notifyCdPlayer: Boolean = true) {
@@ -494,6 +585,9 @@ class LyricBookletViewModel @Inject constructor(
                 currentPositionMs = clamped,
                 activeLineIndex = activeIdx
             )
+        }
+        if (isNotificationActive) {
+            updateMediaNotification()
         }
         if (notifyCdPlayer && _uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
             shanlingBluetoothManager.seekTo((clamped / 1000).toInt())
@@ -660,6 +754,9 @@ class LyricBookletViewModel @Inject constructor(
                         }
                     )
                 }
+                if (isNotificationActive) {
+                    updateMediaNotification()
+                }
             }.onFailure {
                 lastLoadedAnnotationTrackId = null
                 val hasContent = (_uiState.value.songStory != null || _uiState.value.lineAnnotations.isNotEmpty())
@@ -719,6 +816,9 @@ class LyricBookletViewModel @Inject constructor(
                     selectedAnnotation = if (isSelectedMatch) updated else state.selectedAnnotation,
                     lineAnnotations = updatedMap
                 )
+            }
+            if (isNotificationActive) {
+                updateMediaNotification()
             }
         }
     }
@@ -802,6 +902,9 @@ class LyricBookletViewModel @Inject constructor(
                 selectTrack(targetIndex, notifyCdPlayer = false)
             } else {
                 _uiState.update { it.copy(currentTrackIndex = targetIndex) }
+                if (isNotificationActive) {
+                    updateMediaNotification()
+                }
             }
         }
         if (now - userSeekTimestamp >= 1500L && posMs > 0L) {
@@ -908,6 +1011,10 @@ class LyricBookletViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        isNotificationActive = false
+        mediaNotificationManager.commandHandler = null
+        mediaNotificationManager.clear()
+        CompanionPlaybackService.stop(context)
         companionJob?.cancel()
         shanlingBluetoothManager.disconnect()
     }
@@ -916,6 +1023,8 @@ class LyricBookletViewModel @Inject constructor(
         val target = _uiState.value.currentTrackIndex - 1
         if (target >= 0) {
             playCdTrack(target)
+        } else {
+            seekCompanion(0L)
         }
     }
 
