@@ -18,6 +18,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
@@ -28,6 +31,13 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class PrewarmProgress(
+    val albumId: String,
+    val readyCount: Int,
+    val totalCount: Int,
+    val isFinished: Boolean
+)
+
 @Singleton
 class AnnotationRepository @Inject constructor(
     private val lyricAnnotationDao: LyricAnnotationDao,
@@ -37,12 +47,41 @@ class AnnotationRepository @Inject constructor(
 
     companion object {
         private const val NEGATIVE_CACHE_DURATION_MS = 15 * 60 * 1000L // 15 分钟短效负向缓存，防止无典故歌曲频繁重复查询，同时避免网络波动造成长久死锁
+
+        /**
+         * 智能近邻权重调度：根据当前正在播放/选中的曲目索引，以向后优先、放射状排列待预热曲目
+         * 顺序：[k+1, k+2, k-1, k+3, k-2, ...]
+         */
+        fun prioritizeTracksAround(tracks: List<TrackEntity>, currentIndex: Int): List<TrackEntity> {
+            if (tracks.size <= 1) return tracks
+            val safeIndex = currentIndex.coerceIn(0, tracks.lastIndex)
+            return tracks
+                .filterIndexed { idx, _ -> idx != safeIndex }
+                .sortedWith(
+                    Comparator { a, b ->
+                        val idxA = tracks.indexOf(a)
+                        val idxB = tracks.indexOf(b)
+                        val distA = kotlin.math.abs(idxA - safeIndex)
+                        val distB = kotlin.math.abs(idxB - safeIndex)
+                        if (distA != distB) {
+                            distA.compareTo(distB)
+                        } else {
+                            // Forward track (next track) gets higher priority than previous track
+                            idxB.compareTo(idxA)
+                        }
+                    }
+                )
+        }
     }
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val activePrefetchAlbums = ConcurrentHashMap.newKeySet<String>()
     private val negativeCache = ConcurrentHashMap<Long, Long>()
     private val translationJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
+    private var currentAlbumPrefetchJob: kotlinx.coroutines.Job? = null
+
+    private val _prewarmProgressFlow = MutableStateFlow<PrewarmProgress?>(null)
+    val prewarmProgressFlow: StateFlow<PrewarmProgress?> = _prewarmProgressFlow.asStateFlow()
 
     fun getAnnotationsFlow(trackId: Long): Flow<List<LyricAnnotationEntity>> =
         lyricAnnotationDao.getAnnotationsFlow(trackId)
@@ -89,16 +128,75 @@ class AnnotationRepository @Inject constructor(
         }
     }
 
-    /**
-     * 将专辑加入常驻后台预取队列（多轨受控并发下载，应用级生命周期保障）
-     */
-    fun enqueueAlbumPrefetch(albumId: String, artist: String, tracks: List<TrackEntity>) {
-        if (tracks.isEmpty()) return
-        if (!activePrefetchAlbums.add(albumId)) return
 
-        repositoryScope.launch {
+    /**
+     * 将专辑加入常驻后台预取队列（近邻优先调度、多轨受控并发下载与完整双语预热）
+     */
+    fun enqueueAlbumPrefetch(
+        albumId: String,
+        artist: String,
+        tracks: List<TrackEntity>,
+        currentTrackIndex: Int = 0,
+        forceRefresh: Boolean = false
+    ) {
+        if (tracks.isEmpty()) return
+
+        currentAlbumPrefetchJob?.cancel()
+        currentAlbumPrefetchJob = repositoryScope.launch {
             try {
-                prefetchAlbumAnnotationsInternal(artist, tracks)
+                activePrefetchAlbums.add(albumId)
+                if (forceRefresh) {
+                    tracks.forEach { negativeCache.remove(it.id) }
+                }
+
+                val prioritizedTracks = prioritizeTracksAround(tracks, currentTrackIndex)
+                val totalCount = tracks.size
+
+                suspend fun countReady(): Int {
+                    return tracks.count { t ->
+                        val hasStory = lyricAnnotationDao.getSongStory(t.id) != null
+                        val hasAnnots = lyricAnnotationDao.getAnnotations(t.id).isNotEmpty()
+                        hasStory || hasAnnots
+                    }
+                }
+
+                _prewarmProgressFlow.value = PrewarmProgress(
+                    albumId = albumId,
+                    readyCount = countReady(),
+                    totalCount = totalCount,
+                    isFinished = false
+                )
+
+                val semaphore = Semaphore(2)
+                coroutineScope {
+                    prioritizedTracks.map { track ->
+                        async {
+                            semaphore.withPermit {
+                                try {
+                                    prefetchTrackInternal(track, artist, forceRefresh)
+                                    val ready = countReady()
+                                    _prewarmProgressFlow.value = PrewarmProgress(
+                                        albumId = albumId,
+                                        readyCount = ready,
+                                        totalCount = totalCount,
+                                        isFinished = ready >= totalCount
+                                    )
+                                    delay(120)
+                                } catch (e: Exception) {
+                                    // 静默处理，避免干扰前台正常交互
+                                }
+                            }
+                        }
+                    }.awaitAll()
+                }
+
+                val finalReady = countReady()
+                _prewarmProgressFlow.value = PrewarmProgress(
+                    albumId = albumId,
+                    readyCount = finalReady,
+                    totalCount = totalCount,
+                    isFinished = true
+                )
             } finally {
                 activePrefetchAlbums.remove(albumId)
             }
@@ -108,33 +206,61 @@ class AnnotationRepository @Inject constructor(
     /**
      * 后台静默预拉取全专辑曲目的 Genius 典故与背景故事（无感且极速）
      */
-    suspend fun prefetchAlbumAnnotations(artist: String, tracks: List<TrackEntity>) = withContext(Dispatchers.IO) {
-        prefetchAlbumAnnotationsInternal(artist, tracks)
-    }
-
-    private suspend fun prefetchAlbumAnnotationsInternal(artist: String, tracks: List<TrackEntity>) = coroutineScope {
-        val semaphore = Semaphore(3)
-        tracks.map { track ->
-            async {
-                semaphore.withPermit {
-                    try {
-                        val cachedStory = lyricAnnotationDao.getSongStory(track.id)
-                        val cachedAnnotations = lyricAnnotationDao.getAnnotations(track.id)
-                        val isGeniusData = cachedStory?.source == "GENIUS" || cachedAnnotations.any { it.source == "GENIUS" }
-                        val checkedTime = negativeCache[track.id]
-                        val isNegCached = checkedTime != null && (System.currentTimeMillis() - checkedTime < NEGATIVE_CACHE_DURATION_MS)
-
-                        if (isGeniusData || isNegCached) {
-                            return@withPermit
+    suspend fun prefetchAlbumAnnotations(
+        artist: String,
+        tracks: List<TrackEntity>,
+        currentTrackIndex: Int = 0,
+        forceRefresh: Boolean = false
+    ) = withContext(Dispatchers.IO) {
+        val prioritized = prioritizeTracksAround(tracks, currentTrackIndex)
+        val semaphore = Semaphore(2)
+        coroutineScope {
+            prioritized.map { track ->
+                async {
+                    semaphore.withPermit {
+                        try {
+                            prefetchTrackInternal(track, artist, forceRefresh)
+                            delay(120)
+                        } catch (e: Exception) {
+                            // ignore
                         }
-
-                        fetchAndCacheAnnotations(track = track, artist = artist)
-                    } catch (e: Exception) {
-                        // 静默处理，避免干扰前台正常交互
                     }
                 }
+            }.awaitAll()
+        }
+    }
+
+    private suspend fun prefetchTrackInternal(track: TrackEntity, artist: String, forceRefresh: Boolean = false) {
+        val isTraditionalTarget = aiPreferences.targetLanguage == "zh-TW" ||
+            TranslationTargetLanguage.fromCode(aiPreferences.targetLanguage) == TranslationTargetLanguage.ZH_TW
+
+        val checkedTime = negativeCache[track.id]
+        val isNegCached = !forceRefresh && checkedTime != null && (System.currentTimeMillis() - checkedTime < NEGATIVE_CACHE_DURATION_MS)
+        if (isNegCached) {
+            return
+        }
+
+        val cachedStory = lyricAnnotationDao.getSongStory(track.id)
+        val cachedAnnotations = lyricAnnotationDao.getAnnotations(track.id)
+        val isGeniusData = cachedStory?.source == "GENIUS" || cachedAnnotations.any { it.source == "GENIUS" }
+
+        if (isGeniusData && !forceRefresh) {
+            // 已有 Genius 典故数据：检查是否有缺失或截断的中文对照翻译并静默补全
+            val needsStoryTrans = cachedStory != null && !cachedStory.descriptionPlain.isBlank() &&
+                !AiAnnotationCurator.isAlreadyChinese(cachedStory.descriptionPlain) &&
+                isTruncatedTranslation(cachedStory.descriptionPlain, cachedStory.descriptionTranslation)
+            val needsAnnotTrans = cachedAnnotations.any {
+                !AiAnnotationCurator.isAlreadyChinese(it.explanationText) &&
+                isTruncatedTranslation(it.explanationText, it.explanationTranslation)
             }
-        }.awaitAll()
+            if (needsStoryTrans || needsAnnotTrans) {
+                launchBackgroundTranslation(track.id, cachedStory, cachedAnnotations, isTraditionalTarget)
+            }
+            return
+        }
+
+        // 本地尚无数据，或者被强制刷新：向 Genius 检索并持久化
+        fetchAndCacheAnnotations(track = track, artist = artist, forceRefresh = forceRefresh)
     }
 
     /**

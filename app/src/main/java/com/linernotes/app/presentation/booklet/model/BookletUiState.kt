@@ -65,5 +65,7 @@ data class BookletUiState(
     // 行内手风琴典故展开行索引与沉浸式阅读模式
     val expandedAnnotationLineIndex: Int? = null,
     val isImmersiveMode: Boolean = false,
-    val annotationLoadState: AnnotationLoadState = AnnotationLoadState.IDLE
+    val annotationLoadState: AnnotationLoadState = AnnotationLoadState.IDLE,
+    val isAlbumPrewarming: Boolean = false,
+    val prewarmProgress: Pair<Int, Int>? = null
 )

@@ -140,6 +140,22 @@ class LyricBookletViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            annotationRepository.prewarmProgressFlow.collect { progress ->
+                if (progress != null && progress.albumId == currentAlbumId) {
+                    _uiState.update {
+                        it.copy(
+                            isAlbumPrewarming = !progress.isFinished,
+                            prewarmProgress = if (progress.isFinished) null else Pair(progress.readyCount, progress.totalCount)
+                        )
+                    }
+                } else if (progress == null) {
+                    _uiState.update {
+                        it.copy(isAlbumPrewarming = false, prewarmProgress = null)
+                    }
+                }
+            }
+        }
     }
 
     val allShelfAlbums: StateFlow<List<com.linernotes.app.data.local.entity.AlbumEntity>> = repository.getCollectionStream()
@@ -237,7 +253,12 @@ class LyricBookletViewModel @Inject constructor(
                     val otherTracks = albumWithTracks.tracks.filter { it.id != currentTrack?.id }
                     if (prefetchedAlbumId != id && otherTracks.isNotEmpty()) {
                         prefetchedAlbumId = id
-                        annotationRepository.enqueueAlbumPrefetch(id, albumWithTracks.album.artist, otherTracks)
+                        annotationRepository.enqueueAlbumPrefetch(
+                            albumId = id,
+                            artist = albumWithTracks.album.artist,
+                            tracks = albumWithTracks.tracks,
+                            currentTrackIndex = _uiState.value.currentTrackIndex
+                        )
                     }
                 } else {
                     _uiState.update { it.copy(isLoading = false) }
@@ -350,6 +371,17 @@ class LyricBookletViewModel @Inject constructor(
                 }
             }
             loadAnnotationsForCurrentTrack()
+
+            // 动态切歌时按近邻优先级静默预热后续曲目的典故与翻译
+            val album = _uiState.value.albumWithTracks?.album
+            if (album != null && tracks.size > 1) {
+                annotationRepository.enqueueAlbumPrefetch(
+                    albumId = album.id,
+                    artist = album.artist,
+                    tracks = tracks,
+                    currentTrackIndex = index
+                )
+            }
             if (notifyCdPlayer && _uiState.value.cdConnectionState == CdConnectionState.CONNECTED) {
                 // CdPlayQueueReq.index is 0-based (0 for 1st song, 1 for 2nd song...)
                 val cdQueueIndex = if (track.trackNumber > 0) track.trackNumber - 1 else index
@@ -557,6 +589,19 @@ class LyricBookletViewModel @Inject constructor(
             artist = album?.artist,
             album = album?.title
         )
+    }
+
+    fun forcePrewarmAlbum() {
+        val album = _uiState.value.albumWithTracks?.album ?: return
+        val tracks = _uiState.value.albumWithTracks?.tracks ?: return
+        annotationRepository.enqueueAlbumPrefetch(
+            albumId = album.id,
+            artist = album.artist,
+            tracks = tracks,
+            currentTrackIndex = _uiState.value.currentTrackIndex,
+            forceRefresh = true
+        )
+        _uiState.update { it.copy(userMessage = "已启动全专辑典故与翻译后台静默预热") }
     }
 
     fun loadAnnotationsForCurrentTrack(forceRefresh: Boolean = false) {

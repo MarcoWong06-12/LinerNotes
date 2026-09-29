@@ -601,6 +601,15 @@ fun LyricBookletScreen(
                             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                             DropdownMenuItem(
+                                text = { Text(if (state.isTraditionalMode) "預熱全專典故與翻譯" else "预热全专典故与翻译", style = MaterialTheme.typography.bodyMedium) },
+                                onClick = {
+                                    viewModel.setTranslateMenuOpen(false)
+                                    viewModel.forcePrewarmAlbum()
+                                },
+                                leadingIcon = { Icon(Icons.Default.FlashOn, contentDescription = null, tint = Color(0xFFFFD54F)) }
+                            )
+
+                            DropdownMenuItem(
                                 text = { Text(strings.editLyricsAction, style = MaterialTheme.typography.bodyMedium) },
                                 onClick = {
                                     viewModel.setTranslateMenuOpen(false)
@@ -703,6 +712,59 @@ fun LyricBookletScreen(
                                 color = MaterialTheme.colorScheme.primary,
                                 trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                             )
+                        }
+                    }
+                }
+
+                // 全专辑典故与翻译后台静默预热轻量胶囊指示条
+                AnimatedVisibility(
+                    visible = state.isAlbumPrewarming && state.prewarmProgress != null,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    state.prewarmProgress?.let { (ready, total) ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
+                            border = BorderStroke(1.dp, Color(0xFFFFD54F).copy(alpha = 0.40f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(13.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color(0xFFFFD54F)
+                                    )
+                                    Text(
+                                        text = if (state.isTraditionalMode) 
+                                            "正在後台靜默預熱全專典故與翻譯 · 已就緒 $ready/$total 首" 
+                                            else "正在后台静默预热全专典故与翻译 · 已就绪 $ready/$total 首",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    )
+                                }
+                                Text(
+                                    text = "0秒秒开",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFFD54F)
+                                    )
+                                )
+                            }
                         }
                     }
                 }
