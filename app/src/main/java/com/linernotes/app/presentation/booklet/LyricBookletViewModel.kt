@@ -605,10 +605,10 @@ class LyricBookletViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         songStory = story ?: it.songStory,
-                        lineAnnotations = if (lineMap.isNotEmpty()) lineMap else it.lineAnnotations,
+                        lineAnnotations = lineMap,
                         isLoadingAnnotations = false,
                         isTraditionalMode = isTrad,
-                        annotationLoadState = if (hasContent || it.songStory != null || it.lineAnnotations.isNotEmpty()) {
+                        annotationLoadState = if (hasContent || lineMap.isNotEmpty()) {
                             com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADED
                         } else {
                             com.linernotes.app.presentation.booklet.model.AnnotationLoadState.EMPTY
@@ -650,17 +650,28 @@ class LyricBookletViewModel @Inject constructor(
         _uiState.update { it.copy(isSongStoryExpanded = !it.isSongStoryExpanded) }
     }
 
-    fun translateAnnotation(annotation: LyricAnnotationEntity) {
+    fun translateAnnotation(annotation: LyricAnnotationEntity, lineIndex: Int? = null) {
         viewModelScope.launch {
             _uiState.update { it.copy(isTranslatingAnnotation = true) }
             val updated = annotationRepository.translateAnnotation(annotation)
             _uiState.update { state ->
-                val updatedMap = state.lineAnnotations.mapValues { (_, v) ->
-                    if (v.id == updated.id) updated else v
+                val updatedMap = state.lineAnnotations.mapValues { (idx, v) ->
+                    val matches = if (lineIndex != null && idx == lineIndex) {
+                        true
+                    } else if (updated.id > 0L && v.id > 0L) {
+                        v.id == updated.id
+                    } else {
+                        v.lyricFragment == updated.lyricFragment && v.explanationText == updated.explanationText
+                    }
+                    if (matches) updated else v
                 }
+                val isSelectedMatch = state.selectedAnnotation?.let { sel ->
+                    (updated.id > 0L && sel.id > 0L && sel.id == updated.id) ||
+                    (sel.lyricFragment == updated.lyricFragment && sel.explanationText == updated.explanationText)
+                } ?: false
                 state.copy(
                     isTranslatingAnnotation = false,
-                    selectedAnnotation = if (state.selectedAnnotation?.id == updated.id) updated else state.selectedAnnotation,
+                    selectedAnnotation = if (isSelectedMatch) updated else state.selectedAnnotation,
                     lineAnnotations = updatedMap
                 )
             }
@@ -1098,13 +1109,18 @@ class LyricBookletViewModel @Inject constructor(
                     lyricTranslation = newLyricTrans,
                     explanationText = newExplText
                 )
-                annotationRepository.updateAnnotation(updatedAnnot)
+                if (updatedAnnot.id > 0L) {
+                    annotationRepository.updateAnnotation(updatedAnnot)
+                }
                 updatedAnnot
             }
 
             val currentSelected = _uiState.value.selectedAnnotation
             val newSelected = currentSelected?.let { annot ->
-                newAnnotations.values.find { it.id == annot.id } ?: annot.copy(
+                newAnnotations.values.find {
+                    (annot.id > 0L && it.id == annot.id) ||
+                    (it.lyricFragment == annot.lyricFragment && it.explanationText == annot.explanationText)
+                } ?: annot.copy(
                     explanationTranslation = if (toTraditional) ChineseConverter.toTraditional(annot.explanationTranslation) else ChineseConverter.toSimplified(annot.explanationTranslation),
                     lyricTranslation = if (toTraditional) ChineseConverter.toTraditional(annot.lyricTranslation) else ChineseConverter.toSimplified(annot.lyricTranslation)
                 )

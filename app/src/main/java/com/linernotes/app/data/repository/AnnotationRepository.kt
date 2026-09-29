@@ -172,8 +172,18 @@ class AnnotationRepository @Inject constructor(
                 lyricAnnotationDao.deleteAnnotationsForTrack(trackId)
             }
 
-            val isGeniusData = cachedStory?.source == "GENIUS" || cachedAnnotations.any { it.source == "GENIUS" }
-            if (isGeniusData && (cachedAnnotations.isNotEmpty() || cachedStory != null)) {
+            // 自动检测并自愈损坏的缓存：若存在多条注释但引文或解说完全重复，说明历史版本因覆盖污染导致重复
+            val isCorruptedDuplicateCache = cachedAnnotations.size > 1 && (
+                cachedAnnotations.distinctBy { it.lyricFragment.trim() }.size == 1 ||
+                cachedAnnotations.distinctBy { it.explanationText.trim() }.size == 1
+            )
+            if (isCorruptedDuplicateCache) {
+                lyricAnnotationDao.deleteAnnotationsForTrack(trackId)
+            }
+
+            val validCachedAnnotations = if (isCorruptedDuplicateCache) emptyList() else cachedAnnotations
+            val isGeniusData = cachedStory?.source == "GENIUS" || validCachedAnnotations.any { it.source == "GENIUS" }
+            if (isGeniusData && (validCachedAnnotations.isNotEmpty() || cachedStory != null)) {
                 val fixedStory = if (cachedStory != null && AiAnnotationCurator.isAlreadyChinese(cachedStory.descriptionPlain) &&
                     !cachedStory.descriptionTranslation.isNullOrBlank()
                 ) {
@@ -182,7 +192,7 @@ class AnnotationRepository @Inject constructor(
                     s
                 } else cachedStory
 
-                return@withContext Result.success(Pair(fixedStory, cachedAnnotations.filter { it.source == "GENIUS" }))
+                return@withContext Result.success(Pair(fixedStory, validCachedAnnotations.filter { it.source == "GENIUS" }))
             }
         }
 
@@ -265,8 +275,13 @@ class AnnotationRepository @Inject constructor(
                     lyricAnnotationDao.insertSongStory(storyEntity)
                 }
 
-                // 原子替换该曲目的所有注释（删除旧的并插入新的）
-                lyricAnnotationDao.replaceAnnotationsForTrack(trackId, annotationEntities)
+                // 原子替换该曲目的所有注释（删除旧的并插入新的，获取赋予了真实数据库自增 PrimaryKey 的实体列表）
+                val persistedAnnotations = lyricAnnotationDao.replaceAnnotationsForTrack(trackId, annotationEntities)
+                val savedAnnotations = if (persistedAnnotations.isNotEmpty() && persistedAnnotations.all { it.id > 0L }) {
+                    persistedAnnotations
+                } else {
+                    lyricAnnotationDao.getAnnotations(trackId).ifEmpty { annotationEntities }
+                }
                 negativeCache.remove(trackId)
 
                 // 4. 在统一受管的 repositoryScope 中执行后台异步中文对照翻译
@@ -289,7 +304,7 @@ class AnnotationRepository @Inject constructor(
                         }
 
                         // 4.2 顺序/温和翻译各条歌词注释与片段 (带延时防限流)
-                        for (annot in annotationEntities) {
+                        for (annot in savedAnnotations) {
                             try {
                                 var updated = annot
                                 if (!AiAnnotationCurator.isAlreadyChinese(annot.lyricFragment) && annot.lyricTranslation.isNullOrBlank()) {
@@ -306,7 +321,7 @@ class AnnotationRepository @Inject constructor(
                                         updated = updated.copy(explanationTranslation = finalTrans)
                                     }
                                 }
-                                if (updated != annot) {
+                                if (updated != annot && updated.id > 0L) {
                                     lyricAnnotationDao.updateAnnotation(updated)
                                 }
                                 delay(100)
@@ -320,7 +335,7 @@ class AnnotationRepository @Inject constructor(
                 }
                 translationJobs[trackId] = job
 
-                return@withContext Result.success(Pair(storyEntity, annotationEntities))
+                return@withContext Result.success(Pair(storyEntity, savedAnnotations))
             } else {
                 // 网络已请求但未获取到新数据（搜索无结果、远端曲目无典故、或接口返回空）
                 val existingStory = lyricAnnotationDao.getSongStory(trackId)

@@ -819,7 +819,9 @@ fun LyricBookletScreen(
                     // 2. Genius 歌词典故与考据 (状态透明与一键重检)
                     item {
                         val hasAnnotations = state.lineAnnotations.isNotEmpty() || state.songStory != null
-                        val annotCount = state.lineAnnotations.values.distinctBy { it.id }.size + (if (state.songStory != null) 1 else 0)
+                        val annotCount = state.lineAnnotations.values.distinctBy {
+                            if (it.id > 0L) it.id else "${it.lyricFragment}_${it.explanationText.take(20)}"
+                        }.size + (if (state.songStory != null) 1 else 0)
                         val annotLabel = when {
                             state.isLoadingAnnotations -> if (state.isTraditionalMode) "典故檢索中..." else "典故检索中..."
                             hasAnnotations -> if (state.isTraditionalMode) "典故 (${annotCount})" else "典故 (${annotCount})"
@@ -1157,7 +1159,7 @@ fun LyricBookletScreen(
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             viewModel.toggleInlineAnnotation(index)
                                         },
-                                        onTranslateAnnotation = { viewModel.translateAnnotation(it) },
+                                        onTranslateAnnotation = { viewModel.translateAnnotation(it, lineIndex = index) },
                                         onOpenFullAnnotation = {
                                             if (lineAnnotation != null) {
                                                 viewModel.openAnnotation(lineAnnotation)

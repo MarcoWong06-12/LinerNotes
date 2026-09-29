@@ -180,4 +180,68 @@ class LyricFragmentMatcherTest {
         assertNull(matchMap[1])
         assertNull(matchMap[2])
     }
+
+    @Test
+    fun testDnaScenario_fightomoDoesNotPolluteOtherLines() {
+        val lines = listOf(
+            BilingualLyricLine(1, "I got, I got, I got, I got—", ""),
+            BilingualLyricLine(2, "Loyalty, got royalty inside my DNA", ""),
+            BilingualLyricLine(3, "Cocaine quarter piece, got war and peace inside my DNA", ""),
+            BilingualLyricLine(4, "I got power, poison, pain, and joy inside my DNA", ""),
+            BilingualLyricLine(5, "I got hustle though, ambition flow inside my DNA", ""),
+            BilingualLyricLine(6, "I was born like this, since one like this, immaculate conception", ""),
+            BilingualLyricLine(7, "I transform like this, perform like this, Was Yeshua new weapon", ""),
+            BilingualLyricLine(8, "I don’t contemplate, I meditate, then off your fucking head", ""),
+            BilingualLyricLine(9, "This that put-the-kids-to-bed", ""),
+            BilingualLyricLine(10, "This that I got, I got, I got, I got—", ""),
+            BilingualLyricLine(11, "Realness, I just kill shit 'cause it's in my DNA", ""),
+            BilingualLyricLine(12, "I got millions, I got riches buildin' in my DNA", ""),
+            BilingualLyricLine(13, "I got dark, I got evil, that rot inside my DNA", ""),
+            BilingualLyricLine(14, "I got off, I got trouble, that's inside my DNA", ""),
+            BilingualLyricLine(15, "I just win again, then win again, like Wimbledon, I serve", ""),
+            BilingualLyricLine(16, "Yeah, that's him again, the sound that engine in is like a bird", ""),
+            BilingualLyricLine(17, "You see fireworks and Corvette tire smoke, compliment the vibe and", ""),
+            BilingualLyricLine(18, "Tell me who you're loyal to", ""),
+            BilingualLyricLine(19, "Is it love for the streets when the lights get dark?", ""),
+            BilingualLyricLine(20, "I know how you work, I know just who you are", "")
+        )
+
+        val fightomo = LyricAnnotationEntity(
+            id = 11666737L,
+            trackId = 2L,
+            lyricFragment = "I got, I got, I got, I got—\nLoyalty, got royalty inside my DNA",
+            explanationText = "Kendrick's mom taught him the value of loyalty...",
+            votesTotal = 467
+        )
+
+        // 仅存在 Fightomo 单条注释时：绝对只能挂载在第 0 行，绝不可泛滥扩散至第 9、12、15、19 行！
+        val singleMap = LyricFragmentMatcher.matchAnnotationsToLines(lines, listOf(fightomo))
+        assertEquals(1, singleMap.size)
+        assertEquals(11666737L, singleMap[0]?.id)
+        assertNull(singleMap[9])
+        assertNull(singleMap[12])
+        assertNull(singleMap[15])
+        assertNull(singleMap[19])
+
+        // 引入各行专属注释时，各司其职，互不覆盖
+        val darkEvil = LyricAnnotationEntity(
+            id = 11746017L,
+            trackId = 2L,
+            lyricFragment = "I got dark, I got evil that rot inside my DNA",
+            explanationText = "Dark side analysis..."
+        )
+        val soundEngine = LyricAnnotationEntity(
+            id = 11671585L,
+            trackId = 2L,
+            lyricFragment = "Yeah, that’s him again, the sound that engine in is like a bird",
+            explanationText = "Engine sound analysis..."
+        )
+
+        val fullMap = LyricFragmentMatcher.matchAnnotationsToLines(lines, listOf(fightomo, darkEvil, soundEngine))
+        assertEquals(3, fullMap.size)
+        assertEquals(11666737L, fullMap[0]?.id)
+        assertEquals(11746017L, fullMap[12]?.id)
+        assertEquals(11671585L, fullMap[15]?.id)
+        assertNull(fullMap[19])
+    }
 }

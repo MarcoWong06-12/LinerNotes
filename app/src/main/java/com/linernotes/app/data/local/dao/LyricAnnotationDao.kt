@@ -19,7 +19,7 @@ interface LyricAnnotationDao {
     suspend fun getAnnotations(trackId: Long): List<LyricAnnotationEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAnnotations(annotations: List<LyricAnnotationEntity>)
+    suspend fun insertAnnotations(annotations: List<LyricAnnotationEntity>): List<Long>
 
     @Update
     suspend fun updateAnnotation(annotation: LyricAnnotationEntity)
@@ -28,11 +28,16 @@ interface LyricAnnotationDao {
     suspend fun deleteAnnotationsForTrack(trackId: Long)
 
     @androidx.room.Transaction
-    suspend fun replaceAnnotationsForTrack(trackId: Long, annotations: List<LyricAnnotationEntity>) {
+    suspend fun replaceAnnotationsForTrack(trackId: Long, annotations: List<LyricAnnotationEntity>): List<LyricAnnotationEntity> {
         deleteAnnotationsForTrack(trackId)
         if (annotations.isNotEmpty()) {
-            insertAnnotations(annotations)
+            val rowIds = insertAnnotations(annotations)
+            return annotations.mapIndexed { index, entity ->
+                val generatedId = rowIds.getOrNull(index) ?: entity.id
+                if (generatedId > 0L) entity.copy(id = generatedId) else entity
+            }
         }
+        return emptyList()
     }
 
     @Query("SELECT * FROM song_stories WHERE trackId = :trackId LIMIT 1")

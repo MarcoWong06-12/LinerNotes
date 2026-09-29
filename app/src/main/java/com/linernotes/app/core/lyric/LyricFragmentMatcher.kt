@@ -122,18 +122,21 @@ object LyricFragmentMatcher {
             }
 
             if (bestStartIdx >= 0) {
-                // 查找该连续区间内最适宜的挂载点（优先起始行；若起始行已有单行精确注释，则顺延至该区间首个空闲行）
+                // 查找该连续区间内最适宜的挂载点（优先起始行；若起始行已有单行精确注释，则顺延至该区间首个空闲且相似度匹配行）
                 var anchorIdx = -1
-                for (offset in 0 until numFragLines) {
-                    val idx = bestStartIdx + offset
-                    if (!result.containsKey(idx)) {
-                        anchorIdx = idx
-                        break
-                    }
-                }
-
                 if (!result.containsKey(bestStartIdx)) {
                     anchorIdx = bestStartIdx
+                } else {
+                    for (offset in 1 until numFragLines) {
+                        val idx = bestStartIdx + offset
+                        if (!result.containsKey(idx)) {
+                            val sim = calculateLineSimilarity(normalizedLines[idx], fragLines[offset])
+                            if (sim >= 0.40f) {
+                                anchorIdx = idx
+                                break
+                            }
+                        }
+                    }
                 }
 
                 if (anchorIdx >= 0 && !result.containsKey(anchorIdx)) {
@@ -163,20 +166,23 @@ object LyricFragmentMatcher {
             return 0.80f + (ratio * 0.15f)
         }
 
-        // 词元（Token）交集相似度计算
+        // 词元（Token）交集相似度计算 (词袋多重集求交，防止重复词导致召回膨胀)
         val lineWords = line.split(WHITESPACE_REGEX).filter { it.length >= 2 }
         val fragWords = frag.split(WHITESPACE_REGEX).filter { it.length >= 2 }
         if (lineWords.isEmpty() || fragWords.isEmpty()) return 0f
 
+        val lineCounts = mutableMapOf<String, Int>()
+        for (w in lineWords) lineCounts[w] = (lineCounts[w] ?: 0) + 1
+        val fragCounts = mutableMapOf<String, Int>()
+        for (w in fragWords) fragCounts[w] = (fragCounts[w] ?: 0) + 1
+
         var matchedCount = 0
-        for (lw in lineWords) {
-            if (fragWords.contains(lw)) {
-                matchedCount++
-            } else if (lw.endsWith("ing") && fragWords.contains(lw.removeSuffix("ing") + "in")) {
-                matchedCount++
-            } else if (lw.endsWith("in") && fragWords.contains(lw.removeSuffix("in") + "ing")) {
-                matchedCount++
-            }
+        for ((w, lCount) in lineCounts) {
+            val fCount = fragCounts[w]
+                ?: (if (w.endsWith("ing")) fragCounts[w.removeSuffix("ing") + "in"] else null)
+                ?: (if (w.endsWith("in")) fragCounts[w.removeSuffix("in") + "ing"] else null)
+                ?: 0
+            matchedCount += kotlin.math.min(lCount, fCount)
         }
 
         val recall = matchedCount.toFloat() / lineWords.size.toFloat()
