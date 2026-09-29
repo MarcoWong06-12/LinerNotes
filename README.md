@@ -1,0 +1,89 @@
+# LinerNotes（唱片内页）
+
+LinerNotes 是一款专为实体 CD 与数字流媒体音乐爱好者打造的安卓端歌词与唱片资料伴侣应用。
+
+应用支持通过蓝牙连接便携式 CD 播放机实时读取播放状态，拉取高品质双语滚动歌词，并深度整合了 Genius 乐评典故与 Discogs 实体唱片版本数据。
+
+---
+
+## 核心特性
+
+### 1. 实体 CD 伴侣与双语歌词同步
+- 支持通过蓝牙连接便携式 CD 播放机（如山灵 SyncLink 协议）。
+- 实时获取播放机当前曲目号、时间戳与播放状态，实现歌词毫秒级平滑跟随滚动。
+- 支持中英双语歌词逐行对齐展示与歌词微调偏移行。
+
+### 2. Genius 典故注释与双语对照排版
+- 深度整合 Genius 歌曲创作背景、文化隐喻与俚语注释。
+- 采用紧凑双语排版，中文解析下方紧跟对应英文原文，兼顾阅读体验与原意参考。
+
+### 3. 歌词脱敏与脏字审查彻底还原
+- 针对国内音乐源中常见的纯星号与词中掩码，内置确定性匹配与 Genius 引文对齐引擎。
+- 自动将屏蔽词还原为真实歌词与地道汉语翻译，并自动持久化写回本地 Room 数据库。
+
+### 4. 专辑典故后台静默预热
+- 打开专辑详情时，系统在后台自动以低优先级拉取相邻曲目的典故与翻译缓存。
+- 连续收听或切歌时，典故直接秒开，无需停顿等待。
+
+### 5. 系统原生媒体通知栏与锁屏
+- 完整接入 Android MediaSession 架构。
+- 支持在系统通知栏与锁屏界面查看封面、曲目信息与进度，并提供原生切歌与暂停控制。
+
+### 6. Discogs 唱片版本元数据检索
+- 支持扫描或输入实体唱片条形码检索 Discogs 数据库。
+- 查看当前实体专辑的发行国家、厂牌、年份、压盘批次等资料。
+
+---
+
+## 更多 CD 播放机适配支持
+
+目前应用已完整适配山灵（Shanling）支持 SyncLink 蓝牙协议的便携 CD 播放机。
+
+如果你正在使用其他品牌或型号的便携 CD 播放机，且该播放机拥有官方的手机配套控制 App，如果你希望 LinerNotes 也适配你的播放机型号：
+
+欢迎在本项目提一个 Issue（https://github.com/MarcoWong06-12/LinerNotes/issues ），并把官方配套 App 的安装包（APK）分享给我。我会分析其中的蓝牙通信数据包与控制协议，尽力把协议逆向并集成进 LinerNotes，让更多设备都能用上双语歌词伴侣。
+
+---
+
+## 下载与安装
+
+前往项目的 Releases 页面下载最新安装包：
+https://github.com/MarcoWong06-12/LinerNotes/releases
+
+- 正式版安装包：app-release.apk（体积更小，运行更流畅，推荐使用）
+- 调试版安装包：app-debug.apk
+
+系统要求：Android 8.0（API 26）及以上。
+
+---
+
+## 技术架构
+
+- 核心语言：Kotlin
+- 界面框架：Jetpack Compose, Material 3
+- 架构设计：MVI / MVVM, Clean Architecture
+- 依赖注入：Hilt
+- 本地数据库：Room Database
+- 网络请求：Retrofit 2, OkHttp 3, Kotlinx Serialization
+- 图片加载：Coil
+- 硬件协议：Bluetooth RFCOMM (Shanling SyncLink 协议逆向与解析)
+
+---
+
+## 本地编译
+
+项目采用标准 Gradle 构建系统：
+
+1. 克隆代码库：
+   git clone https://github.com/MarcoWong06-12/LinerNotes.git
+
+2. 使用 JDK 17 编译 APK：
+   ./gradlew assembleRelease
+
+编译生成的安装包位于：app/build/outputs/apk/release/app-release.apk
+
+---
+
+## 开源协议
+
+本项目采用 MIT 协议开源。
