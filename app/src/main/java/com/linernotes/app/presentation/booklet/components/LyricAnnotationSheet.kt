@@ -59,6 +59,13 @@ fun LyricAnnotationSheet(
         AiAnnotationCurator.isAlreadyChinese(annotation.explanationText)
     }
 
+    // 打开全屏/弹窗底栏详情时，若尚未翻译且非中文，自动请求翻译
+    LaunchedEffect(annotation.id, annotation.explanationTranslation, isChinese) {
+        if (!isChinese && annotation.explanationTranslation.isNullOrBlank() && !isTranslating) {
+            onTranslate(annotation)
+        }
+    }
+
     // 解析配图列表
     val imageUrls = remember(annotation.imageUrlsJson) {
         val list = mutableListOf<String>()

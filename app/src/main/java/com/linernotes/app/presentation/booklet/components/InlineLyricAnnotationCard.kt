@@ -77,6 +77,13 @@ fun InlineLyricAnnotationCard(
 
     val hasTranslation = !annotation.explanationTranslation.isNullOrBlank()
 
+    // 自动触发中文翻译：当没有翻译、原内容非中文且当前未在翻译中时，自动请求翻译
+    LaunchedEffect(annotation.id, hasTranslation, isChinese) {
+        if (!hasTranslation && !isChinese && !isTranslating) {
+            onTranslate(annotation)
+        }
+    }
+
     // 决定当前展示的文本内容
     val rawText = if (hasTranslation && !showOriginalText) {
         annotation.explanationTranslation ?: annotation.explanationText
@@ -128,6 +135,7 @@ fun InlineLyricAnnotationCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
+                    modifier = Modifier.weight(1f, fill = false),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -169,7 +177,8 @@ fun InlineLyricAnnotationCard(
                                 fontSize = 11.sp
                             ),
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                     }
 

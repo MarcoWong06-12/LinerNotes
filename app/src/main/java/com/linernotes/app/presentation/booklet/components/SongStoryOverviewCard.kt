@@ -47,6 +47,13 @@ fun SongStoryOverviewCard(
         AiAnnotationCurator.isAlreadyChinese(story.descriptionPlain)
     }
 
+    // 自动触发背景故事中文翻译：当未翻译且原内容非中文时，自动请求翻译
+    LaunchedEffect(story.id, story.descriptionTranslation, isChinese) {
+        if (!isChinese && story.descriptionTranslation.isNullOrBlank() && !isTranslating) {
+            onTranslate(story)
+        }
+    }
+
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f),

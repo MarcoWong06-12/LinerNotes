@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -197,6 +198,7 @@ class LyricBookletViewModel @Inject constructor(
     private var loadBookletJob: kotlinx.coroutines.Job? = null
     private var prefetchedAlbumId: String? = null
     private var loadAnnotationsJob: kotlinx.coroutines.Job? = null
+    private var annotationObserverJob: kotlinx.coroutines.Job? = null
     private var trackSelectionJob: kotlinx.coroutines.Job? = null
     private var lastLoadedAnnotationTrackId: Long? = null
     @Volatile
@@ -207,6 +209,45 @@ class LyricBookletViewModel @Inject constructor(
     private fun rematchAnnotations(aligned: List<BilingualLyricLine>): Map<Int, LyricAnnotationEntity> {
         if (aligned.isEmpty() || currentTrackRawAnnotations.isEmpty()) return emptyMap()
         return LyricFragmentMatcher.matchAnnotationsToLines(aligned, currentTrackRawAnnotations)
+    }
+
+    private fun startObservingTrackAnnotations(trackId: Long, trackIndex: Int) {
+        annotationObserverJob?.cancel()
+        annotationObserverJob = viewModelScope.launch {
+            combine(
+                annotationRepository.getSongStoryFlow(trackId),
+                annotationRepository.getAnnotationsFlow(trackId)
+            ) { story, annots ->
+                Pair(story, annots)
+            }.collect { (story, annots) ->
+                if (_uiState.value.currentTrackIndex != trackIndex) return@collect
+                if (story != null || annots.isNotEmpty()) {
+                    currentTrackRawAnnotations = annots
+                    _uiState.update { state ->
+                        val lineMap = if (annots.isNotEmpty()) {
+                            LyricFragmentMatcher.matchAnnotationsToLines(state.alignedLyrics, annots)
+                        } else state.lineAnnotations
+
+                        val updatedSelected = state.selectedAnnotation?.let { sel ->
+                            annots.find { it.id == sel.id } ?: sel
+                        }
+
+                        val hasContent = (story != null || lineMap.isNotEmpty() || annots.isNotEmpty())
+                        state.copy(
+                            songStory = story ?: state.songStory,
+                            lineAnnotations = if (lineMap.isNotEmpty()) lineMap else state.lineAnnotations,
+                            selectedAnnotation = updatedSelected,
+                            annotationLoadState = if (hasContent) {
+                                com.linernotes.app.presentation.booklet.model.AnnotationLoadState.LOADED
+                            } else state.annotationLoadState
+                        )
+                    }
+                    if (isNotificationActive) {
+                        updateMediaNotification()
+                    }
+                }
+            }
+        }
     }
 
     fun setAlbumId(id: String) {
@@ -396,6 +437,7 @@ class LyricBookletViewModel @Inject constructor(
                 updateMediaNotification()
             }
             trackSelectionJob?.cancel()
+            startObservingTrackAnnotations(track.id, index)
             trackSelectionJob = viewModelScope.launch {
                 val cachedStory = annotationRepository.getSongStory(track.id)
                 val cachedAnnotations = annotationRepository.getAnnotations(track.id)
@@ -759,6 +801,7 @@ class LyricBookletViewModel @Inject constructor(
             ChineseConverter.isTraditional(track.translatedTitle)
 
         loadAnnotationsJob?.cancel()
+        startObservingTrackAnnotations(track.id, index)
         loadAnnotationsJob = viewModelScope.launch {
             val hasExisting = _uiState.value.songStory != null || _uiState.value.lineAnnotations.isNotEmpty()
             _uiState.update { 
@@ -829,6 +872,9 @@ class LyricBookletViewModel @Inject constructor(
                 isAnnotationSheetOpen = true
             )
         }
+        if (annotation.explanationTranslation.isNullOrBlank() && !AiAnnotationCurator.isAlreadyChinese(annotation.explanationText) && !_uiState.value.isTranslatingAnnotation) {
+            translateAnnotation(annotation)
+        }
     }
 
     fun dismissAnnotationSheet() {
@@ -841,7 +887,14 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun toggleSongStoryExpanded() {
+        val willExpand = !_uiState.value.isSongStoryExpanded
         _uiState.update { it.copy(isSongStoryExpanded = !it.isSongStoryExpanded) }
+        if (willExpand) {
+            val story = _uiState.value.songStory
+            if (story != null && story.descriptionTranslation.isNullOrBlank() && !AiAnnotationCurator.isAlreadyChinese(story.descriptionPlain) && !_uiState.value.isTranslatingSongStory) {
+                translateSongStory(story)
+            }
+        }
     }
 
     fun translateAnnotation(annotation: LyricAnnotationEntity, lineIndex: Int? = null) {
@@ -900,9 +953,16 @@ class LyricBookletViewModel @Inject constructor(
     }
 
     fun toggleInlineAnnotation(lineIndex: Int) {
+        val willExpand = _uiState.value.expandedAnnotationLineIndex != lineIndex
         _uiState.update { current ->
             val newIndex = if (current.expandedAnnotationLineIndex == lineIndex) null else lineIndex
             current.copy(expandedAnnotationLineIndex = newIndex)
+        }
+        if (willExpand) {
+            val annot = _uiState.value.lineAnnotations[lineIndex]
+            if (annot != null && annot.explanationTranslation.isNullOrBlank() && !AiAnnotationCurator.isAlreadyChinese(annot.explanationText) && !_uiState.value.isTranslatingAnnotation) {
+                translateAnnotation(annot, lineIndex)
+            }
         }
     }
 

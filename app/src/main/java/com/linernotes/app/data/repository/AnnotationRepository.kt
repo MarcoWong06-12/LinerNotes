@@ -534,19 +534,10 @@ class AnnotationRepository @Inject constructor(
                     } catch (e: Exception) { /* ignore */ }
                 }
 
-                // 2. 顺序/温和翻译各条歌词注释与片段 (带延时防限流)
+                // 2. 顺序/温和翻译各条歌词注释解说正文 (带延时防限流，优先聚焦解说实现快速中文展示)
                 for (annot in savedAnnotations) {
                     try {
                         var updated = annot
-                        if (!AiAnnotationCurator.isAlreadyChinese(annot.lyricFragment) &&
-                            (annot.lyricTranslation.isNullOrBlank() || isTruncatedTranslation(annot.lyricFragment, annot.lyricTranslation))
-                        ) {
-                            val lyricTrans = translationService.translateText(annot.lyricFragment, "zh")
-                            if (!lyricTrans.isNullOrBlank()) {
-                                val finalLyricTrans = if (isTraditionalTarget) ChineseConverter.toTraditional(lyricTrans) else lyricTrans
-                                updated = updated.copy(lyricTranslation = finalLyricTrans)
-                            }
-                        }
                         val needsExplanationTrans = isTruncatedTranslation(annot.explanationText, annot.explanationTranslation)
                         if (!AiAnnotationCurator.isAlreadyChinese(annot.explanationText) && needsExplanationTrans) {
                             val trans = translationService.translateText(annot.explanationText, "zh")
